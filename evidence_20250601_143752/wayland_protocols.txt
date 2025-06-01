@@ -1,0 +1,33 @@
+interface: 'wl_shm',                                     version:  2, name:  1
+	formats (fourcc):
+	0x30334258 = 'XB30'
+	0x30334241 = 'AB30'
+	0x30335258 = 'XR30'
+	0x30335241 = 'AR30'
+	0x36314742 = 'BG16'
+	0x36314752 = 'RG16'
+	0x34325842 = 'BX24'
+	0x34324142 = 'BA24'
+	0x34325852 = 'RX24'
+	0x34324152 = 'RA24'
+	0x34324241 = 'AB24'
+	         1 = 'XR24'
+	0x34324258 = 'XB24'
+	         0 = 'AR24'
+interface: 'wl_compositor',                              version:  5, name:  2
+interface: 'wl_subcompositor',                           version:  1, name:  3
+interface: 'wl_data_device_manager',                     version:  3, name:  4
+interface: 'xdg_wm_base',                                version:  3, name:  5
+interface: 'wl_seat',                                    version:  9, name:  6
+	name: seat0
+	capabilities:
+interface: 'wl_output',                                  version:  4, name:  7
+	name: HEADLESS-1
+	description: Headless output 1
+	x: 0, y: 0, scale: 1,
+	physical_width: 0 mm, physical_height: 0 mm,
+	make: 'Unknown', model: 'Unknown',
+	subpixel_orientation: unknown, output_transform: normal,
+	mode:
+		width: 1280 px, height: 720 px, refresh: 0.000 Hz,
+		flags: current

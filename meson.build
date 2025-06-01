@@ -4,22 +4,33 @@ project('fluxbox-wayland', 'c', 'cpp',
   default_options: [
     'cpp_std=c++17',
     'warning_level=3',
-    'werror=false'
+    'werror=false',
+    'c_std=c11'
   ]
 )
 
 add_project_arguments('-DWLR_USE_UNSTABLE', language: ['c', 'cpp'])
+add_project_arguments('-Wno-vla', language: 'cpp')
 
 # Dependencies
 wlroots_dep = dependency('wlroots-0.18')
 wayland_server_dep = dependency('wayland-server')
+wayland_client_dep = dependency('wayland-client')
 wayland_protocols_dep = dependency('wayland-protocols')
 xkbcommon_dep = dependency('xkbcommon')
 pixman_dep = dependency('pixman-1')
 libinput_dep = dependency('libinput')
 
+# Portal backend dependencies
+glib_dep = dependency('glib-2.0')
+gio_dep = dependency('gio-2.0')
+
 # Protocol sources we generated
-protocol_sources = ['protocols/xdg-shell-protocol.c']
+protocol_sources = [
+  'protocols/xdg-shell-protocol.c',
+  'protocols/wlr-screencopy-unstable-v1-client-protocol.c',
+  'protocols/xdg-output-unstable-v1-client-protocol.c'
+]
 protocol_headers = []
 
 # Source files - using full compositor with input and configuration
@@ -40,6 +51,32 @@ executable('fluxbox-wayland',
     xkbcommon_dep,
     pixman_dep,
     libinput_dep,
+  ],
+  include_directories: inc_dirs,
+  install: true
+)
+
+# Portal backend executable
+executable('fluxbox-portal-backend',
+  'src/portal_backend.cpp',
+  dependencies: [
+    wlroots_dep,
+    wayland_client_dep,
+    glib_dep,
+    gio_dep,
+  ],
+  include_directories: inc_dirs,
+  install: true
+)
+
+# Wayland screenshot tool
+executable('fluxbox-screenshot',
+  ['src/wayland_screenshot.c'] + [
+    'protocols/wlr-screencopy-unstable-v1-client-protocol.c',
+    'protocols/xdg-output-unstable-v1-client-protocol.c'
+  ],
+  dependencies: [
+    wayland_client_dep,
   ],
   include_directories: inc_dirs,
   install: true

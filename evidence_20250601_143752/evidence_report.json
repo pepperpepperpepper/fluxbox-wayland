@@ -1,0 +1,97 @@
+{
+  "session_id": "20250601_143752",
+  "test_timestamp": "2025-06-01T14:38:01.408769",
+  "system_info": {
+    "os": "Linux",
+    "version": "6.14.7-arch2-1",
+    "architecture": "x86_64",
+    "python_version": "3.13.3"
+  },
+  "summary": {
+    "total_tests": 6,
+    "passed": 6,
+    "failed": 0,
+    "skipped": 0,
+    "success_rate": 100.0
+  },
+  "evidence_log": [
+    {
+      "timestamp": "2025-06-01T14:37:56.281644",
+      "category": "STARTUP",
+      "test": "Compositor Launch",
+      "status": "PASS",
+      "details": {
+        "pid": 15770,
+        "startup_time": "3 seconds",
+        "log_file": "evidence_20250601_143752/compositor_startup.log"
+      }
+    },
+    {
+      "timestamp": "2025-06-01T14:37:56.282037",
+      "category": "SOCKETS",
+      "test": "Wayland Socket Creation",
+      "status": "PASS",
+      "details": {
+        "sockets_found": 1,
+        "evidence_file": "evidence_20250601_143752/wayland_sockets.json",
+        "active_sockets": [
+          "/run/user/1000/wayland-0"
+        ]
+      }
+    },
+    {
+      "timestamp": "2025-06-01T14:37:56.284434",
+      "category": "PROTOCOLS",
+      "test": "Wayland Protocol Support",
+      "status": "PASS",
+      "details": {
+        "protocols_count": 7,
+        "key_protocols": [
+          "wl_compositor",
+          "wl_subcompositor",
+          "xdg_wm_base",
+          "wl_seat",
+          "wl_output"
+        ],
+        "evidence_file": "evidence_20250601_143752/wayland_protocols.txt"
+      }
+    },
+    {
+      "timestamp": "2025-06-01T14:38:01.294153",
+      "category": "CLIENTS",
+      "test": "Client Connections",
+      "status": "PASS",
+      "details": {
+        "successful_clients": 2,
+        "total_tested": 3,
+        "working_clients": [
+          "wayland-info",
+          "foot"
+        ],
+        "evidence_file": "evidence_20250601_143752/client_connections.json"
+      }
+    },
+    {
+      "timestamp": "2025-06-01T14:38:01.294371",
+      "category": "CONFIG",
+      "test": "Configuration System",
+      "status": "PASS",
+      "details": {
+        "config_dir": "/home/arch/.config/fluxbox-wayland",
+        "config_file_present": true,
+        "evidence_file": "evidence_20250601_143752/configuration.json"
+      }
+    },
+    {
+      "timestamp": "2025-06-01T14:38:01.408717",
+      "category": "SHUTDOWN",
+      "test": "Graceful Shutdown",
+      "status": "PASS",
+      "details": {
+        "shutdown_time_seconds": 0.11,
+        "signal": "SIGTERM",
+        "exit_code": -6
+      }
+    }
+  ]
+}

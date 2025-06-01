@@ -13,6 +13,8 @@ struct wlr_scene_output_layout;
 struct wlr_output_layout;
 struct wlr_seat;
 struct wlr_xdg_shell;
+struct wlr_export_dmabuf_manager_v1;
+struct wlr_screencopy_manager_v1;
 struct wl_listener;
 
 #include <list>
@@ -76,6 +78,10 @@ private:
 
     // Shell
     struct wlr_xdg_shell* xdg_shell;
+    
+    // Screenshot support
+    struct wlr_export_dmabuf_manager_v1* export_dmabuf_manager;
+    struct wlr_screencopy_manager_v1* screencopy_manager;
 
     // Window management
     std::list<FluxboxSurface*> surfaces;

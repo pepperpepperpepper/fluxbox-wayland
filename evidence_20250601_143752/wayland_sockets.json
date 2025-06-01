@@ -1,0 +1,9 @@
+[
+  {
+    "socket": "/run/user/1000/wayland-0",
+    "exists": true,
+    "size": 0,
+    "modified": "2025-06-01T14:37:52.288000",
+    "lock_file": true
+  }
+]

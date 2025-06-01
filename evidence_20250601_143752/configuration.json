@@ -1,0 +1,8 @@
+{
+  "config_directory_exists": true,
+  "config_file_exists": true,
+  "config_directory": "/home/arch/.config/fluxbox-wayland",
+  "config_content_length": 85,
+  "has_workspace_config": true,
+  "has_key_bindings": true
+}

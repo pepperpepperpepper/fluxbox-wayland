@@ -13,6 +13,8 @@ extern "C" {
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_subcompositor.h>
 #include <wlr/types/wlr_xdg_shell.h>
+#include <wlr/types/wlr_export_dmabuf_v1.h>
+#include <wlr/types/wlr_screencopy_v1.h>
 #include <wlr/util/log.h>
 #include <wayland-server-core.h>
 }
@@ -36,6 +38,8 @@ FluxboxServer::FluxboxServer()
     , output_layout(nullptr)
     , seat(nullptr)
     , xdg_shell(nullptr)
+    , export_dmabuf_manager(nullptr)
+    , screencopy_manager(nullptr)
     , focused_surface(nullptr)
     , current_workspace(nullptr) {
     
@@ -137,6 +141,16 @@ bool FluxboxServer::startup() {
 
     // Create XDG shell
     xdg_shell = wlr_xdg_shell_create(display, 3);
+    
+    // Create screenshot support protocols
+    export_dmabuf_manager = wlr_export_dmabuf_manager_v1_create(display);
+    screencopy_manager = wlr_screencopy_manager_v1_create(display);
+    
+    if (screencopy_manager) {
+        wlr_log(WLR_INFO, "Screencopy manager created successfully");
+    } else {
+        wlr_log(WLR_ERROR, "Failed to create screencopy manager");
+    }
 
     // Create seat
     seat = wlr_seat_create(display, "seat0");

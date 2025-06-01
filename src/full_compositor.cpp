@@ -7,16 +7,21 @@ extern "C" {
 #include <wlr/types/wlr_data_device.h>
 #include <wlr/types/wlr_input_device.h>
 #include <wlr/types/wlr_keyboard.h>
+#include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_pointer.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_subcompositor.h>
 #include <wlr/types/wlr_xcursor_manager.h>
 #include <wlr/types/wlr_xdg_shell.h>
+#include <wlr/types/wlr_export_dmabuf_v1.h>
+#include <wlr/types/wlr_screencopy_v1.h>
+#include <wlr/types/wlr_xdg_output_v1.h>
 #include <wlr/util/log.h>
 #include <wayland-server-core.h>
 #include <xkbcommon/xkbcommon.h>
 }
+
 
 #include <iostream>
 #include <cstdlib>
@@ -65,6 +70,16 @@ struct FluxboxCompositor {
     struct wlr_output_layout* output_layout;
     struct wlr_seat* seat;
     struct wlr_xdg_shell* xdg_shell;
+    
+    // Basic rendering for screencopy support
+    
+    // Screenshot support
+    struct wlr_export_dmabuf_manager_v1* export_dmabuf_manager;
+    struct wlr_screencopy_manager_v1* screencopy_manager;
+    struct wlr_xdg_output_manager_v1* xdg_output_manager;
+    
+    // Screencopy event listeners
+    struct wl_listener screencopy_frame_destroy;
     
     // Input handling
     struct wlr_cursor* cursor;
@@ -160,7 +175,19 @@ struct FluxboxCompositor {
         // Create XDG shell
         xdg_shell = wlr_xdg_shell_create(display, 3);
         
+        // Create output layout first
         output_layout = wlr_output_layout_create(display);
+        
+        // Create screenshot support protocols
+        export_dmabuf_manager = wlr_export_dmabuf_manager_v1_create(display);
+        screencopy_manager = wlr_screencopy_manager_v1_create(display);
+        xdg_output_manager = wlr_xdg_output_manager_v1_create(display, output_layout);
+        
+        if (screencopy_manager) {
+            wlr_log(WLR_INFO, "Screencopy manager created successfully");
+        } else {
+            wlr_log(WLR_ERROR, "Failed to create screencopy manager");
+        }
         seat = wlr_seat_create(display, "seat0");
         
         // Create cursor
@@ -271,7 +298,7 @@ void FluxboxCompositor::handle_new_output(struct wl_listener* listener, void* da
     // Load cursor theme for this output
     wlr_xcursor_manager_load(compositor->cursor_mgr, wlr_output->scale);
     
-    std::cout << "Output " << wlr_output->name << " added" << std::endl;
+    std::cout << "Output " << wlr_output->name << " added with scene rendering" << std::endl;
 }
 
 void FluxboxCompositor::handle_new_xdg_toplevel(struct wl_listener* listener, void* data) {

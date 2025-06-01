@@ -65,3 +65,6 @@ test_results*/
 
 # Other generated files
 FILES_TO_COPY.txt
+
+#Python cache
+*.__pycache__
