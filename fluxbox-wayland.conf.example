@@ -1,0 +1,47 @@
+# Fluxbox for Wayland Configuration
+# Example configuration file
+# Copy to ~/.config/fluxbox-wayland/fluxbox-wayland.conf to customize
+
+# Workspace Configuration
+session.screen0.workspaces: 4
+session.screen0.workspaceNames.workspace0: Main
+session.screen0.workspaceNames.workspace1: Development  
+session.screen0.workspaceNames.workspace2: Web
+session.screen0.workspaceNames.workspace3: Misc
+
+# Window Management
+session.screen0.focusModel: ClickFocus
+session.screen0.autoRaise: false
+
+# Appearance
+session.styleFile: default
+
+# Key Bindings
+# Workspace switching
+key Alt+1 : workspace 1
+key Alt+2 : workspace 2
+key Alt+3 : workspace 3
+key Alt+4 : workspace 4
+
+# Workspace navigation
+key Alt+Left : workspace prev
+key Alt+Right : workspace next
+
+# Window management
+key Alt+q : close
+key Alt+F4 : close
+
+# Move windows between workspaces
+key Alt+Shift+1 : sendtoworkspace 1
+key Alt+Shift+2 : sendtoworkspace 2
+key Alt+Shift+3 : sendtoworkspace 3
+key Alt+Shift+4 : sendtoworkspace 4
+
+# Application launching
+key Alt+Return : exec weston-terminal
+key Alt+r : exec foot
+key Super+d : exec dmenu_run
+
+# Additional Settings
+# Add custom settings here
+# example.setting: value

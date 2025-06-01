@@ -1,0 +1,67 @@
+# Build directories
+build/
+builddir/
+
+# Compiled Object files
+*.o
+*.obj
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Compiled Static libraries
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Debug files
+*.dSYM/
+*.su
+*.idb
+*.pdb
+
+# Core dumps
+core
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Meson build files
+.ninja_deps
+.ninja_log
+
+# Temporary files
+*.tmp
+*.temp
+
+# Log files
+*.log
+
+# Test results
+test_results*/
+
+# Documentation files (except README.md)
+*.md
+!README.md
+
+# Other generated files
+FILES_TO_COPY.txt
