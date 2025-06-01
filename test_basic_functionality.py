@@ -54,8 +54,18 @@ class FluxboxTester:
     def test_wayland_socket(self):
         """Test Wayland socket creation"""
         print("Testing Wayland socket creation...")
-        # Check for wayland socket
+        # Check for wayland socket in runtime directory
+        import pwd
+        uid = os.getuid()
+        runtime_dir = f"/run/user/{uid}"
+        
         wayland_sockets = []
+        for i in range(10):
+            socket_path = f"{runtime_dir}/wayland-{i}"
+            if os.path.exists(socket_path):
+                wayland_sockets.append(socket_path)
+                
+        # Also check /tmp for compatibility
         for i in range(10):
             socket_path = f"/tmp/wayland-{i}"
             if os.path.exists(socket_path):
@@ -68,43 +78,65 @@ class FluxboxTester:
             self.test_results.append("❌ Wayland socket creation: FAILED")
             return False
             
+    def get_active_wayland_display(self):
+        """Find active wayland display"""
+        uid = os.getuid()
+        runtime_dir = f"/run/user/{uid}"
+        
+        # Check runtime directory first
+        for i in range(10):
+            socket_path = f"{runtime_dir}/wayland-{i}"
+            if os.path.exists(socket_path):
+                return f"wayland-{i}"
+                
+        # Check /tmp as fallback
+        for i in range(10):
+            socket_path = f"/tmp/wayland-{i}"
+            if os.path.exists(socket_path):
+                return f"wayland-{i}"
+        return None
+        
     def test_client_connection(self):
         """Test basic client connection"""
         print("Testing client connection...")
         try:
             # Find active wayland display
-            for i in range(10):
-                env = os.environ.copy()
-                env['WAYLAND_DISPLAY'] = f'wayland-{i}'
+            display = self.get_active_wayland_display()
+            if not display:
+                self.test_results.append("❌ Client connection: No display found")
+                return False
                 
-                # Try wayland-info first
-                result = subprocess.run(
-                    ['wayland-info'],
+            env = os.environ.copy()
+            env['WAYLAND_DISPLAY'] = display
+            
+            # Try wayland-info first
+            result = subprocess.run(
+                ['wayland-info'],
+                env=env,
+                capture_output=True,
+                timeout=5
+            )
+            
+            if result.returncode == 0:
+                self.test_results.append("✅ Client connection (wayland-info): SUCCESS")
+                
+                # Try launching a simple client
+                foot_result = subprocess.run(
+                    ['foot', '--version'],
                     env=env,
                     capture_output=True,
-                    timeout=5
+                    timeout=3
                 )
                 
-                if result.returncode == 0:
-                    self.test_results.append("✅ Client connection (wayland-info): SUCCESS")
-                    
-                    # Try launching a simple client
-                    foot_result = subprocess.run(
-                        ['foot', '--version'],
-                        env=env,
-                        capture_output=True,
-                        timeout=3
-                    )
-                    
-                    if foot_result.returncode == 0:
-                        self.test_results.append("✅ Client application (foot): AVAILABLE")
-                    else:
-                        self.test_results.append("⚠️  Client application (foot): NOT AVAILABLE")
-                    
-                    return True
-                    
-            self.test_results.append("❌ Client connection: FAILED - No working display found")
-            return False
+                if foot_result.returncode == 0:
+                    self.test_results.append("✅ Client application (foot): AVAILABLE")
+                else:
+                    self.test_results.append("⚠️  Client application (foot): NOT AVAILABLE")
+                
+                return True
+            else:
+                self.test_results.append("❌ Client connection: wayland-info failed")
+                return False
             
         except subprocess.TimeoutExpired:
             self.test_results.append("❌ Client connection: TIMEOUT")

@@ -67,6 +67,16 @@ class InputHandlingTester:
                 
     def get_active_wayland_display(self):
         """Find active wayland display"""
+        uid = os.getuid()
+        runtime_dir = f"/run/user/{uid}"
+        
+        # Check runtime directory first
+        for i in range(10):
+            socket_path = f"{runtime_dir}/wayland-{i}"
+            if os.path.exists(socket_path):
+                return f"wayland-{i}"
+                
+        # Check /tmp as fallback
         for i in range(10):
             socket_path = f"/tmp/wayland-{i}"
             if os.path.exists(socket_path):

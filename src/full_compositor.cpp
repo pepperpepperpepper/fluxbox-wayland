@@ -29,9 +29,14 @@ extern "C" {
 #include "../include/config.hpp"
 
 static bool running = true;
+static struct wl_display* global_display = nullptr;
 
-void signal_handler(int) {
+void signal_handler(int sig) {
+    std::cout << "Received signal " << sig << ", initiating graceful shutdown..." << std::endl;
     running = false;
+    if (global_display) {
+        wl_display_terminate(global_display);
+    }
 }
 
 struct FluxboxWorkspace {
@@ -117,6 +122,9 @@ struct FluxboxCompositor {
             std::cerr << "Failed to create display" << std::endl;
             return false;
         }
+        
+        // Set global display for signal handler
+        global_display = display;
         
         // Set headless backend if not running as root or with proper permissions
         if (getuid() != 0) {
@@ -234,6 +242,9 @@ struct FluxboxCompositor {
             wl_display_destroy_clients(display);
             wl_display_destroy(display);
         }
+        
+        // Clear global display
+        global_display = nullptr;
     }
 };
 

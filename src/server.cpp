@@ -50,27 +50,35 @@ FluxboxServer::~FluxboxServer() {
 }
 
 void FluxboxServer::cleanup_stale_sockets() {
-    // Clean up stale wayland sockets in /tmp
+    // Clean up stale wayland sockets in runtime directory
+    std::string runtime_dir = "/run/user/" + std::to_string(getuid());
+    std::string pattern = runtime_dir + "/wayland-*";
+    
     glob_t glob_result;
-    int ret = glob("/tmp/wayland-*", GLOB_NOSORT, nullptr, &glob_result);
+    int ret = glob(pattern.c_str(), GLOB_NOSORT, nullptr, &glob_result);
     
     if (ret == 0) {
         for (size_t i = 0; i < glob_result.gl_pathc; ++i) {
             const char* socket_path = glob_result.gl_pathv[i];
             
-            // Check if socket is stale (no process using it)
-            // For simplicity, we'll just try to remove lock files
-            std::string lock_path = std::string(socket_path) + ".lock";
+            // Skip if it ends with .lock (we'll handle those separately)
+            std::string path_str(socket_path);
+            if (path_str.find(".lock") != std::string::npos) {
+                continue;
+            }
+            
+            // Check if socket is stale by trying to connect
+            std::string lock_path = path_str + ".lock";
             
             struct stat st;
             if (stat(lock_path.c_str(), &st) == 0) {
-                // Lock file exists, check if it's stale
+                // Lock file exists, try to remove it
                 if (unlink(lock_path.c_str()) == 0) {
                     std::cout << "Removed stale lock file: " << lock_path << std::endl;
                 }
             }
             
-            // Also try to remove the socket itself if it's not in use
+            // Try to remove the socket itself
             if (stat(socket_path, &st) == 0) {
                 if (unlink(socket_path) == 0) {
                     std::cout << "Removed stale socket: " << socket_path << std::endl;
