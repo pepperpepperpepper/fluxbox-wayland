@@ -1,9 +1,13 @@
 #pragma once
 
+extern "C" {
+#include <wayland-server-core.h>
+}
+
 // Forward declarations
 struct wlr_xdg_toplevel;
 struct wlr_scene_tree;
-struct wl_listener;
+struct wlr_scene_rect;
 
 class FluxboxServer;
 class FluxboxWorkspace;
@@ -43,6 +47,11 @@ public:
     struct wlr_scene_tree* get_scene_tree() const { return scene_tree; }
     const char* get_title() const;
     const char* get_app_id() const;
+    
+    // Decoration management
+    void update_decorations();
+    void set_decorated(bool decorated);
+    bool is_decorated() const { return decorated; }
 
 private:
     FluxboxServer* server;
@@ -54,12 +63,23 @@ private:
     bool focused;
     bool maximized;
     bool minimized;
+    bool decorated;
     
     // Saved geometry for maximize/minimize
     struct {
         int x, y;
         int width, height;
     } saved_geometry;
+    
+    // Decoration elements (title bar, borders)
+    struct {
+        struct wlr_scene_tree* tree;
+        struct wlr_scene_rect* titlebar;
+        struct wlr_scene_rect* border_top;
+        struct wlr_scene_rect* border_bottom;
+        struct wlr_scene_rect* border_left;
+        struct wlr_scene_rect* border_right;
+    } decorations;
     
     // Event listeners
     struct wl_listener destroy;

@@ -31,19 +31,38 @@ protocol_sources = [
   'protocols/wlr-screencopy-unstable-v1-client-protocol.c',
   'protocols/xdg-output-unstable-v1-client-protocol.c'
 ]
-protocol_headers = []
 
-# Source files - using scene-based compositor
-sources = [
+# C++ Source files for the main compositor
+cpp_sources = [
+  'src/main.cpp',
+  'src/server.cpp',
+  'src/surface.cpp',
+  'src/workspace.cpp',
+  'src/config.cpp',
+  'src/theme.cpp',
+  'src/keyboard.cpp',
+  'src/cursor.cpp',
+  'src/seat.cpp',
+  'src/output.cpp',
+  'src/xdg_shell.cpp',
+]
+
+# C wrapper sources to avoid C++ incompatibility issues
+c_wrapper_sources = [
+  'src/scene_wrapper.c',
+]
+
+# C sources for scene-based compositor (alternative)
+c_sources = [
   'src/scene_main.c',
 ] + protocol_sources
 
 # Include directories
 inc_dirs = include_directories('include', '.', 'protocols')
 
-# Main executable
+# Main C++ executable
 executable('fluxbox-wayland',
-  sources,
+  cpp_sources + c_wrapper_sources + protocol_sources,
   dependencies: [
     wlroots_dep,
     wayland_server_dep,
@@ -53,6 +72,20 @@ executable('fluxbox-wayland',
   ],
   include_directories: inc_dirs,
   install: true
+)
+
+# C version (scene-based) - alternative implementation
+executable('fluxbox-wayland-scene',
+  c_sources,
+  dependencies: [
+    wlroots_dep,
+    wayland_server_dep,
+    xkbcommon_dep,
+    pixman_dep,
+    libinput_dep,
+  ],
+  include_directories: inc_dirs,
+  install: false
 )
 
 # Portal backend executable

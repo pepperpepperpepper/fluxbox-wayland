@@ -1,0 +1,134 @@
+toolbar:			raised gradient vertical
+toolbar.color:			rgb:80/84/88
+toolbar.colorTo:		rgb:30/34/38
+
+toolbar.button:			raised gradient diagonal
+toolbar.button.color:		rgb:90/94/98
+toolbar.button.colorTo:		rgb:20/24/28
+toolbar.button.picColor:	white
+
+toolbar.button.pressed:		sunken gradient diagonal
+toolbar.button.pressed.color:	black
+toolbar.button.pressed.colorTo:	rgb:80/98/d0
+
+toolbar.clock:			sunken gradient diagonal
+toolbar.clock.color:		rgb:10/20/30
+toolbar.clock.colorTo:		rgb:70/80/90
+toolbar.clock.textColor:	white
+
+toolbar.label:			sunken gradient diagonal
+toolbar.label.color:		rgb:10/20/30
+toolbar.label.colorTo:		rgb:70/80/90
+toolbar.label.textColor:	white
+
+toolbar.windowLabel:		sunken gradient diagonal
+toolbar.windowLabel.color:	rgb:10/20/30
+toolbar.windowLabel.colorTo:	rgb:70/80/90
+toolbar.windowLabel.textColor:	white
+
+toolbar.justify:		center
+
+
+menu.title:			raised gradient diagonal
+menu.title.color:		rgb:90/94/98
+menu.title.colorTo:		rgb:20/24/28
+menu.title.textColor:		white
+menu.title.justify:		center
+
+menu.frame:			sunken gradient diagonal
+menu.frame.color:		rgb:10/20/30
+menu.frame.colorTo:		rgb:70/80/90
+menu.frame.textColor:		rgb:90/a0/b0
+menu.frame.justify:		center
+
+menu.hilite:			raised gradient diagonal
+menu.hilite.color:		rgb:90/94/98
+menu.hilite.colorTo:		rgb:20/24/28
+menu.hilite.textColor:		white
+
+menu.bullet:			empty
+menu.bullet.position:		right
+
+
+window.title.focus:		raised gradient diagonal
+window.title.focus.color:	rgb:90/94/98
+window.title.focus.colorTo:	rgb:20/24/28
+window.title.unfocus:		raised gradient diagonal
+window.title.unfocus.color:	rgb:60/64/68
+window.title.unfocus.colorTo:	rgb:00/04/08
+
+window.label.focus:		sunken gradient diagonal
+window.label.focus.color:	rgb:10/20/30
+window.label.focus.colorTo:	rgb:70/80/90
+window.label.focus.textColor:	white
+window.label.unfocus:		raised gradient diagonal
+window.label.unfocus.color:	rgb:00/04/08
+window.label.unfocus.colorTo:	rgb:60/64/68
+window.label.unfocus.textColor:	rgb:60/64/68
+
+window.button.focus:		raised gradient diagonal
+window.button.focus.color:	rgb:90/94/98
+window.button.focus.colorTo:	rgb:20/24/28
+window.button.focus.picColor:	white
+window.button.unfocus:		raised gradient diagonal
+window.button.unfocus.color:	rgb:60/64/68
+window.button.unfocus.colorTo:	rgb:00/04/08
+window.button.unfocus.picColor:	black
+window.button.pressed:		sunken gradient diagonal
+window.button.pressed.color:	black
+window.button.pressed.colorTo:	rgb:80/98/d0
+
+window.frame.focusColor:	rgb:90/94/98
+window.frame.unfocusColor:	rgb:60/64/68
+
+window.justify:			center
+
+window.handle.focus:		raised gradient diagonal
+window.handle.focus.color:	rgb:90/94/98
+window.handle.focus.colorTo:	rgb:20/24/28
+window.handle.unfocus:		raised gradient diagonal
+window.handle.unfocus.color:	rgb:60/64/68
+window.handle.unfocus.colorTo:	rgb:00/04/08
+
+window.grip.focus:		raised gradient diagonal
+window.grip.focus.color:	rgb:10/20/30
+window.grip.focus.colorTo:	rgb:70/80/90
+window.grip.unfocus:		raised gradient diagonal
+window.grip.unfocus.color:	rgb:00/04/08
+window.grip.unfocus.colorTo:	rgb:60/64/68
+
+! ----------- tab - explicit for fluxbox, the best wm out there[tm] (;
+window.tab.justify:					center
+
+window.tab.label.unfocus:			raised gradient diagonal
+window.tab.label.unfocus.color:		rgb:00/04/08
+window.tab.label.unfocus.colorTo:	rgb:60/64/68
+window.tab.label.unfocus.textColor:	rgb:60/64/68
+
+window.tab.label.focus:				sunken gradient diagonal
+window.tab.label.focus.color:		rgb:10/20/30
+window.tab.label.focus.colorTo:		rgb:70/80/90
+window.tab.label.focus.textColor:	white
+
+window.tab.borderWidth:				1
+window.tab.borderColor:				black
+! ----------- (fluxbox.sourceforge.net)
+
+windowFont:	snap
+window.justify:	center
+menuFont:	snap
+toolbar.font:	lucidasanstypewriter-10
+
+borderColor:	black
+
+bevelWidth:	2
+borderWidth:	1
+handleWidth:	3
+
+rootCommand: xsetroot -mod 4 4 -fg rgb:10/20/30 -bg black
+
+slit:                   raised gradient diagonal
+slit.color:             rgb:90/94/98
+slit.colorTo:           rgb:20/24/28
+slit.borderColor:       black
+slit.borderWidth:       1

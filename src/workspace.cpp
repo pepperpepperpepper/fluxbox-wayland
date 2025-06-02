@@ -1,6 +1,7 @@
 #include "workspace.hpp"
 #include "server.hpp"
 #include "surface.hpp"
+#include "scene_wrapper.h"
 
 #include <algorithm>
 
@@ -11,13 +12,13 @@ FluxboxWorkspace::FluxboxWorkspace(FluxboxServer* server, int index, const std::
     , active(false)
     , scene_tree(nullptr) {
     
-    scene_tree = wlr_scene_tree_create(server->get_scene());
-    wlr_scene_node_set_enabled(&scene_tree->node, false);
+    scene_tree = fluxbox_scene_tree_create_subsurface(fluxbox_scene_tree_create(server->get_scene()));
+    fluxbox_scene_node_set_enabled(scene_tree, false);
 }
 
 FluxboxWorkspace::~FluxboxWorkspace() {
     if (scene_tree) {
-        wlr_scene_node_destroy(&scene_tree->node);
+        fluxbox_scene_node_destroy(scene_tree);
     }
 }
 
@@ -27,7 +28,7 @@ void FluxboxWorkspace::activate() {
     }
     
     active = true;
-    wlr_scene_node_set_enabled(&scene_tree->node, true);
+    fluxbox_scene_node_set_enabled(scene_tree, true);
 }
 
 void FluxboxWorkspace::deactivate() {
@@ -36,7 +37,7 @@ void FluxboxWorkspace::deactivate() {
     }
     
     active = false;
-    wlr_scene_node_set_enabled(&scene_tree->node, false);
+    fluxbox_scene_node_set_enabled(scene_tree, false);
 }
 
 void FluxboxWorkspace::add_surface(FluxboxSurface* surface) {
