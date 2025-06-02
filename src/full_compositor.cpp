@@ -17,6 +17,7 @@ extern "C" {
 #include <wlr/types/wlr_export_dmabuf_v1.h>
 #include <wlr/types/wlr_screencopy_v1.h>
 #include <wlr/types/wlr_xdg_output_v1.h>
+#include <wlr/render/interface.h>
 #include <wlr/util/log.h>
 #include <wayland-server-core.h>
 #include <xkbcommon/xkbcommon.h>
@@ -43,6 +44,15 @@ void signal_handler(int sig) {
         wl_display_terminate(global_display);
     }
 }
+
+// Forward declarations
+struct FluxboxCompositor;
+
+// Wrapper structure to store both listener and compositor pointer
+struct output_frame_listener_data {
+    struct wl_listener listener;
+    FluxboxCompositor* compositor;
+};
 
 struct FluxboxWorkspace {
     int index;
@@ -71,6 +81,7 @@ struct FluxboxCompositor {
     struct wlr_seat* seat;
     struct wlr_xdg_shell* xdg_shell;
     
+    
     // Basic rendering for screencopy support
     
     // Screenshot support
@@ -80,6 +91,9 @@ struct FluxboxCompositor {
     
     // Screencopy event listeners
     struct wl_listener screencopy_frame_destroy;
+    
+    // Output frame listeners for screencopy support
+    std::list<struct wl_listener*> output_frame_listeners;
     
     // Input handling
     struct wlr_cursor* cursor;
@@ -118,6 +132,7 @@ struct FluxboxCompositor {
     static void handle_cursor_axis(struct wl_listener* listener, void* data);
     static void handle_cursor_frame(struct wl_listener* listener, void* data);
     static void handle_keyboard_key(struct wl_listener* listener, void* data);
+    static void handle_output_frame(struct wl_listener* listener, void* data);
     
     // Workspace management
     void switch_workspace(int index);
@@ -259,6 +274,15 @@ struct FluxboxCompositor {
     }
     
     void shutdown() {
+        // Clean up output frame listeners
+        for (auto* listener : output_frame_listeners) {
+            wl_list_remove(&listener->link);
+            // Get the wrapper and delete it
+            struct output_frame_listener_data* wrapper = wl_container_of(listener, wrapper, listener);
+            delete wrapper;
+        }
+        output_frame_listeners.clear();
+        
         // Clean up views
         for (auto* view : views) {
             delete view;
@@ -295,10 +319,20 @@ void FluxboxCompositor::handle_new_output(struct wl_listener* listener, void* da
     
     wlr_output_layout_add_auto(compositor->output_layout, wlr_output);
     
+    // Add frame listener for screencopy support
+    struct output_frame_listener_data* frame_data = new output_frame_listener_data;
+    frame_data->compositor = compositor;
+    frame_data->listener.notify = handle_output_frame;
+    wl_signal_add(&wlr_output->events.frame, &frame_data->listener);
+    compositor->output_frame_listeners.push_back(&frame_data->listener);
+    
     // Load cursor theme for this output
     wlr_xcursor_manager_load(compositor->cursor_mgr, wlr_output->scale);
     
-    std::cout << "Output " << wlr_output->name << " added with scene rendering" << std::endl;
+    // Schedule an initial frame
+    wlr_output_schedule_frame(wlr_output);
+    
+    std::cout << "Output " << wlr_output->name << " added with scene rendering and screencopy support" << std::endl;
 }
 
 void FluxboxCompositor::handle_new_xdg_toplevel(struct wl_listener* listener, void* data) {
@@ -594,6 +628,50 @@ void FluxboxCompositor::handle_keyboard_key(struct wl_listener* listener, void* 
     
     // Forward key event to the focused surface
     wlr_seat_keyboard_notify_key(seat, event->time_msec, event->keycode, event->state);
+}
+
+void FluxboxCompositor::handle_output_frame(struct wl_listener* listener, void* data) {
+    struct wlr_output* output = static_cast<struct wlr_output*>(data);
+    
+    // Get the compositor from the wrapper structure  
+    struct output_frame_listener_data* wrapper = wl_container_of(listener, wrapper, listener);
+    FluxboxCompositor* compositor = wrapper->compositor;
+    
+    // Modern wlroots rendering approach using render passes
+    struct wlr_output_state state;
+    wlr_output_state_init(&state);
+    
+    struct wlr_render_pass* pass = wlr_output_begin_render_pass(output, &state, nullptr, nullptr);
+    if (!pass) {
+        wlr_output_state_finish(&state);
+        return;
+    }
+    
+    // Clear the screen with a solid color (black)
+    struct wlr_render_rect_options rect_options = {};
+    rect_options.box.x = 0;
+    rect_options.box.y = 0;
+    rect_options.box.width = output->width;
+    rect_options.box.height = output->height;
+    rect_options.color.r = 0.0f;
+    rect_options.color.g = 0.0f;
+    rect_options.color.b = 0.0f;
+    rect_options.color.a = 1.0f;
+    
+    wlr_render_pass_add_rect(pass, &rect_options);
+    
+    // Submit the render pass
+    if (!wlr_render_pass_submit(pass)) {
+        wlr_output_state_finish(&state);
+        return;
+    }
+    
+    // Commit the output state
+    if (!wlr_output_commit_state(output, &state)) {
+        std::cerr << "Failed to commit output " << output->name << std::endl;
+    }
+    
+    wlr_output_state_finish(&state);
 }
 
 int main() {

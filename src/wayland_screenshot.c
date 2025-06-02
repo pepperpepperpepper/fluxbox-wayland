@@ -3,6 +3,8 @@
  * Uses zwlr_screencopy_manager_v1 protocol directly
  */
 
+#define _GNU_SOURCE
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -36,7 +38,9 @@ struct screencopy_state {
     size_t buffer_size;
 };
 
-static void shm_format(void *data, struct wl_shm *shm, uint32_t format) {
+static void shm_format(void *data __attribute__((unused)), 
+                       struct wl_shm *shm __attribute__((unused)), 
+                       uint32_t format __attribute__((unused))) {
     // We'll use whatever format the compositor gives us
 }
 
@@ -103,17 +107,17 @@ static void screencopy_buffer(void *data,
     printf("✅ Buffer created and copy started\n");
 }
 
-static void screencopy_flags(void *data,
-                            struct zwlr_screencopy_frame_v1 *frame,
+static void screencopy_flags(void *data __attribute__((unused)),
+                            struct zwlr_screencopy_frame_v1 *frame __attribute__((unused)),
                             uint32_t flags) {
     printf("📋 Screencopy flags: %u\n", flags);
 }
 
 static void screencopy_ready(void *data,
-                            struct zwlr_screencopy_frame_v1 *frame,
-                            uint32_t tv_sec_hi,
-                            uint32_t tv_sec_lo,
-                            uint32_t tv_nsec) {
+                            struct zwlr_screencopy_frame_v1 *frame __attribute__((unused)),
+                            uint32_t tv_sec_hi __attribute__((unused)),
+                            uint32_t tv_sec_lo __attribute__((unused)),
+                            uint32_t tv_nsec __attribute__((unused))) {
     struct screencopy_state *state = data;
     printf("🎉 Screencopy ready!\n");
     state->success = 1;
@@ -121,29 +125,29 @@ static void screencopy_ready(void *data,
 }
 
 static void screencopy_failed(void *data,
-                             struct zwlr_screencopy_frame_v1 *frame) {
+                             struct zwlr_screencopy_frame_v1 *frame __attribute__((unused))) {
     struct screencopy_state *state = data;
     printf("❌ Screencopy failed\n");
     state->success = 0;
     state->done = 1;
 }
 
-static void screencopy_damage(void *data,
-                              struct zwlr_screencopy_frame_v1 *frame,
+static void screencopy_damage(void *data __attribute__((unused)),
+                              struct zwlr_screencopy_frame_v1 *frame __attribute__((unused)),
                               uint32_t x, uint32_t y,
                               uint32_t width, uint32_t height) {
     printf("📋 Damage region: %ux%u at (%u,%u)\n", width, height, x, y);
 }
 
-static void screencopy_linux_dmabuf(void *data,
-                                   struct zwlr_screencopy_frame_v1 *frame,
+static void screencopy_linux_dmabuf(void *data __attribute__((unused)),
+                                   struct zwlr_screencopy_frame_v1 *frame __attribute__((unused)),
                                    uint32_t format,
                                    uint32_t width, uint32_t height) {
     printf("📋 Linux dmabuf: %ux%u format %u\n", width, height, format);
 }
 
-static void screencopy_buffer_done(void *data,
-                                  struct zwlr_screencopy_frame_v1 *frame) {
+static void screencopy_buffer_done(void *data __attribute__((unused)),
+                                  struct zwlr_screencopy_frame_v1 *frame __attribute__((unused))) {
     printf("📋 Buffer done\n");
 }
 
@@ -183,9 +187,9 @@ static void registry_global(void *data,
     }
 }
 
-static void registry_global_remove(void *data,
-                                  struct wl_registry *registry,
-                                  uint32_t name) {
+static void registry_global_remove(void *data __attribute__((unused)),
+                                  struct wl_registry *registry __attribute__((unused)),
+                                  uint32_t name __attribute__((unused))) {
     // Don't care about removed globals
 }
 

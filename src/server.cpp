@@ -15,6 +15,7 @@ extern "C" {
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/types/wlr_export_dmabuf_v1.h>
 #include <wlr/types/wlr_screencopy_v1.h>
+#include <wlr/render/interface.h>
 #include <wlr/util/log.h>
 #include <wayland-server-core.h>
 }
@@ -47,6 +48,7 @@ FluxboxServer::FluxboxServer()
     new_output.notify = handle_new_output;
     new_input.notify = handle_new_input;
     new_xdg_surface.notify = handle_new_xdg_surface;
+    screencopy_frame.notify = handle_screencopy_frame;
 }
 
 FluxboxServer::~FluxboxServer() {
@@ -193,6 +195,13 @@ void FluxboxServer::run() {
 void FluxboxServer::shutdown() {
     std::cout << "Starting server shutdown..." << std::endl;
     
+    // Clean up output frame listeners
+    for (auto* listener : output_frame_listeners) {
+        wl_list_remove(&listener->link);
+        delete listener;
+    }
+    output_frame_listeners.clear();
+    
     // Clean up surfaces
     for (auto* surface : surfaces) {
         delete surface;
@@ -248,6 +257,9 @@ void FluxboxServer::setup_listeners() {
     wl_signal_add(&backend->events.new_output, &new_output);
     wl_signal_add(&backend->events.new_input, &new_input);
     wl_signal_add(&xdg_shell->events.new_toplevel, &new_xdg_surface);
+    if (screencopy_manager) {
+        wl_signal_add(&screencopy_manager->events.new_frame, &screencopy_frame);
+    }
 }
 
 void FluxboxServer::handle_new_output(struct wl_listener* listener, void* data) {
@@ -269,6 +281,24 @@ void FluxboxServer::handle_new_output(struct wl_listener* listener, void* data) 
     wlr_output_state_finish(&state);
 
     wlr_output_layout_add_auto(server->output_layout, wlr_output);
+    
+    // Create scene output for this output
+    struct wlr_scene_output* scene_output = wlr_scene_output_create(server->scene, wlr_output);
+    if (!scene_output) {
+        wlr_log(WLR_ERROR, "Failed to create scene output for %s", wlr_output->name);
+        return;
+    }
+    
+    // Add frame listener for screencopy support
+    struct wl_listener* frame_listener = new wl_listener;
+    frame_listener->notify = handle_output_frame;
+    wl_signal_add(&wlr_output->events.frame, frame_listener);
+    server->output_frame_listeners.push_back(frame_listener);
+    
+    // Schedule an initial frame to get rendering started
+    wlr_output_schedule_frame(wlr_output);
+    
+    wlr_log(WLR_INFO, "Output %s added with scene and frame listener for screencopy", wlr_output->name);
 }
 
 void FluxboxServer::handle_new_input(struct wl_listener* listener, void* data) {
@@ -351,4 +381,44 @@ void FluxboxServer::switch_workspace(int index) {
     } else {
         set_focus(nullptr);
     }
+}
+
+void FluxboxServer::handle_output_frame(struct wl_listener* listener, void* data) {
+    struct wlr_output* output = static_cast<struct wlr_output*>(data);
+    
+    // Find the scene output for this wlr_output
+    struct wlr_scene_output* scene_output = wlr_scene_get_scene_output(scene, output);
+    if (!scene_output) {
+        wlr_log(WLR_ERROR, "No scene output found for output %s", output->name);
+        return;
+    }
+    
+    // Render the scene
+    if (!wlr_scene_output_commit(scene_output, nullptr)) {
+        wlr_log(WLR_ERROR, "Failed to commit scene output for %s", output->name);
+        return;
+    }
+    
+    wlr_log(WLR_DEBUG, "Frame rendered for output %s", output->name);
+}
+
+void FluxboxServer::handle_screencopy_frame(struct wl_listener* listener, void* data) {
+    FluxboxServer* server = wl_container_of(listener, server, screencopy_frame);
+    struct wlr_screencopy_frame_v1* frame = static_cast<struct wlr_screencopy_frame_v1*>(data);
+    
+    wlr_log(WLR_INFO, "Screencopy frame request received");
+    
+    // Get the output being requested
+    struct wlr_output* output = frame->output;
+    if (!output) {
+        wlr_log(WLR_ERROR, "No output specified for screencopy frame");
+        wlr_screencopy_frame_v1_destroy(frame);
+        return;
+    }
+    
+    // The frame listener will handle the actual rendering
+    // Just schedule a frame to trigger the render loop
+    wlr_output_schedule_frame(output);
+    
+    wlr_log(WLR_INFO, "Screencopy frame scheduled for output %s", output->name);
 }

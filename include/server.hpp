@@ -95,11 +95,17 @@ private:
     struct wl_listener new_output;
     struct wl_listener new_input;
     struct wl_listener new_xdg_surface;
+    struct wl_listener screencopy_frame;
+    
+    // Output frame listeners (for screencopy support)
+    std::list<struct wl_listener*> output_frame_listeners;
 
     // Event handlers
     static void handle_new_output(struct wl_listener* listener, void* data);
     static void handle_new_input(struct wl_listener* listener, void* data);
     static void handle_new_xdg_surface(struct wl_listener* listener, void* data);
+    static void handle_screencopy_frame(struct wl_listener* listener, void* data);
+    static void handle_output_frame(struct wl_listener* listener, void* data);
 
     void setup_listeners();
 };

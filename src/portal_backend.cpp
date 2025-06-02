@@ -208,21 +208,28 @@ private:
     }
     
     std::string take_screenshot() {
-        // For now, use a simple approach: take screenshot of the X11 backend
-        // Later we can implement proper Wayland screencopy integration
+        // Use proper Wayland screencopy - this is a Wayland compositor!
         
         std::string timestamp = std::to_string(time(nullptr));
         std::string filename = "/tmp/fluxbox_screenshot_" + timestamp + ".png";
         
-        // Try X11 backend screenshot first
-        std::string x11_cmd = "DISPLAY=:1 scrot '" + filename + "' 2>/dev/null";
-        int result = system(x11_cmd.c_str());
+        // Use our built-in Wayland screenshot tool
+        std::string wayland_cmd = "./build/fluxbox-screenshot '" + filename + ".raw' 2>/dev/null";
+        int result = system(wayland_cmd.c_str());
         
         if (result == 0) {
-            // Check if file was created and has content
+            // Check if raw file was created and has content
             struct stat st;
-            if (stat(filename.c_str(), &st) == 0 && st.st_size > 0) {
-                return "file://" + filename;
+            std::string raw_filename = filename + ".raw";
+            if (stat(raw_filename.c_str(), &st) == 0 && st.st_size > 0) {
+                // Convert raw to PNG if possible
+                std::string convert_cmd = "magick -size 1280x720 -depth 8 rgba:'" + raw_filename + "' '" + filename + "' 2>/dev/null";
+                if (system(convert_cmd.c_str()) == 0) {
+                    return "file://" + filename;
+                } else {
+                    // Return raw file if conversion fails
+                    return "file://" + raw_filename;
+                }
             }
         }
         
