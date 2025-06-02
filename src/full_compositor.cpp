@@ -14,6 +14,7 @@ extern "C" {
 #include <wlr/types/wlr_subcompositor.h>
 #include <wlr/types/wlr_xcursor_manager.h>
 #include <wlr/types/wlr_xdg_shell.h>
+// #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_export_dmabuf_v1.h>
 #include <wlr/types/wlr_screencopy_v1.h>
 #include <wlr/types/wlr_xdg_output_v1.h>
@@ -22,7 +23,6 @@ extern "C" {
 #include <wayland-server-core.h>
 #include <xkbcommon/xkbcommon.h>
 }
-
 
 #include <iostream>
 #include <cstdlib>
@@ -66,9 +66,12 @@ struct FluxboxWorkspace {
 struct FluxboxView {
     struct wlr_xdg_toplevel* toplevel;
     struct wl_listener destroy;
+    struct wl_listener map;
+    struct wl_listener unmap;
     FluxboxWorkspace* workspace;
+    struct wlr_scene_tree* scene_tree;
     
-    FluxboxView(struct wlr_xdg_toplevel* tl) : toplevel(tl), workspace(nullptr) {}
+    FluxboxView(struct wlr_xdg_toplevel* tl) : toplevel(tl), workspace(nullptr), scene_tree(nullptr) {}
 };
 
 struct FluxboxCompositor {
@@ -80,7 +83,7 @@ struct FluxboxCompositor {
     struct wlr_output_layout* output_layout;
     struct wlr_seat* seat;
     struct wlr_xdg_shell* xdg_shell;
-    
+    // struct wlr_scene* scene;
     
     // Basic rendering for screencopy support
     
@@ -125,6 +128,8 @@ struct FluxboxCompositor {
     static void handle_new_output(struct wl_listener* listener, void* data);
     static void handle_new_xdg_toplevel(struct wl_listener* listener, void* data);
     static void handle_view_destroy(struct wl_listener* listener, void* data);
+    static void handle_view_map(struct wl_listener* listener, void* data);
+    static void handle_view_unmap(struct wl_listener* listener, void* data);
     static void handle_new_input(struct wl_listener* listener, void* data);
     static void handle_cursor_motion(struct wl_listener* listener, void* data);
     static void handle_cursor_motion_absolute(struct wl_listener* listener, void* data);
@@ -192,6 +197,10 @@ struct FluxboxCompositor {
         
         // Create output layout first
         output_layout = wlr_output_layout_create(display);
+        
+        // Create scene graph
+        // scene = wlr_scene_create();
+        // wlr_scene_attach_output_layout(scene, output_layout);
         
         // Create screenshot support protocols
         export_dmabuf_manager = wlr_export_dmabuf_manager_v1_create(display);
@@ -319,6 +328,13 @@ void FluxboxCompositor::handle_new_output(struct wl_listener* listener, void* da
     
     wlr_output_layout_add_auto(compositor->output_layout, wlr_output);
     
+    // Create scene output for this output
+    // struct wlr_scene_output* scene_output = wlr_scene_output_create(compositor->scene, wlr_output);
+    // if (!scene_output) {
+    //     std::cerr << "Failed to create scene output for " << wlr_output->name << std::endl;
+    //     return;
+    // }
+    
     // Add frame listener for screencopy support
     struct output_frame_listener_data* frame_data = new output_frame_listener_data;
     frame_data->compositor = compositor;
@@ -341,13 +357,21 @@ void FluxboxCompositor::handle_new_xdg_toplevel(struct wl_listener* listener, vo
     
     FluxboxView* view = new FluxboxView(toplevel);
     
-    // Set up basic view event listener
+    // Create scene tree for this surface
+    // view->scene_tree = wlr_scene_xdg_surface_create(&compositor->scene->tree, toplevel->base);
+    
+    // Set up event listeners
     view->destroy.notify = handle_view_destroy;
     wl_signal_add(&toplevel->base->events.destroy, &view->destroy);
     
+    view->map.notify = handle_view_map;
+    wl_signal_add(&toplevel->base->surface->events.map, &view->map);
+    
+    view->unmap.notify = handle_view_unmap;
+    wl_signal_add(&toplevel->base->surface->events.unmap, &view->unmap);
+    
     compositor->add_view(view);
     compositor->add_view_to_current_workspace(view);
-    compositor->focus_view(view);
     
     std::cout << "New toplevel: " << (toplevel->title ? toplevel->title : "(no title)") << std::endl;
 }
@@ -357,10 +381,31 @@ void FluxboxCompositor::handle_view_destroy(struct wl_listener* listener, void* 
     
     std::cout << "View destroyed" << std::endl;
     
-    // Remove listener
+    // Remove listeners
     wl_list_remove(&view->destroy.link);
+    wl_list_remove(&view->map.link);
+    wl_list_remove(&view->unmap.link);
     
     delete view;
+}
+
+void FluxboxCompositor::handle_view_map(struct wl_listener* listener, void* data) {
+    FluxboxView* view = wl_container_of(listener, view, map);
+    
+    // When the surface is mapped (ready to be displayed), focus it
+    // Find the compositor instance - we need a better way to access it
+    // For now, just ensure the surface is visible
+    // wlr_scene_node_set_enabled(&view->scene_tree->node, true);
+    
+    // Send a configure event to ensure proper sizing
+    wlr_xdg_toplevel_set_size(view->toplevel, 0, 0);
+}
+
+void FluxboxCompositor::handle_view_unmap(struct wl_listener* listener, void* data) {
+    FluxboxView* view = wl_container_of(listener, view, unmap);
+    
+    // When unmapped, unfocus if this was the focused view
+    // The scene graph will handle hiding it
 }
 
 void FluxboxCompositor::handle_new_input(struct wl_listener* listener, void* data) {
@@ -647,18 +692,50 @@ void FluxboxCompositor::handle_output_frame(struct wl_listener* listener, void* 
         return;
     }
     
-    // Clear the screen with a solid color (black)
+    // Clear the screen with a solid color (dark gray for testing)
     struct wlr_render_rect_options rect_options = {};
     rect_options.box.x = 0;
     rect_options.box.y = 0;
     rect_options.box.width = output->width;
     rect_options.box.height = output->height;
-    rect_options.color.r = 0.0f;
-    rect_options.color.g = 0.0f;
-    rect_options.color.b = 0.0f;
+    rect_options.color.r = 0.1f;
+    rect_options.color.g = 0.1f;
+    rect_options.color.b = 0.1f;
     rect_options.color.a = 1.0f;
     
     wlr_render_pass_add_rect(pass, &rect_options);
+    
+    // Render all views in the current workspace
+    if (compositor->current_workspace) {
+        for (auto* view : compositor->current_workspace->views) {
+            if (!view || !view->toplevel || !view->toplevel->base || !view->toplevel->base->surface) {
+                continue;
+            }
+            
+            struct wlr_surface* surface = view->toplevel->base->surface;
+            if (!wlr_surface_has_buffer(surface)) {
+                continue;
+            }
+            
+            // Get the surface's position and size
+            struct wlr_box geo;
+            wlr_xdg_surface_get_geometry(view->toplevel->base, &geo);
+            
+            // Simple rendering: draw surface at a fixed position for now
+            struct wlr_render_texture_options texture_options = {};
+            texture_options.texture = wlr_surface_get_texture(surface);
+            if (!texture_options.texture) {
+                continue;
+            }
+            
+            texture_options.dst_box.x = 100; // Fixed position for testing
+            texture_options.dst_box.y = 100;
+            texture_options.dst_box.width = geo.width > 0 ? geo.width : 800;
+            texture_options.dst_box.height = geo.height > 0 ? geo.height : 600;
+            
+            wlr_render_pass_add_texture(pass, &texture_options);
+        }
+    }
     
     // Submit the render pass
     if (!wlr_render_pass_submit(pass)) {

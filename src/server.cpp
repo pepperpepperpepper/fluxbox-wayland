@@ -203,8 +203,14 @@ void FluxboxServer::shutdown() {
     output_frame_listeners.clear();
     
     // Clean up surfaces
-    for (auto* surface : surfaces) {
-        delete surface;
+    // Make a copy of the list since surfaces will be removed during destruction
+    auto surfaces_copy = surfaces;
+    for (auto* surface : surfaces_copy) {
+        // Only delete if the surface hasn't already been destroyed
+        // The surface destructor will remove itself from the list
+        if (std::find(surfaces.begin(), surfaces.end(), surface) != surfaces.end()) {
+            delete surface;
+        }
     }
     surfaces.clear();
     
@@ -344,6 +350,9 @@ void FluxboxServer::remove_surface(FluxboxSurface* surface) {
             set_focus(surfaces.back());
         }
     }
+    
+    // Note: The surface will be deleted by the destroy handler in surface.cpp
+    // Do NOT delete it here to avoid double-free
 }
 
 void FluxboxServer::set_focus(FluxboxSurface* surface) {

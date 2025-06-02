@@ -63,6 +63,9 @@ private:
     
     // Event listeners
     struct wl_listener destroy;
+    struct wl_listener map;
+    struct wl_listener unmap;
+    struct wl_listener commit;
     struct wl_listener request_move;
     struct wl_listener request_resize;
     struct wl_listener request_maximize;
@@ -73,6 +76,9 @@ private:
     
     // Event handlers
     static void handle_destroy(struct wl_listener* listener, void* data);
+    static void handle_map(struct wl_listener* listener, void* data);
+    static void handle_unmap(struct wl_listener* listener, void* data);
+    static void handle_commit(struct wl_listener* listener, void* data);
     static void handle_request_move(struct wl_listener* listener, void* data);
     static void handle_request_resize(struct wl_listener* listener, void* data);
     static void handle_request_maximize(struct wl_listener* listener, void* data);

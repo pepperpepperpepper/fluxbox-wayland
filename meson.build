@@ -33,10 +33,9 @@ protocol_sources = [
 ]
 protocol_headers = []
 
-# Source files - using full compositor with input and configuration
+# Source files - using scene-based compositor
 sources = [
-  'src/full_compositor.cpp',
-  'src/config.cpp',
+  'src/scene_main.c',
 ] + protocol_sources
 
 # Include directories

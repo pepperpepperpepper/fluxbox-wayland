@@ -23,6 +23,9 @@ FluxboxSurface::FluxboxSurface(FluxboxServer* server, struct wlr_xdg_toplevel* t
 FluxboxSurface::~FluxboxSurface() {
     // Remove listeners
     wl_list_remove(&destroy.link);
+    wl_list_remove(&map.link);
+    wl_list_remove(&unmap.link);
+    wl_list_remove(&commit.link);
     wl_list_remove(&request_move.link);
     wl_list_remove(&request_resize.link);
     wl_list_remove(&request_maximize.link);
@@ -35,6 +38,15 @@ FluxboxSurface::~FluxboxSurface() {
 void FluxboxSurface::setup_listeners() {
     destroy.notify = handle_destroy;
     wl_signal_add(&toplevel->base->events.destroy, &destroy);
+    
+    map.notify = handle_map;
+    wl_signal_add(&toplevel->base->surface->events.map, &map);
+    
+    unmap.notify = handle_unmap;
+    wl_signal_add(&toplevel->base->surface->events.unmap, &unmap);
+    
+    commit.notify = handle_commit;
+    wl_signal_add(&toplevel->base->surface->events.commit, &commit);
     
     request_move.notify = handle_request_move;
     wl_signal_add(&toplevel->events.request_move, &request_move);
@@ -234,4 +246,33 @@ void FluxboxSurface::handle_set_title(struct wl_listener* listener, void* data) 
 
 void FluxboxSurface::handle_set_app_id(struct wl_listener* listener, void* data) {
     // App ID changed - could update window list, taskbar, etc.
+}
+
+void FluxboxSurface::handle_map(struct wl_listener* listener, void* data) {
+    FluxboxSurface* surface = wl_container_of(listener, surface, map);
+    
+    // When the surface is mapped (ready to be displayed), ensure it's visible
+    wlr_scene_node_set_enabled(&surface->scene_tree->node, true);
+    
+    // Focus the newly mapped surface
+    surface->server->set_focus(surface);
+}
+
+void FluxboxSurface::handle_unmap(struct wl_listener* listener, void* data) {
+    FluxboxSurface* surface = wl_container_of(listener, surface, unmap);
+    
+    // When unmapped, hide the surface
+    wlr_scene_node_set_enabled(&surface->scene_tree->node, false);
+    
+    // If this was the focused surface, unfocus it
+    if (surface->server->get_focused_surface() == surface) {
+        surface->server->set_focus(nullptr);
+    }
+}
+
+void FluxboxSurface::handle_commit(struct wl_listener* listener, void* data) {
+    FluxboxSurface* surface = wl_container_of(listener, surface, commit);
+    
+    // Handle surface commits (updates)
+    // The scene graph will automatically handle rendering
 }
