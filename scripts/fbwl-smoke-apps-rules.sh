@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+need_cmd() {
+  command -v "$1" >/dev/null 2>&1 || { echo "missing required command: $1" >&2; exit 1; }
+}
+
+need_cmd rg
+need_cmd timeout
+
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/xdg-runtime-$UID}"
+mkdir -p "$XDG_RUNTIME_DIR"
+chmod 0700 "$XDG_RUNTIME_DIR"
+
+SOCKET="${SOCKET:-wayland-fbwl-test-$UID-$$}"
+LOG="${LOG:-/tmp/fluxbox-wayland-apps-rules-$UID-$$.log}"
+
+APPS_FILE="$(mktemp /tmp/fbwl-apps-rules-XXXXXX)"
+
+cleanup() {
+  rm -f "$APPS_FILE" 2>/dev/null || true
+  if [[ -n "${A_PID:-}" ]]; then kill "$A_PID" 2>/dev/null || true; fi
+  if [[ -n "${B_PID:-}" ]]; then kill "$B_PID" 2>/dev/null || true; fi
+  if [[ -n "${FBW_PID:-}" ]]; then kill "$FBW_PID" 2>/dev/null || true; fi
+  wait 2>/dev/null || true
+}
+trap cleanup EXIT
+
+cat >"$APPS_FILE" <<'EOF'
+# Workspace IDs are 0-based (Fluxbox apps file semantics):
+#   [Workspace] {0} => first workspace
+
+[app] (app_id=fbwl-apps-jump)
+  [Workspace] {1}
+  [Jump]      {yes}
+[end]
+
+[app] (app_id=fbwl-apps-sticky)
+  [Workspace] {2}
+  [Sticky]    {yes}
+[end]
+EOF
+
+: >"$LOG"
+
+WLR_BACKENDS=headless WLR_RENDERER=pixman ./fluxbox-wayland \
+  --no-xwayland \
+  --socket "$SOCKET" \
+  --workspaces 3 \
+  --apps "$APPS_FILE" \
+  >"$LOG" 2>&1 &
+FBW_PID=$!
+
+timeout 5 bash -c "until rg -q 'Running fluxbox-wayland' '$LOG'; do sleep 0.05; done"
+timeout 5 bash -c "until rg -q 'IPC: listening' '$LOG'; do sleep 0.05; done"
+
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-smoke-client --socket "$SOCKET" --app-id fbwl-apps-jump --title apps-jump --stay-ms 10000 >/dev/null 2>&1 &
+A_PID=$!
+
+timeout 5 bash -c "until ./fbwl-remote --socket '$SOCKET' get-workspace | rg -q '^ok workspace=2$'; do sleep 0.05; done"
+
+START=$((OFFSET + 1))
+timeout 5 bash -c "until tail -c +$START '$LOG' | rg -q 'Apps: applied .*app_id=fbwl-apps-jump .*workspace_id=1 .*jump=1'; do sleep 0.05; done"
+
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-smoke-client --socket "$SOCKET" --app-id fbwl-apps-sticky --title apps-sticky --stay-ms 10000 >/dev/null 2>&1 &
+B_PID=$!
+
+START=$((OFFSET + 1))
+timeout 5 bash -c "until tail -c +$START '$LOG' | rg -q 'Apps: applied .*app_id=fbwl-apps-sticky .*workspace_id=2 .*sticky=1'; do sleep 0.05; done"
+timeout 5 bash -c "until tail -c +$START '$LOG' | rg -q 'Workspace: view=apps-sticky ws=3 visible=1'; do sleep 0.05; done"
+
+./fbwl-remote --socket "$SOCKET" get-workspace | rg -q '^ok workspace=2$'
+
+echo "ok: apps rules smoke passed (socket=$SOCKET log=$LOG apps=$APPS_FILE)"
+

@@ -3,17 +3,56 @@
 bin_SCRIPTS = \
 	util/fbsetbg \
 	util/fluxbox-generate_menu \
-	util/startfluxbox
+	util/startfluxbox \
+	util/startfluxbox-wayland
 EXTRA_DIST += \
 	util/fbsetbg
 PATHFILES += \
 	util/startfluxbox \
-	util/fluxbox-generate_menu
+	util/fluxbox-generate_menu \
+	util/startfluxbox-wayland
 
 bin_PROGRAMS += \
 	fbsetroot \
 	fluxbox-remote \
 	fluxbox-update_configs
+
+if WAYLAND
+bin_PROGRAMS += \
+	fbwl-smoke-client \
+	fbwl-clipboard-client \
+	fbwl-cursor-shape-client \
+	fbwl-dnd-client \
+	fbwl-data-control-client \
+	fbwl-presentation-time-client \
+	fbwl-primary-selection-client \
+	fbwl-relptr-client \
+	fbwl-screencopy-client \
+	fbwl-export-dmabuf-client \
+	fbwl-output-management-client \
+	fbwl-output-power-client \
+	fbwl-xdg-output-client \
+	fbwl-viewporter-client \
+	fbwl-fractional-scale-client \
+	fbwl-text-input-client \
+	fbwl-input-method-client \
+	fbwl-xdg-activation-client \
+	fbwl-xdg-decoration-client \
+	fbwl-idle-client \
+	fbwl-session-lock-client \
+	fbwl-shortcuts-inhibit-client \
+	fbwl-single-pixel-buffer-client \
+	fbwl-remote \
+	fbwl-input-injector \
+	fbwl-foreign-toplevel-client \
+	fbwl-layer-shell-client \
+	fbx11-smoke-client
+
+if HAVE_SYSTEMD
+bin_PROGRAMS += \
+	fbwl-sni-item-client
+endif
+endif
 
 fbsetroot_SOURCES = \
 	src/FbAtoms.cc \
@@ -52,3 +91,411 @@ fluxbox_remote_CPPFLAGS = \
 	$(AM_CPPFLAGS) \
 	-I$(fbtk_incdir)
 
+if WAYLAND
+fbwl_smoke_client_SOURCES = \
+	util/fbwl-smoke-client.c \
+	src/wayland/protocol/xdg-shell-protocol.c \
+	src/wayland/protocol/xdg-shell-client-protocol.h \
+	src/wayland/protocol/xdg-decoration-unstable-v1-protocol.c \
+	src/wayland/protocol/xdg-decoration-unstable-v1-client-protocol.h
+
+fbwl_smoke_client_CPPFLAGS = \
+	$(AM_CPPFLAGS) \
+	$(WAYLAND_CLIENT_CFLAGS) \
+	-I$(top_srcdir)/src/wayland/protocol
+
+fbwl_smoke_client_LDADD = \
+	$(WAYLAND_CLIENT_LIBS)
+
+fbwl_clipboard_client_SOURCES = \
+	util/fbwl-clipboard-client.c \
+	src/wayland/protocol/xdg-shell-protocol.c \
+	src/wayland/protocol/xdg-shell-client-protocol.h
+
+fbwl_clipboard_client_CPPFLAGS = \
+	$(AM_CPPFLAGS) \
+	$(WAYLAND_CLIENT_CFLAGS) \
+	-I$(top_srcdir)/src/wayland/protocol
+
+fbwl_clipboard_client_LDADD = \
+	$(WAYLAND_CLIENT_LIBS)
+
+if HAVE_SYSTEMD
+fbwl_sni_item_client_SOURCES = \
+	util/fbwl-sni-item-client.c
+
+fbwl_sni_item_client_CPPFLAGS = \
+	$(AM_CPPFLAGS) \
+	$(SYSTEMD_CFLAGS)
+
+fbwl_sni_item_client_LDADD = \
+	$(SYSTEMD_LIBS)
+endif
+
+fbwl_cursor_shape_client_SOURCES = \
+	util/fbwl-cursor-shape-client.c \
+	src/wayland/protocol/xdg-shell-protocol.c \
+	src/wayland/protocol/xdg-shell-client-protocol.h \
+	src/wayland/protocol/tablet-v2-protocol.c \
+	src/wayland/protocol/tablet-v2-client-protocol.h \
+	src/wayland/protocol/cursor-shape-v1-protocol.c \
+	src/wayland/protocol/cursor-shape-v1-client-protocol.h
+
+fbwl_cursor_shape_client_CPPFLAGS = \
+	$(AM_CPPFLAGS) \
+	$(WAYLAND_CLIENT_CFLAGS) \
+	-I$(top_srcdir)/src/wayland/protocol
+
+fbwl_cursor_shape_client_LDADD = \
+	$(WAYLAND_CLIENT_LIBS)
+
+fbwl_dnd_client_SOURCES = \
+	util/fbwl-dnd-client.c \
+	src/wayland/protocol/xdg-shell-protocol.c \
+	src/wayland/protocol/xdg-shell-client-protocol.h
+
+fbwl_dnd_client_CPPFLAGS = \
+	$(AM_CPPFLAGS) \
+	$(WAYLAND_CLIENT_CFLAGS) \
+	-I$(top_srcdir)/src/wayland/protocol
+
+fbwl_dnd_client_LDADD = \
+	$(WAYLAND_CLIENT_LIBS)
+
+fbwl_data_control_client_SOURCES = \
+	util/fbwl-data-control-client.c \
+	src/wayland/protocol/wlr-data-control-unstable-v1-protocol.c \
+	src/wayland/protocol/wlr-data-control-unstable-v1-client-protocol.h \
+	src/wayland/protocol/ext-data-control-v1-protocol.c \
+	src/wayland/protocol/ext-data-control-v1-client-protocol.h
+
+fbwl_data_control_client_CPPFLAGS = \
+	$(AM_CPPFLAGS) \
+	$(WAYLAND_CLIENT_CFLAGS) \
+	-I$(top_srcdir)/src/wayland/protocol
+
+fbwl_data_control_client_LDADD = \
+	$(WAYLAND_CLIENT_LIBS)
+
+fbwl_presentation_time_client_SOURCES = \
+	util/fbwl-presentation-time-client.c \
+	src/wayland/protocol/xdg-shell-protocol.c \
+	src/wayland/protocol/xdg-shell-client-protocol.h \
+	src/wayland/protocol/presentation-time-protocol.c \
+	src/wayland/protocol/presentation-time-client-protocol.h
+
+fbwl_presentation_time_client_CPPFLAGS = \
+	$(AM_CPPFLAGS) \
+	$(WAYLAND_CLIENT_CFLAGS) \
+	-I$(top_srcdir)/src/wayland/protocol
+
+fbwl_presentation_time_client_LDADD = \
+	$(WAYLAND_CLIENT_LIBS)
+
+fbwl_primary_selection_client_SOURCES = \
+	util/fbwl-primary-selection-client.c \
+	src/wayland/protocol/xdg-shell-protocol.c \
+	src/wayland/protocol/xdg-shell-client-protocol.h \
+	src/wayland/protocol/primary-selection-unstable-v1-protocol.c \
+	src/wayland/protocol/primary-selection-unstable-v1-client-protocol.h
+
+fbwl_primary_selection_client_CPPFLAGS = \
+	$(AM_CPPFLAGS) \
+	$(WAYLAND_CLIENT_CFLAGS) \
+	-I$(top_srcdir)/src/wayland/protocol
+
+fbwl_primary_selection_client_LDADD = \
+	$(WAYLAND_CLIENT_LIBS)
+
+fbwl_relptr_client_SOURCES = \
+	util/fbwl-relptr-client.c \
+	src/wayland/protocol/xdg-shell-protocol.c \
+	src/wayland/protocol/xdg-shell-client-protocol.h \
+	src/wayland/protocol/relative-pointer-unstable-v1-protocol.c \
+	src/wayland/protocol/relative-pointer-unstable-v1-client-protocol.h \
+	src/wayland/protocol/pointer-constraints-unstable-v1-protocol.c \
+	src/wayland/protocol/pointer-constraints-unstable-v1-client-protocol.h
+
+fbwl_relptr_client_CPPFLAGS = \
+	$(AM_CPPFLAGS) \
+	$(WAYLAND_CLIENT_CFLAGS) \
+	-I$(top_srcdir)/src/wayland/protocol
+
+fbwl_relptr_client_LDADD = \
+	$(WAYLAND_CLIENT_LIBS)
+
+fbwl_screencopy_client_SOURCES = \
+	util/fbwl-screencopy-client.c \
+	src/wayland/protocol/wlr-screencopy-unstable-v1-protocol.c \
+	src/wayland/protocol/wlr-screencopy-unstable-v1-client-protocol.h
+
+fbwl_screencopy_client_CPPFLAGS = \
+	$(AM_CPPFLAGS) \
+	$(WAYLAND_CLIENT_CFLAGS) \
+	-I$(top_srcdir)/src/wayland/protocol
+
+fbwl_screencopy_client_LDADD = \
+	$(WAYLAND_CLIENT_LIBS)
+
+fbwl_export_dmabuf_client_SOURCES = \
+	util/fbwl-export-dmabuf-client.c \
+	src/wayland/protocol/wlr-export-dmabuf-unstable-v1-protocol.c \
+	src/wayland/protocol/wlr-export-dmabuf-unstable-v1-client-protocol.h
+
+fbwl_export_dmabuf_client_CPPFLAGS = \
+	$(AM_CPPFLAGS) \
+	$(WAYLAND_CLIENT_CFLAGS) \
+	-I$(top_srcdir)/src/wayland/protocol
+
+fbwl_export_dmabuf_client_LDADD = \
+	$(WAYLAND_CLIENT_LIBS)
+
+fbwl_output_management_client_SOURCES = \
+	util/fbwl-output-management-client.c \
+	src/wayland/protocol/wlr-output-management-unstable-v1-protocol.c \
+	src/wayland/protocol/wlr-output-management-unstable-v1-client-protocol.h
+
+fbwl_output_management_client_CPPFLAGS = \
+	$(AM_CPPFLAGS) \
+	$(WAYLAND_CLIENT_CFLAGS) \
+	-I$(top_srcdir)/src/wayland/protocol
+
+fbwl_output_management_client_LDADD = \
+	$(WAYLAND_CLIENT_LIBS)
+
+fbwl_output_power_client_SOURCES = \
+	util/fbwl-output-power-client.c \
+	src/wayland/protocol/wlr-output-power-management-unstable-v1-protocol.c \
+	src/wayland/protocol/wlr-output-power-management-unstable-v1-client-protocol.h
+
+fbwl_output_power_client_CPPFLAGS = \
+	$(AM_CPPFLAGS) \
+	$(WAYLAND_CLIENT_CFLAGS) \
+	-I$(top_srcdir)/src/wayland/protocol
+
+fbwl_output_power_client_LDADD = \
+	$(WAYLAND_CLIENT_LIBS)
+
+fbwl_xdg_output_client_SOURCES = \
+	util/fbwl-xdg-output-client.c \
+	src/wayland/protocol/xdg-output-unstable-v1-protocol.c \
+	src/wayland/protocol/xdg-output-unstable-v1-client-protocol.h
+
+fbwl_xdg_output_client_CPPFLAGS = \
+	$(AM_CPPFLAGS) \
+	$(WAYLAND_CLIENT_CFLAGS) \
+	-I$(top_srcdir)/src/wayland/protocol
+
+fbwl_xdg_output_client_LDADD = \
+	$(WAYLAND_CLIENT_LIBS)
+
+fbwl_viewporter_client_SOURCES = \
+	util/fbwl-viewporter-client.c \
+	src/wayland/protocol/xdg-shell-protocol.c \
+	src/wayland/protocol/xdg-shell-client-protocol.h \
+	src/wayland/protocol/viewporter-protocol.c \
+	src/wayland/protocol/viewporter-client-protocol.h
+
+fbwl_viewporter_client_CPPFLAGS = \
+	$(AM_CPPFLAGS) \
+	$(WAYLAND_CLIENT_CFLAGS) \
+	-I$(top_srcdir)/src/wayland/protocol
+
+fbwl_viewporter_client_LDADD = \
+	$(WAYLAND_CLIENT_LIBS)
+
+fbwl_fractional_scale_client_SOURCES = \
+	util/fbwl-fractional-scale-client.c \
+	src/wayland/protocol/xdg-shell-protocol.c \
+	src/wayland/protocol/xdg-shell-client-protocol.h \
+	src/wayland/protocol/fractional-scale-v1-protocol.c \
+	src/wayland/protocol/fractional-scale-v1-client-protocol.h
+
+fbwl_fractional_scale_client_CPPFLAGS = \
+	$(AM_CPPFLAGS) \
+	$(WAYLAND_CLIENT_CFLAGS) \
+	-I$(top_srcdir)/src/wayland/protocol
+
+fbwl_fractional_scale_client_LDADD = \
+	$(WAYLAND_CLIENT_LIBS)
+
+fbwl_text_input_client_SOURCES = \
+	util/fbwl-text-input-client.c \
+	src/wayland/protocol/xdg-shell-protocol.c \
+	src/wayland/protocol/xdg-shell-client-protocol.h \
+	src/wayland/protocol/text-input-unstable-v3-protocol.c \
+	src/wayland/protocol/text-input-unstable-v3-client-protocol.h
+
+fbwl_text_input_client_CPPFLAGS = \
+	$(AM_CPPFLAGS) \
+	$(WAYLAND_CLIENT_CFLAGS) \
+	-I$(top_srcdir)/src/wayland/protocol
+
+fbwl_text_input_client_LDADD = \
+	$(WAYLAND_CLIENT_LIBS)
+
+fbwl_input_method_client_SOURCES = \
+	util/fbwl-input-method-client.c \
+	src/wayland/protocol/input-method-unstable-v2-protocol.c \
+	src/wayland/protocol/input-method-unstable-v2-client-protocol.h
+
+fbwl_input_method_client_CPPFLAGS = \
+	$(AM_CPPFLAGS) \
+	$(WAYLAND_CLIENT_CFLAGS) \
+	-I$(top_srcdir)/src/wayland/protocol
+
+fbwl_input_method_client_LDADD = \
+	$(WAYLAND_CLIENT_LIBS)
+
+fbwl_xdg_activation_client_SOURCES = \
+	util/fbwl-xdg-activation-client.c \
+	src/wayland/protocol/xdg-shell-protocol.c \
+	src/wayland/protocol/xdg-shell-client-protocol.h \
+	src/wayland/protocol/xdg-activation-v1-protocol.c \
+	src/wayland/protocol/xdg-activation-v1-client-protocol.h
+
+fbwl_xdg_activation_client_CPPFLAGS = \
+	$(AM_CPPFLAGS) \
+	$(WAYLAND_CLIENT_CFLAGS) \
+	-I$(top_srcdir)/src/wayland/protocol
+
+fbwl_xdg_activation_client_LDADD = \
+	$(WAYLAND_CLIENT_LIBS)
+
+fbwl_xdg_decoration_client_SOURCES = \
+	util/fbwl-xdg-decoration-client.c \
+	src/wayland/protocol/xdg-shell-protocol.c \
+	src/wayland/protocol/xdg-shell-client-protocol.h \
+	src/wayland/protocol/xdg-decoration-unstable-v1-protocol.c \
+	src/wayland/protocol/xdg-decoration-unstable-v1-client-protocol.h
+
+fbwl_xdg_decoration_client_CPPFLAGS = \
+	$(AM_CPPFLAGS) \
+	$(WAYLAND_CLIENT_CFLAGS) \
+	-I$(top_srcdir)/src/wayland/protocol
+
+fbwl_xdg_decoration_client_LDADD = \
+	$(WAYLAND_CLIENT_LIBS)
+
+fbwl_idle_client_SOURCES = \
+	util/fbwl-idle-client.c \
+	src/wayland/protocol/xdg-shell-protocol.c \
+	src/wayland/protocol/xdg-shell-client-protocol.h \
+	src/wayland/protocol/ext-idle-notify-v1-protocol.c \
+	src/wayland/protocol/ext-idle-notify-v1-client-protocol.h \
+	src/wayland/protocol/idle-inhibit-unstable-v1-protocol.c \
+	src/wayland/protocol/idle-inhibit-unstable-v1-client-protocol.h
+
+fbwl_idle_client_CPPFLAGS = \
+	$(AM_CPPFLAGS) \
+	$(WAYLAND_CLIENT_CFLAGS) \
+	-I$(top_srcdir)/src/wayland/protocol
+
+fbwl_idle_client_LDADD = \
+	$(WAYLAND_CLIENT_LIBS)
+
+fbwl_session_lock_client_SOURCES = \
+	util/fbwl-session-lock-client.c \
+	src/wayland/protocol/ext-session-lock-v1-protocol.c \
+	src/wayland/protocol/ext-session-lock-v1-client-protocol.h
+
+fbwl_session_lock_client_CPPFLAGS = \
+	$(AM_CPPFLAGS) \
+	$(WAYLAND_CLIENT_CFLAGS) \
+	-I$(top_srcdir)/src/wayland/protocol
+
+fbwl_session_lock_client_LDADD = \
+	$(WAYLAND_CLIENT_LIBS)
+
+fbwl_shortcuts_inhibit_client_SOURCES = \
+	util/fbwl-shortcuts-inhibit-client.c \
+	src/wayland/protocol/xdg-shell-protocol.c \
+	src/wayland/protocol/xdg-shell-client-protocol.h \
+	src/wayland/protocol/keyboard-shortcuts-inhibit-unstable-v1-protocol.c \
+	src/wayland/protocol/keyboard-shortcuts-inhibit-unstable-v1-client-protocol.h
+
+fbwl_shortcuts_inhibit_client_CPPFLAGS = \
+	$(AM_CPPFLAGS) \
+	$(WAYLAND_CLIENT_CFLAGS) \
+	-I$(top_srcdir)/src/wayland/protocol
+
+fbwl_shortcuts_inhibit_client_LDADD = \
+	$(WAYLAND_CLIENT_LIBS)
+
+fbwl_single_pixel_buffer_client_SOURCES = \
+	util/fbwl-single-pixel-buffer-client.c \
+	src/wayland/protocol/xdg-shell-protocol.c \
+	src/wayland/protocol/xdg-shell-client-protocol.h \
+	src/wayland/protocol/single-pixel-buffer-v1-protocol.c \
+	src/wayland/protocol/single-pixel-buffer-v1-client-protocol.h
+
+fbwl_single_pixel_buffer_client_CPPFLAGS = \
+	$(AM_CPPFLAGS) \
+	$(WAYLAND_CLIENT_CFLAGS) \
+	-I$(top_srcdir)/src/wayland/protocol
+
+fbwl_single_pixel_buffer_client_LDADD = \
+	$(WAYLAND_CLIENT_LIBS)
+
+fbwl_remote_SOURCES = \
+	util/fbwl-remote.c
+
+fbwl_remote_CPPFLAGS = \
+	$(AM_CPPFLAGS)
+
+fbwl_remote_LDADD =
+
+fbwl_input_injector_SOURCES = \
+	util/fbwl-input-injector.c \
+	src/wayland/protocol/virtual-keyboard-unstable-v1-protocol.c \
+	src/wayland/protocol/virtual-keyboard-unstable-v1-client-protocol.h \
+	src/wayland/protocol/wlr-virtual-pointer-unstable-v1-protocol.c \
+	src/wayland/protocol/wlr-virtual-pointer-unstable-v1-client-protocol.h
+
+fbwl_input_injector_CPPFLAGS = \
+	$(AM_CPPFLAGS) \
+	$(WAYLAND_CFLAGS) \
+	$(WAYLAND_CLIENT_CFLAGS) \
+	-I$(top_srcdir)/src/wayland/protocol
+
+fbwl_input_injector_LDADD = \
+	$(WAYLAND_CLIENT_LIBS) \
+	$(WAYLAND_LIBS)
+
+fbwl_foreign_toplevel_client_SOURCES = \
+	util/fbwl-foreign-toplevel-client.c \
+	src/wayland/protocol/wlr-foreign-toplevel-management-unstable-v1-protocol.c \
+	src/wayland/protocol/wlr-foreign-toplevel-management-unstable-v1-client-protocol.h
+
+fbwl_foreign_toplevel_client_CPPFLAGS = \
+	$(AM_CPPFLAGS) \
+	$(WAYLAND_CLIENT_CFLAGS) \
+	-I$(top_srcdir)/src/wayland/protocol
+
+fbwl_foreign_toplevel_client_LDADD = \
+	$(WAYLAND_CLIENT_LIBS)
+
+fbwl_layer_shell_client_SOURCES = \
+	util/fbwl-layer-shell-client.c \
+	src/wayland/protocol/xdg-shell-protocol.c \
+	src/wayland/protocol/wlr-layer-shell-unstable-v1-protocol.c \
+	src/wayland/protocol/wlr-layer-shell-unstable-v1-client-protocol.h
+
+fbwl_layer_shell_client_CPPFLAGS = \
+	$(AM_CPPFLAGS) \
+	$(WAYLAND_CLIENT_CFLAGS) \
+	-I$(top_srcdir)/src/wayland/protocol
+
+fbwl_layer_shell_client_LDADD = \
+	$(WAYLAND_CLIENT_LIBS)
+
+fbx11_smoke_client_SOURCES = \
+	util/fbx11-smoke-client.c
+
+fbx11_smoke_client_CPPFLAGS = \
+	$(AM_CPPFLAGS) \
+	$(XCB_CFLAGS)
+
+fbx11_smoke_client_LDADD = \
+	$(XCB_LIBS)
+endif

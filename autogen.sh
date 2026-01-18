@@ -12,12 +12,10 @@ dothis() {
     fi
 }
 
-libtoolize --copy --force --automake
 rm -f config.cache
-dothis aclocal -I m4 ${ACLOCAL_FLAGS}
-dothis autoheader
-dothis automake -a -c
-dothis autoconf
+
+# Prefer autoreconf since it runs autopoint when gettext macros are needed.
+dothis autoreconf -fi
 
 echo 'Success, now continue with ./configure'
 echo 'Use configure --help for detailed help.'

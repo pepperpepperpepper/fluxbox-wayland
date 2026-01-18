@@ -279,3 +279,36 @@ fluxbox_SOURCES = \
 	${SLIT_SOURCE} \
 	${TOOLBAR_SOURCE}
 
+if WAYLAND
+bin_PROGRAMS += fluxbox-wayland
+
+fluxbox_wayland_CPPFLAGS = \
+	$(WLROOTS_CFLAGS) \
+	$(PIXMAN_CFLAGS) \
+	$(WAYLAND_CFLAGS) \
+	$(PANGOCAIRO_CFLAGS) \
+	$(AM_CPPFLAGS) \
+	-I$(src_incdir) \
+	-I$(top_srcdir)/src/wayland/protocol \
+	-DWLR_USE_UNSTABLE
+
+fluxbox_wayland_LDADD = \
+	$(WLROOTS_LIBS) \
+	$(PIXMAN_LIBS) \
+	$(WAYLAND_LIBS) \
+	$(PANGOCAIRO_LIBS)
+
+fluxbox_wayland_SOURCES = \
+	src/wmcore/fbwm_core.c \
+	src/wmcore/fbwm_core.h \
+	src/wayland/fluxbox_wayland.c \
+	src/wayland/protocol/xdg-shell-protocol.h
+
+if HAVE_SYSTEMD
+fluxbox_wayland_CPPFLAGS += \
+	$(SYSTEMD_CFLAGS)
+
+fluxbox_wayland_LDADD += \
+	$(SYSTEMD_LIBS)
+endif
+endif

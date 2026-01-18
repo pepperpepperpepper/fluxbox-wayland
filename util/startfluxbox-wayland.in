@@ -1,0 +1,78 @@
+#!/bin/sh
+
+command="`basename \"$0\"`"
+fluxdir="$HOME/.@pkgprefix@fluxbox@pkgsuffix@"
+startup="$fluxdir/startup-wayland"
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -c|--config)
+            if [ $# -lt 2 ]; then
+                echo "$command: error, missing argument" >&2
+                exit 1
+            fi
+            shift
+            startup=$1
+        ;;
+        -h|--help) cat <<EOF
+Usage: $command [-h] [-c startupfile]
+EOF
+        exit 0
+        ;;
+    esac
+    shift
+done
+
+# Wayland session defaults (useful when started from a tty or SSH shell).
+XDG_SESSION_TYPE=wayland
+: "${XDG_CURRENT_DESKTOP:=Fluxbox}"
+: "${XDG_SESSION_DESKTOP:=fluxbox-wayland}"
+: "${DESKTOP_SESSION:=fluxbox-wayland}"
+export XDG_SESSION_TYPE XDG_CURRENT_DESKTOP XDG_SESSION_DESKTOP DESKTOP_SESSION
+
+# Ensure a runtime dir exists for Wayland sockets if started outside systemd/logind.
+if [ -z "${XDG_RUNTIME_DIR:-}" ]; then
+    XDG_RUNTIME_DIR="/tmp/xdg-runtime-$UID"
+    export XDG_RUNTIME_DIR
+fi
+mkdir -p "$XDG_RUNTIME_DIR" 2>/dev/null || true
+chmod 0700 "$XDG_RUNTIME_DIR" 2>/dev/null || true
+
+exec_with_dbus() {
+    if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] && command -v dbus-run-session >/dev/null 2>&1; then
+        exec dbus-run-session -- "$@"
+    else
+        exec "$@"
+    fi
+}
+
+if [ -x "$startup" ]; then
+    exec_with_dbus "$startup"
+elif [ -r "$startup" ]; then
+    exec_with_dbus sh "$startup"
+else
+    if [ ! -d "$fluxdir" ]; then
+        mkdir -p "$fluxdir/backgrounds" "$fluxdir/styles" "$fluxdir/pixmaps"
+    fi
+    if [ ! -r "$startup" ]; then
+        ( cat << EOF
+#!/bin/sh
+#
+# fluxbox-wayland startup-script:
+#
+# Lines starting with a '#' are ignored.
+
+# Applications you want to run with fluxbox-wayland.
+# MAKE SURE THAT APPS THAT KEEP RUNNING HAVE AN '&' AT THE END.
+#
+# waybar &
+# xdg-desktop-portal-wlr &
+
+# And last but not least we start fluxbox-wayland.
+exec @pkgprefix@fluxbox-wayland@pkgsuffix@
+EOF
+    ) > "$startup"
+    fi
+    chmod 644 "$startup"
+    exec_with_dbus sh "$startup"
+fi

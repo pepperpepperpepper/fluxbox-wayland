@@ -30,7 +30,10 @@ Makefile.in
 /data/menu
 /fbrun
 /fbsetroot
+/fbwl-smoke-client
+/fbwl-input-injector
 /fluxbox
+/fluxbox-wayland
 /fluxbox-remote
 /fluxbox-update_configs
 /libFbTk.a
@@ -48,6 +51,14 @@ Makefile.in
 /util/fluxbox-generate_menu
 /util/startfluxbox
 /version.h
+
+# build artifacts from wlroots/Wayland smoke utilities
+/fbwl-*
+/fbx11-*
+/util/startfluxbox-wayland
+
+# editor/backup files
+*~
 
 # off source build directory
 build

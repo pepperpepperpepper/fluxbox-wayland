@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+need_cmd() {
+  command -v "$1" >/dev/null 2>&1 || { echo "missing required command: $1" >&2; exit 1; }
+}
+
+need_cmd rg
+need_cmd timeout
+
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/xdg-runtime-$UID}"
+mkdir -p "$XDG_RUNTIME_DIR"
+chmod 0700 "$XDG_RUNTIME_DIR"
+
+SOCKET="${SOCKET:-wayland-fbwl-test-$UID-$$}"
+LOG="${LOG:-/tmp/fluxbox-wayland-input-$UID-$$.log}"
+SPAWN_MARK="${SPAWN_MARK:-/tmp/fbwl-terminal-spawned-$UID-$$}"
+
+cleanup() {
+  rm -f "$SPAWN_MARK" 2>/dev/null || true
+  if [[ -n "${A_PID:-}" ]]; then kill "$A_PID" 2>/dev/null || true; fi
+  if [[ -n "${B_PID:-}" ]]; then kill "$B_PID" 2>/dev/null || true; fi
+  if [[ -n "${FBW_PID:-}" ]]; then kill "$FBW_PID" 2>/dev/null || true; fi
+  wait 2>/dev/null || true
+}
+trap cleanup EXIT
+
+: >"$LOG"
+rm -f "$SPAWN_MARK"
+
+WLR_BACKENDS=headless WLR_RENDERER=pixman ./fluxbox-wayland \
+  --no-xwayland \
+  --socket "$SOCKET" \
+  --terminal "touch '$SPAWN_MARK'" \
+  >"$LOG" 2>&1 &
+FBW_PID=$!
+
+timeout 5 bash -c "until rg -q 'Running fluxbox-wayland' '$LOG'; do sleep 0.05; done"
+
+./fbwl-smoke-client --socket "$SOCKET" --title client-a --stay-ms 10000 >/dev/null 2>&1 &
+A_PID=$!
+./fbwl-smoke-client --socket "$SOCKET" --title client-b --stay-ms 10000 >/dev/null 2>&1 &
+B_PID=$!
+
+timeout 5 bash -c "until rg -q 'Focus: client-a' '$LOG' && rg -q 'Focus: client-b' '$LOG'; do sleep 0.05; done"
+
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+
+./fbwl-input-injector --socket "$SOCKET" click 70 70 100 100
+
+tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Policy: focus \(direct\) title=client-a'
+tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Policy: focus \(direct\) title=client-b'
+tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Focus: client-a"
+tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Focus: client-b"
+
+LAST_FOCUS=$(
+  tail -c +$((OFFSET + 1)) "$LOG" \
+    | rg -o 'Focus: client-[ab]' \
+    | tail -n 1 \
+    | awk '{print $2}'
+)
+
+case "$LAST_FOCUS" in
+  client-a) EXPECT_CYCLE=client-b ;;
+  client-b) EXPECT_CYCLE=client-a ;;
+  *) echo "failed to determine last focused client (got: $LAST_FOCUS)" >&2; exit 1 ;;
+esac
+
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+
+./fbwl-input-injector --socket "$SOCKET" key alt-f1
+
+tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Policy: focus \\(cycle\\) title=$EXPECT_CYCLE"
+tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Focus: $EXPECT_CYCLE"
+
+./fbwl-input-injector --socket "$SOCKET" key alt-return
+
+timeout 2 bash -c "until [[ -f '$SPAWN_MARK' ]]; do sleep 0.05; done"
+
+echo "ok: input smoke passed (socket=$SOCKET log=$LOG spawn_mark=$SPAWN_MARK)"

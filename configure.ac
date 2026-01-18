@@ -216,6 +216,70 @@ AS_IF([test x$have_x11 = "xno"], [
 CXXFLAGS="$X11_CFLAGS $CXXFLAGS"
 LIBS="$X11_LIBS $LIBS"
 
+dnl Check for Wayland compositor (wlroots) support
+AC_MSG_CHECKING([whether to enable Wayland compositor support])
+AC_ARG_ENABLE([wayland],
+	AS_HELP_STRING([--enable-wayland],
+		[build fluxbox-wayland (wlroots-based Wayland compositor) (default=no)]),
+	[], [enable_wayland=no]
+)
+AC_MSG_RESULT([$enable_wayland])
+
+have_wayland=no
+have_systemd=no
+AS_IF([test "x$enable_wayland" = "xyes"], [
+	dnl wlroots pkg-config name may be versioned by distros
+	PKG_CHECK_MODULES([WLROOTS], [ wlroots-0.19 ],
+		[have_wlroots=yes], [have_wlroots=no])
+	AS_IF([test "x$have_wlroots" = "xno"], [
+		PKG_CHECK_MODULES([WLROOTS], [ wlroots ],
+			[have_wlroots=yes], [have_wlroots=no])
+	])
+	AS_IF([test "x$have_wlroots" = "xno"], [
+		PKG_CHECK_MODULES([WLROOTS], [ wlroots-0.18 ],
+			[have_wlroots=yes], [have_wlroots=no])
+	])
+	AS_IF([test "x$have_wlroots" = "xno"], [
+		AC_MSG_ERROR([--enable-wayland requires wlroots (try installing wlroots development files, e.g. wlroots-0.19).])
+	])
+
+	PKG_CHECK_MODULES([PIXMAN], [ pixman-1 ],
+		[], [
+			AC_MSG_ERROR([--enable-wayland requires pixman-1 development files.])
+		])
+
+	PKG_CHECK_MODULES([WAYLAND], [ wayland-server xkbcommon ],
+		[have_wayland=yes], [
+			AC_MSG_ERROR([--enable-wayland requires wayland-server and xkbcommon development files.])
+		])
+	PKG_CHECK_MODULES([WAYLAND_CLIENT], [ wayland-client ],
+		[], [
+			AC_MSG_ERROR([--enable-wayland requires wayland-client development files.])
+		])
+	PKG_CHECK_MODULES([XCB], [ xcb xcb-icccm xcb-ewmh ],
+		[], [
+			AC_MSG_ERROR([--enable-wayland requires xcb, xcb-icccm, and xcb-ewmh development files (for XWayland integration).])
+		])
+	PKG_CHECK_MODULES([PANGOCAIRO], [ pangocairo ],
+		[], [
+			AC_MSG_ERROR([--enable-wayland requires pangocairo development files (for compositor UI text rendering).])
+		])
+
+	PKG_CHECK_MODULES([SYSTEMD], [ libsystemd ],
+		[have_systemd=yes], [have_systemd=no])
+	AS_IF([test "x$have_systemd" = "xyes"], [
+		AC_DEFINE([HAVE_SYSTEMD], [1], [Define if libsystemd is available (for sd-bus integrations)])
+	], [
+		AC_MSG_WARN([libsystemd not found; StatusNotifier (tray) support will be disabled.])
+	])
+
+	AS_IF([test "x$have_wayland" = "xyes"], [
+		AC_DEFINE([HAVE_WAYLAND], [1], [Define if Wayland compositor support is enabled])
+	])
+])
+AM_CONDITIONAL([WAYLAND], [test "x$have_wayland" = "xyes"])
+AM_CONDITIONAL([HAVE_SYSTEMD], [test "x$have_systemd" = "xyes"])
+
 dnl Check for xpg4
 AC_CHECK_LIB([xpg4], [setlocale], [LIBS="-lxpg4 $LIBS"])
 AC_CHECK_PROGS([gencat_cmd], [gencat])
