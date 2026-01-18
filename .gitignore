@@ -51,6 +51,7 @@ Makefile.in
 /util/fluxbox-generate_menu
 /util/startfluxbox
 /version.h
+/plan.md
 
 # build artifacts from wlroots/Wayland smoke utilities
 /fbwl-*
