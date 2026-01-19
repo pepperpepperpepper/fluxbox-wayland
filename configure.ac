@@ -205,16 +205,29 @@ AC_CHECK_LIB([socket], [socket], [LIBS="-lsocket $LIBS"])
 #])
 
 dnl Check for X11
-PKG_CHECK_MODULES([X11], [ x11 ],
-	[AC_DEFINE([HAVE_X11], [1], [Define if x11 is available]) have_x11=yes],
-	[have_x11=no])
-AM_CONDITIONAL([X11], [test "$have_x11" = "yes"], AC_MSG_ERROR([Could not find XOpenDisplay in -lX11.]))
-AS_IF([test x$have_x11 = "xno"], [
-	AC_MSG_ERROR([Fluxbox requires the X Window System libraries and headers.])
-])
+AC_MSG_CHECKING([whether to enable the X11 window manager build])
+AC_ARG_ENABLE([x11],
+	AS_HELP_STRING([--disable-x11],
+		[disable building the X11 fluxbox window manager (default=enabled)]),
+	[], [enable_x11=yes]
+)
+AC_MSG_RESULT([$enable_x11])
 
-CXXFLAGS="$X11_CFLAGS $CXXFLAGS"
-LIBS="$X11_LIBS $LIBS"
+have_x11=no
+AS_IF([test "x$enable_x11" = "xyes"], [
+	PKG_CHECK_MODULES([X11], [ x11 ],
+		[AC_DEFINE([HAVE_X11], [1], [Define if x11 is available]) have_x11=yes],
+		[have_x11=no])
+	AS_IF([test "x$have_x11" = "xno"], [
+		AC_MSG_ERROR([Fluxbox requires the X Window System libraries and headers (or configure with --disable-x11).])
+	])
+
+	CXXFLAGS="$X11_CFLAGS $CXXFLAGS"
+	LIBS="$X11_LIBS $LIBS"
+], [
+	AC_MSG_NOTICE([X11 build disabled (--disable-x11).])
+])
+AM_CONDITIONAL([X11], [test "x$enable_x11" = "xyes" && test "x$have_x11" = "xyes"])
 
 dnl Check for Wayland compositor (wlroots) support
 AC_MSG_CHECKING([whether to enable Wayland compositor support])
@@ -224,6 +237,10 @@ AC_ARG_ENABLE([wayland],
 	[], [enable_wayland=no]
 )
 AC_MSG_RESULT([$enable_wayland])
+
+AS_IF([test "x$enable_x11" = "xno" -a "x$enable_wayland" = "xno"], [
+	AC_MSG_ERROR([Nothing to build: X11 is disabled and Wayland compositor support is disabled. Re-run without --disable-x11 or with --enable-wayland.])
+])
 
 have_wayland=no
 have_systemd=no

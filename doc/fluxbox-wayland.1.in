@@ -1,0 +1,131 @@
+'\" t
+.TH "FLUXBOX-WAYLAND" "1" "18 January 2026" "fluxbox-wayland" "Fluxbox Manual"
+.nh
+.ad l
+.SH "NAME"
+fluxbox-wayland \- a wlroots-based Wayland compositor with Fluxbox-like policy
+.SH "SYNOPSIS"
+.sp
+\fBfluxbox-wayland\fR [\-\-socket \fINAME\fR] [\-\-ipc-socket \fIPATH\fR] [\-\-no-xwayland] [\-\-bg-color \fI#RRGGBB[AA]\fR] [\-s \fICMD\fR] [\-\-terminal \fICMD\fR] [\-\-workspaces \fIN\fR] [\-\-config-dir \fIDIR\fR] [\-\-keys \fIFILE\fR] [\-\-apps \fIFILE\fR] [\-\-style \fIFILE\fR] [\-\-menu \fIFILE\fR] [\-\-log-level \fILEVEL\fR] [\-\-log-protocol]
+.SH "DESCRIPTION"
+.sp
+\fBfluxbox-wayland(1)\fR is a Wayland compositor (not an X11 window manager running under Wayland).
+It manages native Wayland \fBxdg_toplevel\fR applications and can optionally manage X11 applications via XWayland.
+.sp
+For a Wayland-safe launcher which sets up a runtime directory and a DBus session when needed, see \fBstartfluxbox-wayland(1)\fR.
+.SH "OPTIONS"
+.PP
+\fB\-\-socket\fR \fINAME\fR
+.RS 4
+Use a fixed Wayland socket name instead of auto-generating one.
+.RE
+.PP
+\fB\-\-ipc-socket\fR \fIPATH\fR
+.RS 4
+Listen on the given AF_UNIX socket path for compositor IPC.
+When IPC is enabled, \fBfluxbox-wayland(1)\fR exports \fBFBWL_IPC_SOCKET\fR for child processes.
+.RE
+.PP
+\fB\-\-no-xwayland\fR
+.RS 4
+Disable XWayland support (X11 applications will not run).
+.RE
+.PP
+\fB\-\-bg-color\fR \fI#RRGGBB[AA]\fR
+.RS 4
+Set the background color. Alpha is optional.
+.RE
+.PP
+\fB\-s\fR \fICMD\fR
+.RS 4
+Run a shell command on compositor startup (executed as \fB/bin/sh -c\fR).
+.RE
+.PP
+\fB\-\-terminal\fR \fICMD\fR
+.RS 4
+Set the terminal command used by the default \fBAlt+Return\fR keybinding.
+.RE
+.PP
+\fB\-\-workspaces\fR \fIN\fR
+.RS 4
+Set the number of workspaces.
+.RE
+.PP
+\fB\-\-config-dir\fR \fIDIR\fR
+.RS 4
+Load a minimal subset of classic Fluxbox configuration from \fIDIR\fR (for example \fB~/.fluxbox\fR):
+workspace count (from \fBinit\fR), plus discovery of \fBkeys\fR/\fBapps\fR/\fBmenu\fR and style file references from \fBinit\fR.
+.RE
+.PP
+\fB\-\-keys\fR \fIFILE\fR
+.RS 4
+Load keybindings from a Fluxbox-like \fBkeys\fR file (subset).
+.RE
+.PP
+\fB\-\-apps\fR \fIFILE\fR
+.RS 4
+Load application rules from a Fluxbox-like \fBapps\fR file (subset).
+.RE
+.PP
+\fB\-\-style\fR \fIFILE\fR
+.RS 4
+Load a minimal Fluxbox style/theme file (subset).
+.RE
+.PP
+\fB\-\-menu\fR \fIFILE\fR
+.RS 4
+Load a Fluxbox-style root menu file.
+.RE
+.PP
+\fB\-\-log-level\fR \fILEVEL\fR
+.RS 4
+Set wlroots log verbosity. \fILEVEL\fR is one of: \fBsilent\fR, \fBerror\fR, \fBinfo\fR, \fBdebug\fR (default: \fBinfo\fR).
+.RE
+.PP
+\fB\-\-log-protocol\fR
+.RS 4
+Log Wayland protocol requests and events to stderr (very verbose).
+.RE
+.PP
+\fB\-h\fR, \fB\-\-help\fR
+.RS 4
+Display command line options and default keybindings.
+.RE
+.SH "DEFAULT KEYBINDINGS"
+.sp
+\fBAlt+Return\fR: spawn terminal (see \fB\-\-terminal\fR)
+.br
+\fBAlt+Escape\fR: exit compositor
+.br
+\fBAlt+F1\fR: cycle to next toplevel
+.br
+\fBAlt+F2\fR: open command dialog
+.br
+\fBAlt+M\fR: toggle maximize
+.br
+\fBAlt+F\fR: toggle fullscreen
+.br
+\fBAlt+I\fR: toggle minimize
+.br
+\fBAlt+[1-9]\fR: switch workspace
+.br
+\fBAlt+Ctrl+[1-9]\fR: move focused view to workspace
+.SH "ENVIRONMENT"
+.PP
+\fBWAYLAND_DISPLAY\fR
+.RS 4
+Wayland socket name used by clients to connect.
+.RE
+.PP
+\fBXDG_RUNTIME_DIR\fR
+.RS 4
+Runtime directory where the Wayland socket lives. If unset, \fBstartfluxbox-wayland(1)\fR creates a private directory under \fB/tmp\fR.
+.RE
+.PP
+\fBFBWL_IPC_SOCKET\fR
+.RS 4
+When IPC is enabled, path to the compositor IPC socket for helper tools.
+.RE
+.SH "SEE ALSO"
+.sp
+startfluxbox-wayland(1) fluxbox(1) fluxbox-keys(5) fluxbox-apps(5) fluxbox-menu(5) fluxbox-style(5)

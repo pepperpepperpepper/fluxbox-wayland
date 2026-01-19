@@ -75,11 +75,17 @@ $(PATHFILES): Makefile
 include data/Makemodule.am
 include doc/Makemodule.am
 include nls/Makemodule.am
+if X11
 include src/FbTk/Makemodule.am
+endif
 include src/Makemodule.am
+if X11
 include src/tests/Makemodule.am
+endif
 include util/Makemodule.am
+if X11
 include util/fbrun/Makemodule.am
+endif
 
 uninstall-hook:
 	rmdir $(DESTDIR)$(pkgdatadir)

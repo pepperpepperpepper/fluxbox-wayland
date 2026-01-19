@@ -90,6 +90,7 @@
 #endif
 
 #include "wmcore/fbwm_core.h"
+#include "wmcore/fbwm_output.h"
 
 struct fbwl_server;
 struct fbwl_view;
@@ -539,6 +540,7 @@ struct fbwl_sni_watcher {
 
 struct fbwl_server {
     struct wl_display *wl_display;
+    struct wl_protocol_logger *protocol_logger;
     struct wlr_backend *backend;
     struct wlr_renderer *renderer;
     struct wlr_allocator *allocator;
@@ -688,9 +690,6 @@ struct fbwl_server {
 
     struct fbwl_apps_rule *apps_rules;
     size_t apps_rule_count;
-
-    int next_x;
-    int next_y;
 
     struct fbwm_core wm;
     struct fbwl_view *focused_view;
@@ -2445,6 +2444,72 @@ static void view_foreign_update_output_from_position(struct fbwl_view *view) {
     view_foreign_set_output(view, output);
 }
 
+struct fbwl_wm_output {
+    struct fbwm_output wm_output;
+    struct fbwl_server *server;
+    struct wlr_output *wlr_output;
+};
+
+static const char *fbwl_wm_output_name(const struct fbwm_output *wm_output) {
+    const struct fbwl_wm_output *output = wm_output != NULL ? wm_output->userdata : NULL;
+    if (output == NULL || output->wlr_output == NULL) {
+        return NULL;
+    }
+    return output->wlr_output->name;
+}
+
+static bool fbwl_wm_output_full_box(const struct fbwm_output *wm_output, struct fbwm_box *out) {
+    if (out != NULL) {
+        *out = (struct fbwm_box){0};
+    }
+
+    const struct fbwl_wm_output *output = wm_output != NULL ? wm_output->userdata : NULL;
+    if (output == NULL || output->server == NULL || output->server->output_layout == NULL ||
+            output->wlr_output == NULL || out == NULL) {
+        return false;
+    }
+
+    struct wlr_box box = {0};
+    wlr_output_layout_get_box(output->server->output_layout, output->wlr_output, &box);
+    *out = (struct fbwm_box){
+        .x = box.x,
+        .y = box.y,
+        .width = box.width,
+        .height = box.height,
+    };
+    return true;
+}
+
+static bool fbwl_wm_output_usable_box(const struct fbwm_output *wm_output, struct fbwm_box *out) {
+    if (out != NULL) {
+        *out = (struct fbwm_box){0};
+    }
+
+    const struct fbwl_wm_output *output = wm_output != NULL ? wm_output->userdata : NULL;
+    if (output == NULL || output->server == NULL || output->wlr_output == NULL || out == NULL) {
+        return false;
+    }
+
+    struct fbwl_output *out_data = server_find_output(output->server, output->wlr_output);
+    if (out_data == NULL || out_data->usable_area.width < 1 || out_data->usable_area.height < 1) {
+        return false;
+    }
+
+    *out = (struct fbwm_box){
+        .x = out_data->usable_area.x,
+        .y = out_data->usable_area.y,
+        .width = out_data->usable_area.width,
+        .height = out_data->usable_area.height,
+    };
+    return true;
+}
+
+static const struct fbwm_output_ops fbwl_wm_output_ops = {
+    .name = fbwl_wm_output_name,
+    .full_box = fbwl_wm_output_full_box,
+    .usable_box = fbwl_wm_output_usable_box,
+};
+
 static void view_place_initial(struct fbwl_view *view) {
     if (view == NULL || view->server == NULL) {
         return;
@@ -2458,33 +2523,27 @@ static void view_place_initial(struct fbwl_view *view) {
         output = wlr_output_layout_get_center_output(server->output_layout);
     }
 
-    struct wlr_box full = {0};
+    struct fbwl_wm_output wm_out = {0};
+    const struct fbwm_output *wm_output = NULL;
     if (output != NULL) {
-        wlr_output_layout_get_box(server->output_layout, output, &full);
+        wm_out.server = server;
+        wm_out.wlr_output = output;
+        fbwm_output_init(&wm_out.wm_output, &fbwl_wm_output_ops, &wm_out);
+        wm_output = &wm_out.wm_output;
     }
 
-    struct wlr_box box = full;
-    struct fbwl_output *out = server_find_output(server, output);
-    if (out != NULL && out->usable_area.width > 0 && out->usable_area.height > 0) {
-        box = out->usable_area;
-    }
-
-    int x = server->next_x;
-    int y = server->next_y;
-    server->next_x = (server->next_x + 32) % 256;
-    server->next_y = (server->next_y + 32) % 256;
-
-    if (box.width > 0 && box.height > 0) {
-        x += box.x;
-        y += box.y;
-
-        if (x < box.x || x >= box.x + box.width) {
-            x = box.x;
-        }
-        if (y < box.y || y >= box.y + box.height) {
-            y = box.y;
+    struct fbwm_box full = {0};
+    struct fbwm_box box = {0};
+    if (wm_output != NULL) {
+        (void)fbwm_output_get_full_box(wm_output, &full);
+        if (!fbwm_output_get_usable_box(wm_output, &box) || box.width < 1 || box.height < 1) {
+            box = full;
         }
     }
+
+    int x = 0;
+    int y = 0;
+    fbwm_core_place_next(&server->wm, wm_output, &x, &y);
 
     view->x = x;
     view->y = y;
@@ -2492,7 +2551,7 @@ static void view_place_initial(struct fbwl_view *view) {
 
     wlr_log(WLR_INFO, "Place: %s out=%s x=%d y=%d usable=%d,%d %dx%d full=%d,%d %dx%d",
         view_display_title(view),
-        output != NULL && output->name != NULL ? output->name : "(none)",
+        fbwm_output_name(wm_output) != NULL ? fbwm_output_name(wm_output) : "(none)",
         view->x, view->y,
         box.x, box.y, box.width, box.height,
         full.x, full.y, full.width, full.height);
@@ -9905,7 +9964,7 @@ static void server_sni_finish(struct fbwl_server *server) {
 #endif
 
 static void usage(const char *argv0) {
-    printf("Usage: %s [--socket NAME] [--ipc-socket PATH] [--no-xwayland] [--bg-color #RRGGBB[AA]] [-s CMD] [--terminal CMD] [--workspaces N] [--config-dir DIR] [--keys FILE] [--apps FILE] [--style FILE] [--menu FILE]\n", argv0);
+    printf("Usage: %s [--socket NAME] [--ipc-socket PATH] [--no-xwayland] [--bg-color #RRGGBB[AA]] [-s CMD] [--terminal CMD] [--workspaces N] [--config-dir DIR] [--keys FILE] [--apps FILE] [--style FILE] [--menu FILE] [--log-level LEVEL] [--log-protocol]\n", argv0);
     printf("Keybindings:\n");
     printf("  Alt+Return: spawn terminal\n");
     printf("  Alt+Escape: exit\n");
@@ -9918,9 +9977,66 @@ static void usage(const char *argv0) {
     printf("  Alt+Ctrl+[1-9]: move focused view to workspace\n");
 }
 
-int main(int argc, char **argv) {
-    wlr_log_init(WLR_INFO, NULL);
+static bool parse_log_level(const char *s, enum wlr_log_importance *out) {
+    if (s == NULL || out == NULL) {
+        return false;
+    }
 
+    if (strcasecmp(s, "silent") == 0 || strcmp(s, "0") == 0) {
+        *out = WLR_SILENT;
+        return true;
+    }
+    if (strcasecmp(s, "error") == 0 || strcmp(s, "1") == 0) {
+        *out = WLR_ERROR;
+        return true;
+    }
+    if (strcasecmp(s, "info") == 0 || strcmp(s, "2") == 0) {
+        *out = WLR_INFO;
+        return true;
+    }
+    if (strcasecmp(s, "debug") == 0 || strcmp(s, "3") == 0) {
+        *out = WLR_DEBUG;
+        return true;
+    }
+
+    return false;
+}
+
+static const char *wl_protocol_logger_type_str(enum wl_protocol_logger_type type) {
+    switch (type) {
+    case WL_PROTOCOL_LOGGER_REQUEST:
+        return "REQ";
+    case WL_PROTOCOL_LOGGER_EVENT:
+        return "EVT";
+    default:
+        return "?";
+    }
+}
+
+static void fbwl_wayland_protocol_logger(void *user_data, enum wl_protocol_logger_type type,
+    const struct wl_protocol_logger_message *message) {
+    (void)user_data;
+
+    if (message == NULL || message->resource == NULL || message->message == NULL || message->message->name == NULL) {
+        return;
+    }
+
+    struct wl_client *client = wl_resource_get_client(message->resource);
+    pid_t pid = 0;
+    if (client != NULL) {
+        uid_t uid = 0;
+        gid_t gid = 0;
+        wl_client_get_credentials(client, &pid, &uid, &gid);
+    }
+
+    const char *class = wl_resource_get_class(message->resource);
+    const uint32_t id = wl_resource_get_id(message->resource);
+
+    fprintf(stderr, "WAYLAND %s pid=%d %s@%u.%s\n", wl_protocol_logger_type_str(type), (int)pid,
+        class != NULL ? class : "?", id, message->message->name);
+}
+
+int main(int argc, char **argv) {
     const char *socket_name = NULL;
     const char *ipc_socket_path = NULL;
     const char *startup_cmd = NULL;
@@ -9934,6 +10050,8 @@ int main(int argc, char **argv) {
     int workspaces = 4;
     bool workspaces_set = false;
     bool enable_xwayland = true;
+    enum wlr_log_importance log_level = WLR_INFO;
+    bool log_protocol = false;
 
     static const struct option options[] = {
         {"socket", required_argument, NULL, 1},
@@ -9947,6 +10065,8 @@ int main(int argc, char **argv) {
         {"apps", required_argument, NULL, 7},
         {"style", required_argument, NULL, 9},
         {"menu", required_argument, NULL, 10},
+        {"log-level", required_argument, NULL, 12},
+        {"log-protocol", no_argument, NULL, 13},
         {"help", no_argument, NULL, 'h'},
         {0, 0, 0, 0},
     };
@@ -9994,6 +10114,15 @@ int main(int argc, char **argv) {
         case 10:
             menu_file = optarg;
             break;
+        case 12:
+            if (!parse_log_level(optarg, &log_level)) {
+                fprintf(stderr, "invalid --log-level (expected silent|error|info|debug or 0-3): %s\n", optarg);
+                return 1;
+            }
+            break;
+        case 13:
+            log_protocol = true;
+            break;
         case 's':
             startup_cmd = optarg;
             break;
@@ -10008,14 +10137,14 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    wlr_log_init(log_level, NULL);
+
     struct fbwl_server server = {0};
     decor_theme_set_defaults(&server.decor_theme);
     memcpy(server.background_color, background_color, sizeof(server.background_color));
     server.startup_cmd = startup_cmd;
     server.terminal_cmd = terminal_cmd;
     server.has_pointer = false;
-    server.next_x = 64;
-    server.next_y = 64;
     server.ipc_listen_fd = -1;
     wl_list_init(&server.shortcuts_inhibitors);
 #ifdef HAVE_SYSTEMD
@@ -10026,6 +10155,15 @@ int main(int argc, char **argv) {
     if (server.wl_display == NULL) {
         wlr_log(WLR_ERROR, "failed to create wl_display");
         return 1;
+    }
+
+    if (log_protocol) {
+        server.protocol_logger = wl_display_add_protocol_logger(server.wl_display, fbwl_wayland_protocol_logger, NULL);
+        if (server.protocol_logger == NULL) {
+            wlr_log(WLR_ERROR, "failed to add Wayland protocol logger");
+            return 1;
+        }
+        wlr_log(WLR_INFO, "Wayland protocol logging enabled");
     }
 
     struct wl_event_loop *loop = wl_display_get_event_loop(server.wl_display);
@@ -10542,6 +10680,10 @@ int main(int argc, char **argv) {
     wlr_backend_destroy(server.backend);
     server_apps_rules_free(&server);
     server_keybindings_free(&server);
+    if (server.protocol_logger != NULL) {
+        wl_protocol_logger_destroy(server.protocol_logger);
+        server.protocol_logger = NULL;
+    }
     wl_display_destroy(server.wl_display);
     return 0;
 }

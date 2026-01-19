@@ -5,10 +5,12 @@ CLEANFILES += \
 	doc/fluxbox-apps.5 \
 	doc/fluxbox-keys.5 \
 	doc/fluxbox-menu.5 \
+	doc/fluxbox-wayland.1 \
 	doc/fluxbox-remote.1 \
 	doc/fluxbox-style.5 \
 	doc/fluxbox.1 \
-	doc/startfluxbox.1
+	doc/startfluxbox.1 \
+	doc/startfluxbox-wayland.1
 
 dist_man_MANS = \
 	doc/fbrun.1 \
@@ -17,10 +19,12 @@ dist_man_MANS = \
 	doc/fluxbox-apps.5 \
 	doc/fluxbox-keys.5 \
 	doc/fluxbox-menu.5 \
+	doc/fluxbox-wayland.1 \
 	doc/fluxbox-remote.1 \
 	doc/fluxbox-style.5 \
 	doc/fluxbox.1 \
-	doc/startfluxbox.1
+	doc/startfluxbox.1 \
+	doc/startfluxbox-wayland.1
 
 EXTRA_DIST += \
 	doc/CODESTYLE \
@@ -30,10 +34,12 @@ EXTRA_DIST += \
 	doc/fluxbox-apps.5.in \
 	doc/fluxbox-keys.5.in \
 	doc/fluxbox-menu.5.in \
+	doc/fluxbox-wayland.1.in \
 	doc/fluxbox-remote.1.in \
 	doc/fluxbox-style.5.in \
 	doc/fluxbox.1.in \
-	doc/startfluxbox.1.in
+	doc/startfluxbox.1.in \
+	doc/startfluxbox-wayland.1.in
 
 doc/%: doc/%.in
 	$(MKDIR_P) doc

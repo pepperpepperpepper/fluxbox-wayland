@@ -1,0 +1,85 @@
+'\" t
+.TH "STARTFLUXBOX-WAYLAND" "1" "18 January 2026" "startfluxbox-wayland" "Fluxbox Manual"
+.nh
+.ad l
+.SH "NAME"
+startfluxbox-wayland \- start a fluxbox-wayland session
+.SH "SYNOPSIS"
+.sp
+\fBstartfluxbox-wayland\fR [\-h] [\-c \fISTARTUPFILE\fR]
+.SH "DESCRIPTION"
+.sp
+\fBstartfluxbox-wayland(1)\fR is a helper script for starting \fBfluxbox-wayland(1)\fR from a tty, SSH shell, or display manager.
+It runs a startup script (by default \fB~/\&.fluxbox/startup-wayland\fR); if it does not exist, it is generated.
+.sp
+The script also sets Wayland-oriented session environment variables and ensures a usable \fBXDG_RUNTIME_DIR\fR.
+If no DBus session is available and \fBdbus-run-session\fR exists, it runs the startup script under a private DBus session.
+.SH "OPTIONS"
+.PP
+\fB\-c\fR, \fB\-\-config\fR \fISTARTUPFILE\fR
+.RS 4
+Use an alternate startup script instead of \fB~/\&.fluxbox/startup-wayland\fR.
+.RE
+.PP
+\fB\-h\fR, \fB\-\-help\fR
+.RS 4
+Display a short usage message.
+.RE
+.SH "FILES"
+.PP
+\fB~/\&.fluxbox/startup-wayland\fR
+.RS 4
+Startup script executed before launching \fBfluxbox-wayland(1)\fR. Lines starting with \fB#\fR are treated as comments.
+.RE
+.SH "ENVIRONMENT"
+.sp
+\fBstartfluxbox-wayland(1)\fR sets (if not already set) the following variables:
+.PP
+\fBXDG_SESSION_TYPE\fR
+.RS 4
+Set to \fBwayland\fR.
+.RE
+.PP
+\fBXDG_CURRENT_DESKTOP\fR
+.RS 4
+Defaults to \fBFluxbox\fR.
+.RE
+.PP
+\fBXDG_SESSION_DESKTOP\fR, \fBDESKTOP_SESSION\fR
+.RS 4
+Defaults to \fBfluxbox-wayland\fR.
+.RE
+.PP
+\fBXDG_RUNTIME_DIR\fR
+.RS 4
+If unset, defaults to \fB/tmp/xdg-runtime-$UID\fR and is created with mode 0700. Wayland sockets live here.
+.RE
+.SH "EXAMPLES"
+.sp
+The generated \fB~/\&.fluxbox/startup-wayland\fR looks like this:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+#!/bin/sh
+#
+# fluxbox-wayland startup-script:
+#
+# Lines starting with a '#' are ignored.
+
+# Applications you want to run with fluxbox-wayland.
+# MAKE SURE THAT APPS THAT KEEP RUNNING HAVE AN '&' AT THE END.
+#
+# waybar &
+# xdg-desktop-portal-wlr &
+
+# And last but not least we start fluxbox-wayland.
+exec fluxbox-wayland
+.fi
+.if n \{\
+.RE
+.\}
+.SH "SEE ALSO"
+.sp
+fluxbox-wayland(1) fluxbox(1) startfluxbox(1)

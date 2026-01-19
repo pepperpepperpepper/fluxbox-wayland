@@ -19,9 +19,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-#include <X11/Xatom.h>
-#include <X11/Xlib.h>
-#include <X11/Xutil.h>
 #include <ctype.h>
 #include <errno.h>
 #include <poll.h>
@@ -33,6 +30,12 @@
 #include <unistd.h>
 
 #include <string>
+
+#ifdef HAVE_X11
+#include <X11/Xatom.h>
+#include <X11/Xlib.h>
+#include <X11/Xutil.h>
+#endif
 
 static void usage(const char *argv0) {
     printf("Usage: %s [--x11|--wayland] [--socket WAYLAND_DISPLAY] [--ipc-socket PATH] [--timeout-ms N] <command...>\n",
@@ -231,6 +234,7 @@ static int wayland_ipc_call(const std::string &cmdline, const char *wayland_sock
     return EXIT_FAILURE;
 }
 
+#ifdef HAVE_X11
 static bool g_gotError = false;
 static int HandleIPCError(Display * /*disp*/, XErrorEvent * /*ptr*/) {
     g_gotError = true;
@@ -273,6 +277,13 @@ static int x11_call(const std::string &cmdline) {
 
     return rc;
 }
+#else
+static int x11_call(const std::string &cmdline) {
+    (void)cmdline;
+    fprintf(stderr, "fluxbox-remote: this build has no X11 support; use --wayland\n");
+    return EXIT_FAILURE;
+}
+#endif
 
 int main(int argc, char **argv) {
     bool force_x11 = false;
@@ -342,6 +353,13 @@ int main(int argc, char **argv) {
         return EXIT_FAILURE;
     }
 
+#ifndef HAVE_X11
+    if (force_x11) {
+        fprintf(stderr, "fluxbox-remote: this build has no X11 support; use --wayland\n");
+        return EXIT_FAILURE;
+    }
+#endif
+
     bool use_wayland = false;
     if (force_wayland) {
         use_wayland = true;
@@ -352,6 +370,7 @@ int main(int argc, char **argv) {
             (getenv("FBWL_IPC_SOCKET") != NULL && *getenv("FBWL_IPC_SOCKET") != '\0')) {
         use_wayland = true;
     } else {
+#ifdef HAVE_X11
         Display *disp = XOpenDisplay(NULL);
         if (disp != NULL) {
             XCloseDisplay(disp);
@@ -363,6 +382,15 @@ int main(int argc, char **argv) {
             perror("error, can't open display.");
             return EXIT_FAILURE;
         }
+#else
+        if ((getenv("WAYLAND_DISPLAY") != NULL && *getenv("WAYLAND_DISPLAY") != '\0') ||
+                (getenv("FBWL_IPC_SOCKET") != NULL && *getenv("FBWL_IPC_SOCKET") != '\0')) {
+            use_wayland = true;
+        } else {
+            fprintf(stderr, "fluxbox-remote: no X11 support and no Wayland socket specified; use --wayland --socket NAME (or set WAYLAND_DISPLAY)\n");
+            return EXIT_FAILURE;
+        }
+#endif
     }
 
     if (use_wayland) {

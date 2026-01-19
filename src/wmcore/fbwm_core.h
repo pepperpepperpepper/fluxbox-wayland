@@ -3,6 +3,7 @@
 #include <stdbool.h>
 
 struct fbwm_view;
+struct fbwm_output;
 
 struct fbwm_view_ops {
     void (*focus)(struct fbwm_view *view);
@@ -28,6 +29,9 @@ struct fbwm_core {
 
     int workspace_current;
     int workspace_count;
+
+    int place_next_x;
+    int place_next_y;
 };
 
 void fbwm_view_init(struct fbwm_view *view, const struct fbwm_view_ops *ops, void *userdata);
@@ -49,3 +53,5 @@ int fbwm_core_workspace_current(const struct fbwm_core *core);
 bool fbwm_core_view_is_visible(const struct fbwm_core *core, const struct fbwm_view *view);
 void fbwm_core_workspace_switch(struct fbwm_core *core, int workspace);
 void fbwm_core_move_focused_to_workspace(struct fbwm_core *core, int workspace);
+
+void fbwm_core_place_next(struct fbwm_core *core, const struct fbwm_output *output, int *x, int *y);

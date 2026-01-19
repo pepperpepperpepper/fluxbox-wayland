@@ -55,7 +55,16 @@ dbus-run-session -- bash -c '
   : >"$PW_LOG"
   : >"$WP_LOG"
 
-  rm -f /tmp/out.png
+  OUT_FILE="/tmp/out.png"
+  if [[ -e "$OUT_FILE" ]] && [[ ! -w "$OUT_FILE" ]]; then
+    echo "precondition failed: $OUT_FILE exists but is not writable by uid=$UID ($(id -un))" >&2
+    ls -la "$OUT_FILE" >&2 || true
+    echo "note: xdg-desktop-portal-wlr (backend) writes screenshots to $OUT_FILE; remove it or chmod it so this user can write it" >&2
+    exit 1
+  fi
+
+  : >"$OUT_FILE"
+  chmod a+rw "$OUT_FILE" 2>/dev/null || true
 
   pipewire >"$PW_LOG" 2>&1 &
   PW_PID=$!
@@ -106,8 +115,8 @@ dbus-run-session -- bash -c '
   echo "$OUT" | rg -q "ua\\{sv\\} 0"
   echo "$OUT" | rg -q "file:///tmp/out.png"
 
-  [[ -s /tmp/out.png ]] || { echo "missing screenshot output: /tmp/out.png" >&2; exit 1; }
-  file -b /tmp/out.png | rg -q "^PNG image data" || { echo "unexpected screenshot format: $(file -b /tmp/out.png)" >&2; exit 1; }
+  [[ -s "$OUT_FILE" ]] || { echo "missing screenshot output: $OUT_FILE" >&2; exit 1; }
+  file -b "$OUT_FILE" | rg -q "^PNG image data" || { echo "unexpected screenshot format: $(file -b "$OUT_FILE")" >&2; exit 1; }
 
-  echo "ok: xdg-desktop-portal-wlr smoke passed (socket=$WAYLAND_DISPLAY log=$LOG xdpw_log=$XDPW_LOG screenshot=/tmp/out.png)"
+  echo "ok: xdg-desktop-portal-wlr smoke passed (socket=$WAYLAND_DISPLAY log=$LOG xdpw_log=$XDPW_LOG screenshot=$OUT_FILE)"
 '

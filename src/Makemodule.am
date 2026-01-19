@@ -22,10 +22,10 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-BUILT_SOURCES = src/defaults.hh src/defaults.cc
 CONFIG_CLEAN_FILES = src/defaults.hh src/defaults.cc
 
-LDADD = libFbTk.a src/defaults.$(OBJEXT)
+if X11
+BUILT_SOURCES = src/defaults.hh src/defaults.cc
 
 bin_PROGRAMS += fluxbox
 
@@ -143,7 +143,7 @@ fluxbox_CPPFLAGS = \
 	-I$(nls_incdir)
 
 fluxbox_LDADD = \
-	$(LDADD) \
+	libFbTk.a src/defaults.$(OBJEXT) \
 	$(FONTCONFIG_LIBS) \
 	$(FREETYPE2_LIBS) \
 	$(FRIBIDI_LIBS) \
@@ -278,6 +278,7 @@ fluxbox_SOURCES = \
 	${REMEMBER_SOURCE} \
 	${SLIT_SOURCE} \
 	${TOOLBAR_SOURCE}
+endif
 
 if WAYLAND
 bin_PROGRAMS += fluxbox-wayland
@@ -301,6 +302,8 @@ fluxbox_wayland_LDADD = \
 fluxbox_wayland_SOURCES = \
 	src/wmcore/fbwm_core.c \
 	src/wmcore/fbwm_core.h \
+	src/wmcore/fbwm_output.c \
+	src/wmcore/fbwm_output.h \
 	src/wayland/fluxbox_wayland.c \
 	src/wayland/protocol/xdg-shell-protocol.h
 

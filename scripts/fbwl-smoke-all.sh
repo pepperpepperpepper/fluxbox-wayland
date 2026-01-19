@@ -6,6 +6,7 @@ cd "$ROOT"
 
 scripts=(
   scripts/fbwl-smoke-headless.sh
+  scripts/fbwl-smoke-log-protocol.sh
   scripts/fbwl-smoke-background.sh
   scripts/fbwl-smoke-xvfb.sh
   scripts/fbwl-smoke-xwayland.sh
@@ -30,6 +31,8 @@ scripts=(
   scripts/fbwl-smoke-export-dmabuf.sh
   scripts/fbwl-smoke-portal-wlr.sh
   scripts/fbwl-smoke-portal-wlr-screencast.sh
+  scripts/fbwl-smoke-xdg-desktop-portal.sh
+  scripts/fbwl-smoke-xdg-desktop-portal-screenshot.sh
   scripts/fbwl-smoke-output-management.sh
   scripts/fbwl-smoke-output-power.sh
   scripts/fbwl-smoke-xdg-output.sh

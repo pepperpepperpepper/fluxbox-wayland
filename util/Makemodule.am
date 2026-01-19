@@ -12,10 +12,13 @@ PATHFILES += \
 	util/fluxbox-generate_menu \
 	util/startfluxbox-wayland
 
+bin_PROGRAMS += fluxbox-remote
+
+if X11
 bin_PROGRAMS += \
 	fbsetroot \
-	fluxbox-remote \
 	fluxbox-update_configs
+endif
 
 if WAYLAND
 bin_PROGRAMS += \
@@ -50,10 +53,12 @@ bin_PROGRAMS += \
 
 if HAVE_SYSTEMD
 bin_PROGRAMS += \
-	fbwl-sni-item-client
+	fbwl-sni-item-client \
+	fbwl-xdp-portal-client
 endif
 endif
 
+if X11
 fbsetroot_SOURCES = \
 	src/FbAtoms.cc \
 	src/FbRootWindow.cc \
@@ -84,6 +89,7 @@ fluxbox_update_configs_CPPFLAGS = \
 fluxbox_update_configs_LDADD = \
 	libFbTk.a \
 	$(FRIBIDI_LIBS)
+endif
 
 fluxbox_remote_SOURCES = \
 	util/fluxbox-remote.cc
@@ -129,6 +135,16 @@ fbwl_sni_item_client_CPPFLAGS = \
 	$(SYSTEMD_CFLAGS)
 
 fbwl_sni_item_client_LDADD = \
+	$(SYSTEMD_LIBS)
+
+fbwl_xdp_portal_client_SOURCES = \
+	util/fbwl-xdp-portal-client.c
+
+fbwl_xdp_portal_client_CPPFLAGS = \
+	$(AM_CPPFLAGS) \
+	$(SYSTEMD_CFLAGS)
+
+fbwl_xdp_portal_client_LDADD = \
 	$(SYSTEMD_LIBS)
 endif
 

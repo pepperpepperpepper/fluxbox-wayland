@@ -1,5 +1,7 @@
 #include "fbwm_core.h"
 
+#include "fbwm_output.h"
+
 #include <stddef.h>
 #include <stdio.h>
 
@@ -86,6 +88,9 @@ void fbwm_core_init(struct fbwm_core *core) {
 
     core->workspace_current = 0;
     core->workspace_count = 4;
+
+    core->place_next_x = 64;
+    core->place_next_y = 64;
 }
 
 void fbwm_core_view_map(struct fbwm_core *core, struct fbwm_view *view) {
@@ -243,4 +248,37 @@ void fbwm_core_move_focused_to_workspace(struct fbwm_core *core, int workspace) 
         workspace + 1, safe_str(title), safe_str(app_id));
 
     refocus_if_needed(core);
+}
+
+void fbwm_core_place_next(struct fbwm_core *core, const struct fbwm_output *output, int *x, int *y) {
+    if (core == NULL || x == NULL || y == NULL) {
+        return;
+    }
+
+    struct fbwm_box box = {0};
+    if (output != NULL) {
+        if (!fbwm_output_get_usable_box(output, &box) || box.width < 1 || box.height < 1) {
+            (void)fbwm_output_get_full_box(output, &box);
+        }
+    }
+
+    int px = core->place_next_x;
+    int py = core->place_next_y;
+    core->place_next_x = (core->place_next_x + 32) % 256;
+    core->place_next_y = (core->place_next_y + 32) % 256;
+
+    if (box.width > 0 && box.height > 0) {
+        px += box.x;
+        py += box.y;
+
+        if (px < box.x || px >= box.x + box.width) {
+            px = box.x;
+        }
+        if (py < box.y || py >= box.y + box.height) {
+            py = box.y;
+        }
+    }
+
+    *x = px;
+    *y = py;
 }
