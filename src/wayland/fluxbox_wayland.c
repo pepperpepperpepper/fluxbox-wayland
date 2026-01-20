@@ -94,6 +94,7 @@
 #include "wayland/fbwl_menu.h"
 #include "wayland/fbwl_menu_parse.h"
 #include "wayland/fbwl_output.h"
+#include "wayland/fbwl_output_management.h"
 #include "wayland/fbwl_sni_tray.h"
 #include "wayland/fbwl_style_parse.h"
 #include "wayland/fbwl_ui_decor_theme.h"
@@ -1078,39 +1079,9 @@ static void server_arrange_layer_surfaces_on_output(struct fbwl_server *server,
         usable.x, usable.y, usable.width, usable.height);
 }
 
-static void server_output_manager_update(struct fbwl_server *server) {
-    if (server == NULL || server->output_manager == NULL) {
-        return;
-    }
-
-    struct wlr_output_configuration_v1 *config = wlr_output_configuration_v1_create();
-    if (config == NULL) {
-        wlr_log(WLR_ERROR, "OutputMgmt: failed to allocate current configuration");
-        return;
-    }
-
-    struct fbwl_output *out;
-    wl_list_for_each(out, &server->outputs, link) {
-        if (out->wlr_output == NULL) {
-            continue;
-        }
-        struct wlr_output_configuration_head_v1 *head =
-            wlr_output_configuration_head_v1_create(config, out->wlr_output);
-        if (head == NULL) {
-            continue;
-        }
-
-        struct wlr_output_layout_output *lo =
-            wlr_output_layout_get(server->output_layout, out->wlr_output);
-        if (lo != NULL) {
-            head->state.x = lo->x;
-            head->state.y = lo->y;
-        } else {
-            head->state.enabled = false;
-        }
-    }
-
-    wlr_output_manager_v1_set_configuration(server->output_manager, config);
+static void server_output_management_arrange_layers_on_output(void *userdata, struct wlr_output *wlr_output) {
+    struct fbwl_server *server = userdata;
+    server_arrange_layer_surfaces_on_output(server, wlr_output);
 }
 
 static void server_output_power_set_mode(struct wl_listener *listener, void *data) {
@@ -1142,7 +1113,7 @@ static void server_output_power_set_mode(struct wl_listener *listener, void *dat
             event->output->name != NULL ? event->output->name : "(unnamed)");
     }
 
-    server_output_manager_update(server);
+    fbwl_output_manager_update(server->output_manager, &server->outputs, server->output_layout);
 }
 
 static void server_session_lock_maybe_send_locked(struct fbwl_server *server) {
@@ -1348,75 +1319,13 @@ static void server_new_session_lock(struct wl_listener *listener, void *data) {
     wl_signal_add(&lock->events.destroy, &server->session_lock_destroy);
 }
 
-static bool server_output_management_apply_config(struct fbwl_server *server,
-        struct wlr_output_configuration_v1 *config, bool test_only) {
-    if (server == NULL || config == NULL) {
-        return false;
-    }
-
-    size_t states_len = 0;
-    struct wlr_backend_output_state *states =
-        wlr_output_configuration_v1_build_state(config, &states_len);
-    if (states == NULL) {
-        wlr_log(WLR_ERROR, "OutputMgmt: failed to build output state array");
-        return false;
-    }
-
-    bool ok = false;
-    if (test_only) {
-        ok = wlr_backend_test(server->backend, states, states_len);
-    } else {
-        ok = wlr_backend_commit(server->backend, states, states_len);
-    }
-
-    for (size_t i = 0; i < states_len; i++) {
-        wlr_output_state_finish(&states[i].base);
-    }
-    free(states);
-
-    if (!ok) {
-        return false;
-    }
-    if (test_only) {
-        return true;
-    }
-
-    struct wlr_output_configuration_head_v1 *head;
-    wl_list_for_each(head, &config->heads, link) {
-        struct wlr_output *wlr_output = head->state.output;
-        if (wlr_output == NULL) {
-            continue;
-        }
-
-        if (head->state.enabled) {
-            wlr_output_layout_add(server->output_layout, wlr_output, head->state.x, head->state.y);
-
-            struct wlr_box box = {0};
-            wlr_output_layout_get_box(server->output_layout, wlr_output, &box);
-            struct fbwl_output *out = fbwl_output_find(&server->outputs, wlr_output);
-            if (out != NULL) {
-                out->usable_area = box;
-            }
-            wlr_log(WLR_INFO, "OutputLayout: name=%s x=%d y=%d w=%d h=%d",
-                wlr_output->name != NULL ? wlr_output->name : "(unnamed)",
-                box.x, box.y, box.width, box.height);
-            server_arrange_layer_surfaces_on_output(server, wlr_output);
-        } else {
-            wlr_output_layout_remove(server->output_layout, wlr_output);
-            wlr_log(WLR_INFO, "OutputLayout: name=%s removed",
-                wlr_output->name != NULL ? wlr_output->name : "(unnamed)");
-        }
-    }
-
-    return true;
-}
-
 static void server_output_manager_test(struct wl_listener *listener, void *data) {
     struct fbwl_server *server = wl_container_of(listener, server, output_manager_test);
     struct wlr_output_configuration_v1 *config = data;
 
     wlr_log(WLR_INFO, "OutputMgmt: test serial=%u", config->serial);
-    const bool ok = server_output_management_apply_config(server, config, true);
+    const bool ok = fbwl_output_management_apply_config(server->backend, server->output_layout, &server->outputs,
+        config, true, server_output_management_arrange_layers_on_output, server);
     if (ok) {
         wlr_output_configuration_v1_send_succeeded(config);
     } else {
@@ -1430,10 +1339,11 @@ static void server_output_manager_apply(struct wl_listener *listener, void *data
     struct wlr_output_configuration_v1 *config = data;
 
     wlr_log(WLR_INFO, "OutputMgmt: apply serial=%u", config->serial);
-    const bool ok = server_output_management_apply_config(server, config, false);
+    const bool ok = fbwl_output_management_apply_config(server->backend, server->output_layout, &server->outputs,
+        config, false, server_output_management_arrange_layers_on_output, server);
     if (ok) {
         wlr_output_configuration_v1_send_succeeded(config);
-        server_output_manager_update(server);
+        fbwl_output_manager_update(server->output_manager, &server->outputs, server->output_layout);
         server_background_update_all(server);
         server_toolbar_ui_update_position(server);
         server_cmd_dialog_ui_update_position(server);
@@ -1541,7 +1451,7 @@ static void server_output_destroyed(void *userdata, struct wlr_output *wlr_outpu
         }
     }
 
-    server_output_manager_update(server);
+    fbwl_output_manager_update(server->output_manager, &server->outputs, server->output_layout);
     server_toolbar_ui_update_position(server);
     server_cmd_dialog_ui_update_position(server);
     server_osd_ui_update_position(server);
@@ -1562,7 +1472,7 @@ static void server_new_output(struct wl_listener *listener, void *data) {
 
     server_background_update_output(server, output);
     server_arrange_layer_surfaces_on_output(server, wlr_output);
-    server_output_manager_update(server);
+    fbwl_output_manager_update(server->output_manager, &server->outputs, server->output_layout);
     server_toolbar_ui_update_position(server);
     server_cmd_dialog_ui_update_position(server);
     server_osd_ui_update_position(server);
