@@ -306,6 +306,8 @@ fluxbox_wayland_SOURCES = \
 	src/wmcore/fbwm_output.h \
 	src/wayland/fbwl_util.c \
 	src/wayland/fbwl_util.h \
+	src/wayland/fbwl_ui_text.c \
+	src/wayland/fbwl_ui_text.h \
 	src/wayland/fluxbox_wayland.c \
 	src/wayland/protocol/xdg-shell-protocol.h
 
