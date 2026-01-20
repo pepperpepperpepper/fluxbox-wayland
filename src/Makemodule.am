@@ -339,6 +339,8 @@ fluxbox_wayland_SOURCES = \
 		src/wayland/fbwl_view.h \
 		src/wayland/fbwl_view_foreign_toplevel.c \
 		src/wayland/fbwl_view_foreign_toplevel.h \
+		src/wayland/fbwl_xdg_shell.c \
+		src/wayland/fbwl_xdg_shell.h \
 		src/wayland/fluxbox_wayland.c \
 		src/wayland/protocol/xdg-shell-protocol.h
 

@@ -104,6 +104,7 @@
 #include "wayland/fbwl_ui_text.h"
 #include "wayland/fbwl_view.h"
 #include "wayland/fbwl_view_foreign_toplevel.h"
+#include "wayland/fbwl_xdg_shell.h"
 
 struct fbwl_server;
 
@@ -220,12 +221,6 @@ struct fbwl_init_settings {
     char *apps_file;
     char *style_file;
     char *menu_file;
-};
-
-struct fbwl_popup {
-    struct wlr_xdg_popup *xdg_popup;
-    struct wl_listener commit;
-    struct wl_listener destroy;
 };
 
 struct fbwl_keyboard {
@@ -4369,134 +4364,108 @@ static const struct fbwm_view_ops fbwl_wm_view_ops = {
     .app_id = fbwl_wm_view_app_id,
 };
 
+static void xdg_shell_apply_workspace_visibility(void *userdata, const char *why) {
+    struct fbwl_server *server = userdata;
+    apply_workspace_visibility(server, why);
+}
+
+static void xdg_shell_toolbar_rebuild(void *userdata) {
+    struct fbwl_server *server = userdata;
+    if (server == NULL) {
+        return;
+    }
+    server_toolbar_ui_rebuild(server);
+}
+
+static void xdg_shell_clear_keyboard_focus(void *userdata) {
+    struct fbwl_server *server = userdata;
+    clear_keyboard_focus(server);
+}
+
+static void xdg_shell_clear_focused_view_if_matches(void *userdata, struct fbwl_view *view) {
+    struct fbwl_server *server = userdata;
+    if (server == NULL || view == NULL) {
+        return;
+    }
+    if (server->focused_view == view) {
+        server->focused_view = NULL;
+    }
+}
+
+static struct fbwl_xdg_shell_hooks xdg_shell_hooks(struct fbwl_server *server) {
+    return (struct fbwl_xdg_shell_hooks){
+        .userdata = server,
+        .apply_workspace_visibility = xdg_shell_apply_workspace_visibility,
+        .toolbar_rebuild = xdg_shell_toolbar_rebuild,
+        .clear_keyboard_focus = xdg_shell_clear_keyboard_focus,
+        .clear_focused_view_if_matches = xdg_shell_clear_focused_view_if_matches,
+        .apps_rules_apply_pre_map = server_apps_rules_apply_pre_map,
+        .apps_rules_apply_post_map = server_apps_rules_apply_post_map,
+        .view_set_minimized = view_set_minimized,
+    };
+}
+
 static void xdg_toplevel_map(struct wl_listener *listener, void *data) {
     (void)data;
     struct fbwl_view *view = wl_container_of(listener, view, map);
-    if (!view->placed) {
-        fbwl_view_place_initial(view, &view->server->wm, view->server->output_layout, &view->server->outputs,
-            view->server->cursor->x, view->server->cursor->y);
-        view->placed = true;
-    }
-    view->mapped = true;
-    view->minimized = false;
-    if (view->foreign_toplevel != NULL) {
-        wlr_foreign_toplevel_handle_v1_set_minimized(view->foreign_toplevel, false);
-    }
-    view->wm_view.workspace = fbwm_core_workspace_current(&view->server->wm);
-
-    const struct fbwl_apps_rule *apps_rule = NULL;
-    size_t apps_rule_idx = 0;
-    if (!view->apps_rules_applied) {
-        const char *app_id = fbwl_view_app_id(view);
-        const char *instance = NULL;
-        if (view->type == FBWL_VIEW_XWAYLAND && view->xwayland_surface != NULL) {
-            instance = view->xwayland_surface->instance;
-        } else {
-            instance = app_id;
-        }
-        const char *title = fbwl_view_title(view);
-        apps_rule = fbwl_apps_rules_match(view->server->apps_rules, view->server->apps_rule_count,
-            app_id, instance, title, &apps_rule_idx);
-        if (apps_rule != NULL) {
-            wlr_log(WLR_INFO, "Apps: match rule=%zu title=%s app_id=%s",
-                apps_rule_idx,
-                fbwl_view_title(view) != NULL ? fbwl_view_title(view) : "(no-title)",
-                fbwl_view_app_id(view) != NULL ? fbwl_view_app_id(view) : "(no-app-id)");
-
-            server_apps_rules_apply_pre_map(view, apps_rule);
-            view->apps_rules_applied = true;
-
-            wlr_log(WLR_INFO,
-                "Apps: applied title=%s app_id=%s workspace_id=%d sticky=%d jump=%d minimized=%d maximized=%d fullscreen=%d",
-                fbwl_view_display_title(view),
-                fbwl_view_app_id(view) != NULL ? fbwl_view_app_id(view) : "(no-app-id)",
-                apps_rule->set_workspace ? apps_rule->workspace : -1,
-                apps_rule->set_sticky ? (apps_rule->sticky ? 1 : 0) : -1,
-                apps_rule->set_jump ? (apps_rule->jump ? 1 : 0) : -1,
-                apps_rule->set_minimized ? (apps_rule->minimized ? 1 : 0) : -1,
-                apps_rule->set_maximized ? (apps_rule->maximized ? 1 : 0) : -1,
-                apps_rule->set_fullscreen ? (apps_rule->fullscreen ? 1 : 0) : -1);
-        }
-    }
-
-    fbwm_core_view_map(&view->server->wm, &view->wm_view);
-    apply_workspace_visibility(view->server, "map");
-    if (apps_rule != NULL) {
-        server_apps_rules_apply_post_map(view, apps_rule);
-    }
-    fbwm_core_focus_view(&view->server->wm, &view->wm_view);
+    struct fbwl_server *server = view->server;
+    struct fbwl_xdg_shell_hooks hooks = xdg_shell_hooks(server);
+    fbwl_xdg_shell_handle_toplevel_map(view, &server->wm, server->output_layout, &server->outputs,
+        server->cursor->x, server->cursor->y, server->apps_rules, server->apps_rule_count, &hooks);
 }
 
 static void xdg_toplevel_unmap(struct wl_listener *listener, void *data) {
     (void)data;
     struct fbwl_view *view = wl_container_of(listener, view, unmap);
-    view->mapped = false;
-    view->minimized = false;
-    if (view->foreign_toplevel != NULL) {
-        wlr_foreign_toplevel_handle_v1_set_minimized(view->foreign_toplevel, false);
-    }
-    fbwm_core_view_unmap(&view->server->wm, &view->wm_view);
-    apply_workspace_visibility(view->server, "unmap");
+    struct fbwl_server *server = view->server;
+    struct fbwl_xdg_shell_hooks hooks = xdg_shell_hooks(server);
+    fbwl_xdg_shell_handle_toplevel_unmap(view, &server->wm, &hooks);
 }
 
 static void xdg_toplevel_commit(struct wl_listener *listener, void *data) {
     (void)data;
     struct fbwl_view *view = wl_container_of(listener, view, commit);
-    if (view->xdg_toplevel->base->initial_commit) {
-        wlr_xdg_toplevel_set_size(view->xdg_toplevel, 0, 0);
-    }
-
-    struct wlr_surface *surface = fbwl_view_wlr_surface(view);
-    const int w = surface->current.width;
-    const int h = surface->current.height;
-    if (w > 0 && h > 0 && (w != view->width || h != view->height)) {
-        view->width = w;
-        view->height = h;
-        wlr_log(WLR_INFO, "Surface size: %s %dx%d",
-            fbwl_view_display_title(view),
-            w, h);
-    }
-    fbwl_view_decor_update(view, &view->server->decor_theme);
+    struct fbwl_server *server = view->server;
+    fbwl_xdg_shell_handle_toplevel_commit(view, &server->decor_theme);
 }
 
 static void xdg_toplevel_request_maximize(struct wl_listener *listener, void *data) {
     (void)data;
     struct fbwl_view *view = wl_container_of(listener, view, request_maximize);
-    fbwl_view_set_maximized(view, view->xdg_toplevel->requested.maximized, view->server->output_layout,
-        &view->server->outputs);
+    struct fbwl_server *server = view->server;
+    fbwl_xdg_shell_handle_toplevel_request_maximize(view, server->output_layout, &server->outputs);
 }
 
 static void xdg_toplevel_request_fullscreen(struct wl_listener *listener, void *data) {
     (void)data;
     struct fbwl_view *view = wl_container_of(listener, view, request_fullscreen);
-    fbwl_view_set_fullscreen(view, view->xdg_toplevel->requested.fullscreen, view->server->output_layout,
-        &view->server->outputs, view->server->layer_normal, view->server->layer_fullscreen,
-        view->xdg_toplevel->requested.fullscreen_output);
+    struct fbwl_server *server = view->server;
+    fbwl_xdg_shell_handle_toplevel_request_fullscreen(view, server->output_layout, &server->outputs,
+        server->layer_normal, server->layer_fullscreen);
 }
 
 static void xdg_toplevel_request_minimize(struct wl_listener *listener, void *data) {
     (void)data;
     struct fbwl_view *view = wl_container_of(listener, view, request_minimize);
-    view_set_minimized(view, view->xdg_toplevel->requested.minimized, "xdg-request");
+    struct fbwl_server *server = view->server;
+    struct fbwl_xdg_shell_hooks hooks = xdg_shell_hooks(server);
+    fbwl_xdg_shell_handle_toplevel_request_minimize(view, &hooks);
 }
 
 static void xdg_toplevel_set_title(struct wl_listener *listener, void *data) {
     (void)data;
     struct fbwl_view *view = wl_container_of(listener, view, set_title);
-    fbwl_view_foreign_toplevel_set_title(view, view->xdg_toplevel->title);
-    fbwl_view_decor_update_title_text(view, view->server != NULL ? &view->server->decor_theme : NULL);
-    if (view->server != NULL) {
-        server_toolbar_ui_rebuild(view->server);
-    }
+    struct fbwl_server *server = view->server;
+    struct fbwl_xdg_shell_hooks hooks = xdg_shell_hooks(server);
+    fbwl_xdg_shell_handle_toplevel_set_title(view, &server->decor_theme, &hooks);
 }
 
 static void xdg_toplevel_set_app_id(struct wl_listener *listener, void *data) {
     (void)data;
     struct fbwl_view *view = wl_container_of(listener, view, set_app_id);
-    fbwl_view_foreign_toplevel_set_app_id(view, view->xdg_toplevel->app_id);
-    if (view->server != NULL) {
-        server_toolbar_ui_rebuild(view->server);
-    }
+    struct fbwl_server *server = view->server;
+    struct fbwl_xdg_shell_hooks hooks = xdg_shell_hooks(server);
+    fbwl_xdg_shell_handle_toplevel_set_app_id(view, &hooks);
 }
 
 static void foreign_toplevel_request_maximize(struct wl_listener *listener, void *data) {
@@ -4891,74 +4860,15 @@ static void server_xwayland_new_surface(struct wl_listener *listener, void *data
 static void xdg_toplevel_destroy(struct wl_listener *listener, void *data) {
     (void)data;
     struct fbwl_view *view = wl_container_of(listener, view, destroy);
-
-    fbwl_cleanup_listener(&view->map);
-    fbwl_cleanup_listener(&view->unmap);
-    fbwl_cleanup_listener(&view->commit);
-    fbwl_cleanup_listener(&view->destroy);
-    fbwl_cleanup_listener(&view->request_maximize);
-    fbwl_cleanup_listener(&view->request_fullscreen);
-    fbwl_cleanup_listener(&view->request_minimize);
-    fbwl_cleanup_listener(&view->set_title);
-    fbwl_cleanup_listener(&view->set_app_id);
-    fbwl_cleanup_listener(&view->foreign_request_maximize);
-    fbwl_cleanup_listener(&view->foreign_request_minimize);
-    fbwl_cleanup_listener(&view->foreign_request_activate);
-    fbwl_cleanup_listener(&view->foreign_request_fullscreen);
-    fbwl_cleanup_listener(&view->foreign_request_close);
-
-    if (view->server != NULL && view->server->focused_view == view) {
-        view->server->focused_view = NULL;
-    }
-
-    fbwl_view_foreign_toplevel_destroy(view);
-
-    fbwm_core_view_destroy(&view->server->wm, &view->wm_view);
-    if (view->server->wm.focused == NULL) {
-        clear_keyboard_focus(view->server);
-    }
-    free(view);
+    struct fbwl_server *server = view->server;
+    struct fbwl_xdg_shell_hooks hooks = xdg_shell_hooks(server);
+    fbwl_xdg_shell_handle_toplevel_destroy(view, &server->wm, &hooks);
 }
 
 static void server_new_xdg_toplevel(struct wl_listener *listener, void *data) {
     struct fbwl_server *server = wl_container_of(listener, server, new_xdg_toplevel);
     struct wlr_xdg_toplevel *xdg_toplevel = data;
-
-    struct fbwl_view *view = calloc(1, sizeof(*view));
-    view->server = server;
-    view->type = FBWL_VIEW_XDG;
-    view->xdg_toplevel = xdg_toplevel;
-    view->scene_tree =
-        wlr_scene_xdg_surface_create(server->layer_normal != NULL ? server->layer_normal : &server->scene->tree,
-            xdg_toplevel->base);
-    view->scene_tree->node.data = view;
-    xdg_toplevel->base->data = view->scene_tree;
-    fbwl_view_decor_create(view, &server->decor_theme);
-
-    fbwm_view_init(&view->wm_view, &fbwl_wm_view_ops, view);
-
-    view->map.notify = xdg_toplevel_map;
-    wl_signal_add(&xdg_toplevel->base->surface->events.map, &view->map);
-    view->unmap.notify = xdg_toplevel_unmap;
-    wl_signal_add(&xdg_toplevel->base->surface->events.unmap, &view->unmap);
-    view->commit.notify = xdg_toplevel_commit;
-    wl_signal_add(&xdg_toplevel->base->surface->events.commit, &view->commit);
-
-    view->destroy.notify = xdg_toplevel_destroy;
-    wl_signal_add(&xdg_toplevel->events.destroy, &view->destroy);
-
-    view->request_maximize.notify = xdg_toplevel_request_maximize;
-    wl_signal_add(&xdg_toplevel->events.request_maximize, &view->request_maximize);
-    view->request_fullscreen.notify = xdg_toplevel_request_fullscreen;
-    wl_signal_add(&xdg_toplevel->events.request_fullscreen, &view->request_fullscreen);
-    view->request_minimize.notify = xdg_toplevel_request_minimize;
-    wl_signal_add(&xdg_toplevel->events.request_minimize, &view->request_minimize);
-
-    view->set_title.notify = xdg_toplevel_set_title;
-    wl_signal_add(&xdg_toplevel->events.set_title, &view->set_title);
-    view->set_app_id.notify = xdg_toplevel_set_app_id;
-    wl_signal_add(&xdg_toplevel->events.set_app_id, &view->set_app_id);
-
+    const struct fbwl_view_foreign_toplevel_handlers *foreign_handlers = NULL;
     if (server->foreign_toplevel_mgr != NULL) {
         static const struct fbwl_view_foreign_toplevel_handlers handlers = {
             .request_maximize = foreign_toplevel_request_maximize,
@@ -4967,45 +4877,16 @@ static void server_new_xdg_toplevel(struct wl_listener *listener, void *data) {
             .request_fullscreen = foreign_toplevel_request_fullscreen,
             .request_close = foreign_toplevel_request_close,
         };
-        fbwl_view_foreign_toplevel_create(view, server->foreign_toplevel_mgr, xdg_toplevel->title, xdg_toplevel->app_id,
-            &handlers);
-    }
-}
-
-static void xdg_popup_commit(struct wl_listener *listener, void *data) {
-    (void)data;
-    struct fbwl_popup *popup = wl_container_of(listener, popup, commit);
-    if (popup->xdg_popup->base->initial_commit) {
-        wlr_xdg_surface_schedule_configure(popup->xdg_popup->base);
-    }
-}
-
-static void xdg_popup_destroy(struct wl_listener *listener, void *data) {
-    (void)data;
-    struct fbwl_popup *popup = wl_container_of(listener, popup, destroy);
-    fbwl_cleanup_listener(&popup->commit);
-    fbwl_cleanup_listener(&popup->destroy);
-    free(popup);
-}
-
-static void server_new_xdg_popup(struct wl_listener *listener, void *data) {
-    (void)listener;
-    struct wlr_xdg_popup *xdg_popup = data;
-
-    struct fbwl_popup *popup = calloc(1, sizeof(*popup));
-    popup->xdg_popup = xdg_popup;
-
-    struct wlr_xdg_surface *parent =
-        wlr_xdg_surface_try_from_wlr_surface(xdg_popup->parent);
-    if (parent != NULL) {
-        struct wlr_scene_tree *parent_tree = parent->data;
-        xdg_popup->base->data = wlr_scene_xdg_surface_create(parent_tree, xdg_popup->base);
+        foreign_handlers = &handlers;
     }
 
-    popup->commit.notify = xdg_popup_commit;
-    wl_signal_add(&xdg_popup->base->surface->events.commit, &popup->commit);
-    popup->destroy.notify = xdg_popup_destroy;
-    wl_signal_add(&xdg_popup->events.destroy, &popup->destroy);
+    fbwl_xdg_shell_handle_new_toplevel(server, xdg_toplevel,
+        server->layer_normal != NULL ? server->layer_normal : &server->scene->tree,
+        &server->decor_theme, &fbwl_wm_view_ops,
+        xdg_toplevel_map, xdg_toplevel_unmap, xdg_toplevel_commit, xdg_toplevel_destroy,
+        xdg_toplevel_request_maximize, xdg_toplevel_request_fullscreen, xdg_toplevel_request_minimize,
+        xdg_toplevel_set_title, xdg_toplevel_set_app_id,
+        server->foreign_toplevel_mgr, foreign_handlers);
 }
 
 static void server_new_layer_surface(struct wl_listener *listener, void *data) {
@@ -5654,7 +5535,7 @@ int main(int argc, char **argv) {
     server.xdg_shell = wlr_xdg_shell_create(server.wl_display, 3);
     server.new_xdg_toplevel.notify = server_new_xdg_toplevel;
     wl_signal_add(&server.xdg_shell->events.new_toplevel, &server.new_xdg_toplevel);
-    server.new_xdg_popup.notify = server_new_xdg_popup;
+    server.new_xdg_popup.notify = fbwl_xdg_shell_handle_new_popup;
     wl_signal_add(&server.xdg_shell->events.new_popup, &server.new_xdg_popup);
 
     server.layer_shell = wlr_layer_shell_v1_create(server.wl_display, 4);
