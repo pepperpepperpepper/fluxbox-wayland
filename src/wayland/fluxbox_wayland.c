@@ -109,14 +109,6 @@
 
 struct fbwl_server;
 
-struct fbwl_keybinding {
-    xkb_keysym_t sym;
-    uint32_t modifiers;
-    enum fbwl_keybinding_action action;
-    int arg;
-    char *cmd;
-};
-
 struct fbwl_menu_ui {
     bool open;
     struct fbwl_menu *current;
@@ -1956,158 +1948,10 @@ static void keyboard_handle_modifiers(struct wl_listener *listener, void *data) 
         &keyboard->wlr_keyboard->modifiers);
 }
 
-static void spawn(const char *cmd) {
-    if (cmd == NULL || *cmd == '\0') {
-        return;
-    }
-    pid_t pid = fork();
-    if (pid == 0) {
-        execl("/bin/sh", "/bin/sh", "-c", cmd, (void *)NULL);
-        _exit(127);
-    }
-}
-
-#define FBWL_KEYMOD_MASK (WLR_MODIFIER_SHIFT | WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT | WLR_MODIFIER_LOGO)
-
-static void server_keybindings_free(struct fbwl_server *server) {
-    if (server == NULL || server->keybindings == NULL) {
-        return;
-    }
-    for (size_t i = 0; i < server->keybinding_count; i++) {
-        free(server->keybindings[i].cmd);
-        server->keybindings[i].cmd = NULL;
-    }
-    free(server->keybindings);
-    server->keybindings = NULL;
-    server->keybinding_count = 0;
-}
-
-static bool server_keybindings_add(struct fbwl_server *server, xkb_keysym_t sym,
-        uint32_t modifiers, enum fbwl_keybinding_action action, int arg, const char *cmd) {
-    if (server == NULL) {
-        return false;
-    }
-
-    struct fbwl_keybinding *bindings =
-        realloc(server->keybindings, (server->keybinding_count + 1) * sizeof(*bindings));
-    if (bindings == NULL) {
-        return false;
-    }
-    server->keybindings = bindings;
-
-    struct fbwl_keybinding *binding = &server->keybindings[server->keybinding_count++];
-    binding->sym = xkb_keysym_to_lower(sym);
-    binding->modifiers = modifiers & FBWL_KEYMOD_MASK;
-    binding->action = action;
-    binding->arg = arg;
-    binding->cmd = cmd != NULL ? strdup(cmd) : NULL;
-    return true;
-}
-
 static bool server_keybindings_add_from_keys_file(void *userdata, xkb_keysym_t sym, uint32_t modifiers,
         enum fbwl_keybinding_action action, int arg, const char *cmd) {
     struct fbwl_server *server = userdata;
-    return server_keybindings_add(server, sym, modifiers, action, arg, cmd);
-}
-
-static bool server_keybindings_execute(struct fbwl_server *server, const struct fbwl_keybinding *binding) {
-    if (server == NULL || binding == NULL) {
-        return false;
-    }
-
-    switch (binding->action) {
-    case FBWL_KEYBIND_EXIT:
-        wl_display_terminate(server->wl_display);
-        return true;
-    case FBWL_KEYBIND_EXEC:
-        spawn(binding->cmd);
-        return true;
-    case FBWL_KEYBIND_COMMAND_DIALOG:
-        server_cmd_dialog_ui_open(server);
-        return true;
-    case FBWL_KEYBIND_FOCUS_NEXT:
-        fbwm_core_focus_next(&server->wm);
-        return true;
-    case FBWL_KEYBIND_TOGGLE_MAXIMIZE: {
-        struct fbwm_view *wm_view = server->wm.focused;
-        if (wm_view != NULL) {
-            struct fbwl_view *view = wm_view->userdata;
-            if (view != NULL) {
-                fbwl_view_set_maximized(view, !view->maximized, server->output_layout, &server->outputs);
-            }
-        }
-        return true;
-    }
-    case FBWL_KEYBIND_TOGGLE_FULLSCREEN: {
-        struct fbwm_view *wm_view = server->wm.focused;
-        if (wm_view != NULL) {
-            struct fbwl_view *view = wm_view->userdata;
-            if (view != NULL) {
-                fbwl_view_set_fullscreen(view, !view->fullscreen, server->output_layout, &server->outputs,
-                    server->layer_normal, server->layer_fullscreen, NULL);
-            }
-        }
-        return true;
-    }
-    case FBWL_KEYBIND_TOGGLE_MINIMIZE: {
-        struct fbwl_view *view = NULL;
-        struct fbwm_view *wm_view = server->wm.focused;
-        if (wm_view != NULL) {
-            view = wm_view->userdata;
-        }
-
-        if (view == NULL) {
-            const int cur = fbwm_core_workspace_current(&server->wm);
-            for (struct fbwm_view *walk = server->wm.views.next;
-                    walk != &server->wm.views;
-                    walk = walk->next) {
-                struct fbwl_view *candidate = walk->userdata;
-                if (candidate != NULL && candidate->mapped && candidate->minimized &&
-                        (walk->sticky || walk->workspace == cur)) {
-                    view = candidate;
-                    break;
-                }
-            }
-        }
-
-        if (view != NULL) {
-            view_set_minimized(view, !view->minimized, "keybinding");
-        }
-        return true;
-    }
-    case FBWL_KEYBIND_WORKSPACE_SWITCH:
-        fbwm_core_workspace_switch(&server->wm, binding->arg);
-        apply_workspace_visibility(server, "switch");
-        return true;
-    case FBWL_KEYBIND_SEND_TO_WORKSPACE:
-        fbwm_core_move_focused_to_workspace(&server->wm, binding->arg);
-        apply_workspace_visibility(server, "move-focused");
-        return true;
-    case FBWL_KEYBIND_TAKE_TO_WORKSPACE:
-        fbwm_core_move_focused_to_workspace(&server->wm, binding->arg);
-        apply_workspace_visibility(server, "move-focused");
-        fbwm_core_workspace_switch(&server->wm, binding->arg);
-        apply_workspace_visibility(server, "switch");
-        return true;
-    default:
-        return false;
-    }
-}
-
-static bool server_handle_keybinding(struct fbwl_server *server, xkb_keysym_t sym, uint32_t modifiers) {
-    if (server == NULL || server->keybindings == NULL || server->keybinding_count == 0) {
-        return false;
-    }
-
-    sym = xkb_keysym_to_lower(sym);
-    modifiers &= FBWL_KEYMOD_MASK;
-    for (ssize_t i = (ssize_t)server->keybinding_count - 1; i >= 0; i--) {
-        const struct fbwl_keybinding *binding = &server->keybindings[i];
-        if (binding->sym == sym && binding->modifiers == modifiers) {
-            return server_keybindings_execute(server, binding);
-        }
-    }
-    return false;
+    return fbwl_keybindings_add(&server->keybindings, &server->keybinding_count, sym, modifiers, action, arg, cmd);
 }
 
 static char *trim_inplace(char *s) {
@@ -3336,7 +3180,7 @@ static bool server_cmd_dialog_ui_handle_key(struct fbwl_server *server, xkb_keys
         const char *cmd = ui->text != NULL ? ui->text : "";
         if (*cmd != '\0') {
             wlr_log(WLR_INFO, "CmdDialog: execute cmd=%s", cmd);
-            spawn(cmd);
+            fbwl_spawn(cmd);
             server_cmd_dialog_ui_close(server, "execute");
         } else {
             server_cmd_dialog_ui_close(server, "empty-enter");
@@ -3764,7 +3608,7 @@ static void server_menu_ui_activate_selected(struct fbwl_server *server) {
 
     if (it->kind == FBWL_MENU_ITEM_EXEC) {
         wlr_log(WLR_INFO, "Menu: exec label=%s cmd=%s", label, it->cmd != NULL ? it->cmd : "(null)");
-        spawn(it->cmd);
+        fbwl_spawn(it->cmd);
         server_menu_ui_close(server, "exec");
         return;
     }
@@ -3862,26 +3706,63 @@ static void server_menu_free(struct fbwl_server *server) {
     server->menu_file = NULL;
 }
 
-static void server_keybindings_add_defaults(struct fbwl_server *server) {
+static void keybindings_terminate(void *userdata) {
+    struct fbwl_server *server = userdata;
+    if (server == NULL || server->wl_display == NULL) {
+        return;
+    }
+    wl_display_terminate(server->wl_display);
+}
+
+static void keybindings_spawn(void *userdata, const char *cmd) {
+    (void)userdata;
+    fbwl_spawn(cmd);
+}
+
+static void keybindings_command_dialog_open(void *userdata) {
+    struct fbwl_server *server = userdata;
+    server_cmd_dialog_ui_open(server);
+}
+
+static void keybindings_apply_workspace_visibility(void *userdata, const char *why) {
+    struct fbwl_server *server = userdata;
+    apply_workspace_visibility(server, why);
+}
+
+static void keybindings_view_set_maximized(void *userdata, struct fbwl_view *view, bool maximized) {
+    struct fbwl_server *server = userdata;
     if (server == NULL) {
         return;
     }
+    fbwl_view_set_maximized(view, maximized, server->output_layout, &server->outputs);
+}
 
-    server_keybindings_add(server, XKB_KEY_Escape, WLR_MODIFIER_ALT, FBWL_KEYBIND_EXIT, 0, NULL);
-    server_keybindings_add(server, XKB_KEY_Return, WLR_MODIFIER_ALT,
-        FBWL_KEYBIND_EXEC, 0, server->terminal_cmd);
-    server_keybindings_add(server, XKB_KEY_F2, WLR_MODIFIER_ALT,
-        FBWL_KEYBIND_COMMAND_DIALOG, 0, NULL);
-    server_keybindings_add(server, XKB_KEY_F1, WLR_MODIFIER_ALT, FBWL_KEYBIND_FOCUS_NEXT, 0, NULL);
-    server_keybindings_add(server, XKB_KEY_m, WLR_MODIFIER_ALT, FBWL_KEYBIND_TOGGLE_MAXIMIZE, 0, NULL);
-    server_keybindings_add(server, XKB_KEY_f, WLR_MODIFIER_ALT, FBWL_KEYBIND_TOGGLE_FULLSCREEN, 0, NULL);
-    server_keybindings_add(server, XKB_KEY_i, WLR_MODIFIER_ALT, FBWL_KEYBIND_TOGGLE_MINIMIZE, 0, NULL);
-    for (int i = 0; i < 9; i++) {
-        server_keybindings_add(server, XKB_KEY_1 + i, WLR_MODIFIER_ALT,
-            FBWL_KEYBIND_WORKSPACE_SWITCH, i, NULL);
-        server_keybindings_add(server, XKB_KEY_1 + i, WLR_MODIFIER_ALT | WLR_MODIFIER_CTRL,
-            FBWL_KEYBIND_SEND_TO_WORKSPACE, i, NULL);
+static void keybindings_view_set_fullscreen(void *userdata, struct fbwl_view *view, bool fullscreen) {
+    struct fbwl_server *server = userdata;
+    if (server == NULL) {
+        return;
     }
+    fbwl_view_set_fullscreen(view, fullscreen, server->output_layout, &server->outputs,
+        server->layer_normal, server->layer_fullscreen, NULL);
+}
+
+static void keybindings_view_set_minimized(void *userdata, struct fbwl_view *view, bool minimized, const char *why) {
+    (void)userdata;
+    view_set_minimized(view, minimized, why);
+}
+
+static struct fbwl_keybindings_hooks keybindings_hooks(struct fbwl_server *server) {
+    return (struct fbwl_keybindings_hooks){
+        .userdata = server,
+        .wm = server != NULL ? &server->wm : NULL,
+        .terminate = keybindings_terminate,
+        .spawn = keybindings_spawn,
+        .command_dialog_open = keybindings_command_dialog_open,
+        .apply_workspace_visibility = keybindings_apply_workspace_visibility,
+        .view_set_maximized = keybindings_view_set_maximized,
+        .view_set_fullscreen = keybindings_view_set_fullscreen,
+        .view_set_minimized = keybindings_view_set_minimized,
+    };
 }
 
 static void server_apps_rules_apply_pre_map(struct fbwl_view *view,
@@ -4003,8 +3884,9 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data) {
 
     if (!handled && !server_keyboard_shortcuts_inhibited(server) &&
             event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+        const struct fbwl_keybindings_hooks hooks = keybindings_hooks(server);
         for (int i = 0; i < nsyms; i++) {
-            handled = server_handle_keybinding(server, syms[i], modifiers);
+            handled = fbwl_keybindings_handle(server->keybindings, server->keybinding_count, syms[i], modifiers, &hooks);
             if (handled) {
                 break;
             }
@@ -5308,7 +5190,7 @@ int main(int argc, char **argv) {
         init_settings_free(&init);
     }
     fbwm_core_set_workspace_count(&server.wm, workspaces);
-    server_keybindings_add_defaults(&server);
+    fbwl_keybindings_add_defaults(&server.keybindings, &server.keybinding_count, server.terminal_cmd);
     if (keys_file != NULL) {
         (void)fbwl_keys_parse_file(keys_file, server_keybindings_add_from_keys_file, &server, NULL);
     }
@@ -5466,7 +5348,7 @@ int main(int argc, char **argv) {
 
     setenv("WAYLAND_DISPLAY", socket, true);
     if (server.startup_cmd != NULL) {
-        spawn(server.startup_cmd);
+        fbwl_spawn(server.startup_cmd);
     }
 
     wlr_log(WLR_INFO, "Running fluxbox-wayland on WAYLAND_DISPLAY=%s", socket);
@@ -5540,7 +5422,7 @@ int main(int argc, char **argv) {
     wlr_renderer_destroy(server.renderer);
     wlr_backend_destroy(server.backend);
     fbwl_apps_rules_free(&server.apps_rules, &server.apps_rule_count);
-    server_keybindings_free(&server);
+    fbwl_keybindings_free(&server.keybindings, &server.keybinding_count);
     if (server.protocol_logger != NULL) {
         wl_protocol_logger_destroy(server.protocol_logger);
         server.protocol_logger = NULL;

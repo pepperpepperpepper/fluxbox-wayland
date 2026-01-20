@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #include <wayland-server-core.h>
@@ -64,4 +65,15 @@ bool fbwl_parse_hex_color(const char *s, float rgba[static 4]) {
     rgba[2] = (float)comps[2] / 255.0f;
     rgba[3] = (float)comps[3] / 255.0f;
     return true;
+}
+
+void fbwl_spawn(const char *cmd) {
+    if (cmd == NULL || *cmd == '\0') {
+        return;
+    }
+    pid_t pid = fork();
+    if (pid == 0) {
+        execl("/bin/sh", "/bin/sh", "-c", cmd, (void *)NULL);
+        _exit(127);
+    }
 }
