@@ -93,6 +93,7 @@
 #include "wayland/fbwl_keys_parse.h"
 #include "wayland/fbwl_menu.h"
 #include "wayland/fbwl_menu_parse.h"
+#include "wayland/fbwl_output.h"
 #include "wayland/fbwl_sni_tray.h"
 #include "wayland/fbwl_style_parse.h"
 #include "wayland/fbwl_ui_decor_theme.h"
@@ -220,17 +221,6 @@ struct fbwl_init_settings {
     char *apps_file;
     char *style_file;
     char *menu_file;
-};
-
-struct fbwl_output {
-    struct wl_list link;
-    struct fbwl_server *server;
-    struct wlr_output *wlr_output;
-    struct wlr_box usable_area;
-    struct wlr_scene_rect *background_rect;
-    struct wl_listener frame;
-    struct wl_listener request_state;
-    struct wl_listener destroy;
 };
 
 struct fbwl_view {
@@ -1012,20 +1002,6 @@ static struct fbwl_decor_hit view_decor_hit_test(const struct fbwl_view *view, d
     return hit;
 }
 
-static struct fbwl_output *server_find_output(struct fbwl_server *server, struct wlr_output *wlr_output) {
-    if (server == NULL || wlr_output == NULL) {
-        return NULL;
-    }
-
-    struct fbwl_output *out;
-    wl_list_for_each(out, &server->outputs, link) {
-        if (out->wlr_output == wlr_output) {
-            return out;
-        }
-    }
-    return NULL;
-}
-
 static struct wlr_scene_tree *server_layer_tree_for_layer(struct fbwl_server *server,
         enum zwlr_layer_shell_v1_layer layer) {
     if (server == NULL) {
@@ -1093,7 +1069,7 @@ static void server_arrange_layer_surfaces_on_output(struct fbwl_server *server,
         }
     }
 
-    struct fbwl_output *out = server_find_output(server, wlr_output);
+    struct fbwl_output *out = fbwl_output_find(&server->outputs, wlr_output);
     if (out != NULL) {
         out->usable_area = usable;
     }
@@ -1167,18 +1143,6 @@ static void server_output_power_set_mode(struct wl_listener *listener, void *dat
     }
 
     server_output_manager_update(server);
-}
-
-static size_t server_output_count(struct fbwl_server *server) {
-    if (server == NULL) {
-        return 0;
-    }
-    size_t n = 0;
-    struct fbwl_output *out;
-    wl_list_for_each(out, &server->outputs, link) {
-        n++;
-    }
-    return n;
 }
 
 static void server_session_lock_maybe_send_locked(struct fbwl_server *server) {
@@ -1363,7 +1327,7 @@ static void server_new_session_lock(struct wl_listener *listener, void *data) {
     server->session_lock = lock;
     server->session_locked = true;
     server->session_lock_sent_locked = false;
-    server->session_lock_expected_surfaces = server_output_count(server);
+    server->session_lock_expected_surfaces = fbwl_output_count(&server->outputs);
     if (server->session_lock_expected_surfaces < 1) {
         server->session_lock_expected_surfaces = 1;
     }
@@ -1429,7 +1393,7 @@ static bool server_output_management_apply_config(struct fbwl_server *server,
 
             struct wlr_box box = {0};
             wlr_output_layout_get_box(server->output_layout, wlr_output, &box);
-            struct fbwl_output *out = server_find_output(server, wlr_output);
+            struct fbwl_output *out = fbwl_output_find(&server->outputs, wlr_output);
             if (out != NULL) {
                 out->usable_area = box;
             }
@@ -1556,113 +1520,45 @@ static void server_background_update_all(struct fbwl_server *server) {
     }
 }
 
-static void output_frame(struct wl_listener *listener, void *data) {
-    (void)data;
-    struct fbwl_output *output = wl_container_of(listener, output, frame);
-    struct wlr_scene_output *scene_output =
-        wlr_scene_get_scene_output(output->server->scene, output->wlr_output);
-    if (scene_output == NULL) {
+static void server_output_destroyed(void *userdata, struct wlr_output *wlr_output) {
+    struct fbwl_server *server = userdata;
+    if (server == NULL || wlr_output == NULL) {
         return;
     }
 
-    wlr_scene_output_commit(scene_output, NULL);
+    if (server->session_lock != NULL && !server->session_lock_sent_locked &&
+            server->session_lock_expected_surfaces > 1) {
+        server->session_lock_expected_surfaces--;
+        server_session_lock_maybe_send_locked(server);
+    }
 
-    struct timespec now;
-    clock_gettime(CLOCK_MONOTONIC, &now);
-    wlr_scene_output_send_frame_done(scene_output, &now);
-}
-
-static void output_request_state(struct wl_listener *listener, void *data) {
-    struct fbwl_output *output = wl_container_of(listener, output, request_state);
-    const struct wlr_output_event_request_state *event = data;
-    wlr_output_commit_state(output->wlr_output, event->state);
-}
-
-static void output_destroy(struct wl_listener *listener, void *data) {
-    (void)data;
-    struct fbwl_output *output = wl_container_of(listener, output, destroy);
-
-    struct fbwl_server *server = output->server;
-    if (server != NULL) {
-        if (server->session_lock != NULL && !server->session_lock_sent_locked &&
-                server->session_lock_expected_surfaces > 1) {
-            server->session_lock_expected_surfaces--;
-            server_session_lock_maybe_send_locked(server);
-        }
-
-        for (struct fbwm_view *wm_view = server->wm.views.next;
-                wm_view != &server->wm.views;
-                wm_view = wm_view->next) {
-            struct fbwl_view *view = wm_view->userdata;
-            if (view != NULL && view->foreign_output == output->wlr_output) {
-                view->foreign_output = NULL;
-            }
+    for (struct fbwm_view *wm_view = server->wm.views.next;
+            wm_view != &server->wm.views;
+            wm_view = wm_view->next) {
+        struct fbwl_view *view = wm_view->userdata;
+        if (view != NULL && view->foreign_output == wlr_output) {
+            view->foreign_output = NULL;
         }
     }
 
-    fbwl_cleanup_listener(&output->frame);
-    fbwl_cleanup_listener(&output->request_state);
-    fbwl_cleanup_listener(&output->destroy);
-    if (output->background_rect != NULL) {
-        wlr_scene_node_destroy(&output->background_rect->node);
-        output->background_rect = NULL;
-    }
-    wl_list_remove(&output->link);
-    if (server != NULL) {
-        server_output_manager_update(server);
-        server_toolbar_ui_update_position(server);
-        server_cmd_dialog_ui_update_position(server);
-        server_osd_ui_update_position(server);
-    }
-    free(output);
+    server_output_manager_update(server);
+    server_toolbar_ui_update_position(server);
+    server_cmd_dialog_ui_update_position(server);
+    server_osd_ui_update_position(server);
 }
 
 static void server_new_output(struct wl_listener *listener, void *data) {
     struct fbwl_server *server = wl_container_of(listener, server, new_output);
     struct wlr_output *wlr_output = data;
 
-    wlr_output_init_render(wlr_output, server->allocator, server->renderer);
-
-    struct wlr_output_state state;
-    wlr_output_state_init(&state);
-    wlr_output_state_set_enabled(&state, true);
-
-    struct wlr_output_mode *mode = wlr_output_preferred_mode(wlr_output);
-    if (mode != NULL) {
-        wlr_output_state_set_mode(&state, mode);
+    struct fbwl_output *output = fbwl_output_create(&server->outputs, wlr_output,
+        server->allocator, server->renderer,
+        server->output_layout, server->scene, server->scene_layout,
+        server_output_destroyed, server);
+    if (output == NULL) {
+        wlr_log(WLR_ERROR, "Output: failed to create output");
+        return;
     }
-
-    wlr_output_commit_state(wlr_output, &state);
-    wlr_output_state_finish(&state);
-
-    wlr_log(WLR_INFO, "Output: %s %dx%d",
-        wlr_output->name != NULL ? wlr_output->name : "(unnamed)",
-        wlr_output->width, wlr_output->height);
-
-    struct fbwl_output *output = calloc(1, sizeof(*output));
-    output->server = server;
-    output->wlr_output = wlr_output;
-
-    output->frame.notify = output_frame;
-    wl_signal_add(&wlr_output->events.frame, &output->frame);
-    output->request_state.notify = output_request_state;
-    wl_signal_add(&wlr_output->events.request_state, &output->request_state);
-    output->destroy.notify = output_destroy;
-    wl_signal_add(&wlr_output->events.destroy, &output->destroy);
-
-    wl_list_insert(&server->outputs, &output->link);
-
-    struct wlr_output_layout_output *layout_output =
-        wlr_output_layout_add_auto(server->output_layout, wlr_output);
-    struct wlr_box box;
-    wlr_output_layout_get_box(server->output_layout, wlr_output, &box);
-    output->usable_area = box;
-    wlr_log(WLR_INFO, "OutputLayout: name=%s x=%d y=%d w=%d h=%d",
-        wlr_output->name != NULL ? wlr_output->name : "(unnamed)",
-        box.x, box.y, box.width, box.height);
-    struct wlr_scene_output *scene_output =
-        wlr_scene_output_create(server->scene, wlr_output);
-    wlr_scene_output_layout_add_output(server->scene_layout, layout_output, scene_output);
 
     server_background_update_output(server, output);
     server_arrange_layer_surfaces_on_output(server, wlr_output);
@@ -2235,7 +2131,7 @@ static void view_get_output_usable_box(struct fbwl_view *view, struct wlr_output
         return;
     }
 
-    struct fbwl_output *out = server_find_output(server, output);
+    struct fbwl_output *out = fbwl_output_find(&server->outputs, output);
     if (out != NULL && out->usable_area.width > 0 && out->usable_area.height > 0) {
         *box = out->usable_area;
         return;
@@ -2321,7 +2217,7 @@ static bool fbwl_wm_output_usable_box(const struct fbwm_output *wm_output, struc
         return false;
     }
 
-    struct fbwl_output *out_data = server_find_output(output->server, output->wlr_output);
+    struct fbwl_output *out_data = fbwl_output_find(&output->server->outputs, output->wlr_output);
     if (out_data == NULL || out_data->usable_area.width < 1 || out_data->usable_area.height < 1) {
         return false;
     }
