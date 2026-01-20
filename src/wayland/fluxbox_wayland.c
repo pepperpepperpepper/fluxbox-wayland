@@ -91,6 +91,8 @@
 
 #include "wmcore/fbwm_core.h"
 #include "wmcore/fbwm_output.h"
+#include "wayland/fbwl_keybindings.h"
+#include "wayland/fbwl_keys_parse.h"
 #include "wayland/fbwl_util.h"
 #include "wayland/fbwl_ui_text.h"
 
@@ -100,19 +102,6 @@ struct fbwl_view;
 enum fbwl_view_type {
     FBWL_VIEW_XDG,
     FBWL_VIEW_XWAYLAND,
-};
-
-enum fbwl_keybinding_action {
-    FBWL_KEYBIND_EXIT,
-    FBWL_KEYBIND_EXEC,
-    FBWL_KEYBIND_COMMAND_DIALOG,
-    FBWL_KEYBIND_FOCUS_NEXT,
-    FBWL_KEYBIND_TOGGLE_MAXIMIZE,
-    FBWL_KEYBIND_TOGGLE_FULLSCREEN,
-    FBWL_KEYBIND_TOGGLE_MINIMIZE,
-    FBWL_KEYBIND_WORKSPACE_SWITCH,
-    FBWL_KEYBIND_SEND_TO_WORKSPACE,
-    FBWL_KEYBIND_TAKE_TO_WORKSPACE,
 };
 
 struct fbwl_keybinding {
@@ -3386,6 +3375,12 @@ static bool server_keybindings_add(struct fbwl_server *server, xkb_keysym_t sym,
     return true;
 }
 
+static bool server_keybindings_add_from_keys_file(void *userdata, xkb_keysym_t sym, uint32_t modifiers,
+        enum fbwl_keybinding_action action, int arg, const char *cmd) {
+    struct fbwl_server *server = userdata;
+    return server_keybindings_add(server, sym, modifiers, action, arg, cmd);
+}
+
 static bool server_keybindings_execute(struct fbwl_server *server, const struct fbwl_keybinding *binding) {
     if (server == NULL || binding == NULL) {
         return false;
@@ -5678,35 +5673,6 @@ static void server_menu_free(struct fbwl_server *server) {
     server->menu_file = NULL;
 }
 
-static bool parse_keys_modifier(const char *token, uint32_t *mods) {
-    if (token == NULL || mods == NULL) {
-        return false;
-    }
-
-    if (strcasecmp(token, "none") == 0) {
-        return true;
-    }
-    if (strcasecmp(token, "mod1") == 0 || strcasecmp(token, "alt") == 0) {
-        *mods |= WLR_MODIFIER_ALT;
-        return true;
-    }
-    if (strcasecmp(token, "mod4") == 0 || strcasecmp(token, "super") == 0 ||
-            strcasecmp(token, "logo") == 0 || strcasecmp(token, "win") == 0) {
-        *mods |= WLR_MODIFIER_LOGO;
-        return true;
-    }
-    if (strcasecmp(token, "control") == 0 || strcasecmp(token, "ctrl") == 0) {
-        *mods |= WLR_MODIFIER_CTRL;
-        return true;
-    }
-    if (strcasecmp(token, "shift") == 0) {
-        *mods |= WLR_MODIFIER_SHIFT;
-        return true;
-    }
-
-    return false;
-}
-
 static void server_keybindings_add_defaults(struct fbwl_server *server) {
     if (server == NULL) {
         return;
@@ -5727,199 +5693,6 @@ static void server_keybindings_add_defaults(struct fbwl_server *server) {
         server_keybindings_add(server, XKB_KEY_1 + i, WLR_MODIFIER_ALT | WLR_MODIFIER_CTRL,
             FBWL_KEYBIND_SEND_TO_WORKSPACE, i, NULL);
     }
-}
-
-static bool server_keybindings_load_keys_file(struct fbwl_server *server, const char *path) {
-    if (server == NULL || path == NULL || *path == '\0') {
-        return false;
-    }
-
-    FILE *f = fopen(path, "r");
-    if (f == NULL) {
-        wlr_log(WLR_ERROR, "Keys: failed to open %s: %s", path, strerror(errno));
-        return false;
-    }
-
-    size_t before = server->keybinding_count;
-    char *line = NULL;
-    size_t cap = 0;
-    ssize_t n = 0;
-    while ((n = getline(&line, &cap, f)) != -1) {
-        if (n <= 0) {
-            continue;
-        }
-
-        while (n > 0 && (line[n - 1] == '\n' || line[n - 1] == '\r')) {
-            line[n - 1] = '\0';
-            n--;
-        }
-
-        char *s = trim_inplace(line);
-        if (s == NULL || *s == '\0') {
-            continue;
-        }
-        if (*s == '#' || *s == '!') {
-            continue;
-        }
-
-        char *colon = strchr(s, ':');
-        if (colon == NULL) {
-            continue;
-        }
-        *colon = '\0';
-        char *lhs = trim_inplace(s);
-        char *rhs = trim_inplace(colon + 1);
-        if (lhs == NULL || rhs == NULL || *lhs == '\0' || *rhs == '\0') {
-            continue;
-        }
-
-        for (char *p = lhs; *p != '\0'; p++) {
-            if (*p == '+') {
-                *p = ' ';
-            }
-        }
-
-        uint32_t mods = 0;
-        bool ok = true;
-
-        char *save = NULL;
-        char *tok = NULL;
-        const char *tokens[32];
-        size_t ntok = 0;
-        for (tok = strtok_r(lhs, " \t", &save);
-                tok != NULL;
-                tok = strtok_r(NULL, " \t", &save)) {
-            if (ntok < (sizeof(tokens) / sizeof(tokens[0]))) {
-                tokens[ntok++] = tok;
-            } else {
-                ntok++;
-            }
-        }
-        if (ntok == 0 || ntok > (sizeof(tokens) / sizeof(tokens[0]))) {
-            continue;
-        }
-
-        for (size_t i = 0; i + 1 < ntok; i++) {
-            if (strncasecmp(tokens[i], "on", 2) == 0) {
-                continue;
-            }
-            if (strncasecmp(tokens[i], "mouse", 5) == 0 || strncasecmp(tokens[i], "button", 6) == 0) {
-                ok = false;
-                break;
-            }
-            if (!parse_keys_modifier(tokens[i], &mods)) {
-                ok = false;
-                break;
-            }
-        }
-        if (!ok) {
-            continue;
-        }
-
-        const char *key_name = tokens[ntok - 1];
-        if (key_name == NULL || *key_name == '\0') {
-            continue;
-        }
-        xkb_keysym_t sym = xkb_keysym_from_name(key_name, XKB_KEYSYM_CASE_INSENSITIVE);
-        if (sym == XKB_KEY_NoSymbol) {
-            continue;
-        }
-
-        char *cmd = rhs;
-        char *sp = cmd;
-        while (*sp != '\0' && !isspace((unsigned char)*sp)) {
-            sp++;
-        }
-        char *cmd_args = sp;
-        if (*sp != '\0') {
-            *sp = '\0';
-            cmd_args = sp + 1;
-        }
-        const char *cmd_name = cmd;
-        cmd_args = trim_inplace(cmd_args);
-
-        if (strcasecmp(cmd_name, "execcommand") == 0 || strcasecmp(cmd_name, "exec") == 0) {
-            if (cmd_args == NULL || *cmd_args == '\0') {
-                continue;
-            }
-            server_keybindings_add(server, sym, mods, FBWL_KEYBIND_EXEC, 0, cmd_args);
-            continue;
-        }
-        if (strcasecmp(cmd_name, "commanddialog") == 0 || strcasecmp(cmd_name, "rundialog") == 0) {
-            server_keybindings_add(server, sym, mods, FBWL_KEYBIND_COMMAND_DIALOG, 0, NULL);
-            continue;
-        }
-        if (strcasecmp(cmd_name, "exit") == 0) {
-            server_keybindings_add(server, sym, mods, FBWL_KEYBIND_EXIT, 0, NULL);
-            continue;
-        }
-        if (strcasecmp(cmd_name, "nextwindow") == 0) {
-            server_keybindings_add(server, sym, mods, FBWL_KEYBIND_FOCUS_NEXT, 0, NULL);
-            continue;
-        }
-        if (strcasecmp(cmd_name, "maximize") == 0) {
-            server_keybindings_add(server, sym, mods, FBWL_KEYBIND_TOGGLE_MAXIMIZE, 0, NULL);
-            continue;
-        }
-        if (strcasecmp(cmd_name, "fullscreen") == 0) {
-            server_keybindings_add(server, sym, mods, FBWL_KEYBIND_TOGGLE_FULLSCREEN, 0, NULL);
-            continue;
-        }
-        if (strcasecmp(cmd_name, "minimize") == 0 || strcasecmp(cmd_name, "iconify") == 0) {
-            server_keybindings_add(server, sym, mods, FBWL_KEYBIND_TOGGLE_MINIMIZE, 0, NULL);
-            continue;
-        }
-        if (strcasecmp(cmd_name, "workspace") == 0) {
-            if (cmd_args == NULL || *cmd_args == '\0') {
-                continue;
-            }
-            char *end = NULL;
-            long ws = strtol(cmd_args, &end, 10);
-            if (end == cmd_args) {
-                continue;
-            }
-            if (ws > 0) {
-                ws -= 1;
-            }
-            server_keybindings_add(server, sym, mods, FBWL_KEYBIND_WORKSPACE_SWITCH, (int)ws, NULL);
-            continue;
-        }
-        if (strcasecmp(cmd_name, "sendtoworkspace") == 0) {
-            if (cmd_args == NULL || *cmd_args == '\0') {
-                continue;
-            }
-            char *end = NULL;
-            long ws = strtol(cmd_args, &end, 10);
-            if (end == cmd_args) {
-                continue;
-            }
-            if (ws > 0) {
-                ws -= 1;
-            }
-            server_keybindings_add(server, sym, mods, FBWL_KEYBIND_SEND_TO_WORKSPACE, (int)ws, NULL);
-            continue;
-        }
-        if (strcasecmp(cmd_name, "taketoworkspace") == 0) {
-            if (cmd_args == NULL || *cmd_args == '\0') {
-                continue;
-            }
-            char *end = NULL;
-            long ws = strtol(cmd_args, &end, 10);
-            if (end == cmd_args) {
-                continue;
-            }
-            if (ws > 0) {
-                ws -= 1;
-            }
-            server_keybindings_add(server, sym, mods, FBWL_KEYBIND_TAKE_TO_WORKSPACE, (int)ws, NULL);
-            continue;
-        }
-    }
-
-    free(line);
-    fclose(f);
-    wlr_log(WLR_INFO, "Keys: loaded %zu bindings from %s", server->keybinding_count - before, path);
-    return true;
 }
 
 static void apps_rule_match_free(struct fbwl_apps_rule_match *match) {
@@ -10287,7 +10060,7 @@ int main(int argc, char **argv) {
     fbwm_core_set_workspace_count(&server.wm, workspaces);
     server_keybindings_add_defaults(&server);
     if (keys_file != NULL) {
-        (void)server_keybindings_load_keys_file(&server, keys_file);
+        (void)fbwl_keys_parse_file(keys_file, server_keybindings_add_from_keys_file, &server, NULL);
     }
     if (apps_file != NULL) {
         (void)server_apps_rules_load_apps_file(&server, apps_file);

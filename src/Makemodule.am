@@ -304,10 +304,13 @@ fluxbox_wayland_SOURCES = \
 	src/wmcore/fbwm_core.h \
 	src/wmcore/fbwm_output.c \
 	src/wmcore/fbwm_output.h \
+	src/wayland/fbwl_keybindings.h \
 	src/wayland/fbwl_util.c \
 	src/wayland/fbwl_util.h \
 	src/wayland/fbwl_ui_text.c \
 	src/wayland/fbwl_ui_text.h \
+	src/wayland/fbwl_keys_parse.c \
+	src/wayland/fbwl_keys_parse.h \
 	src/wayland/fluxbox_wayland.c \
 	src/wayland/protocol/xdg-shell-protocol.h
 
