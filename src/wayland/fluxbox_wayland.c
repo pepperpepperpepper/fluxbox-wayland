@@ -92,6 +92,7 @@
 #include "wmcore/fbwm_core.h"
 #include "wmcore/fbwm_output.h"
 #include "wayland/fbwl_apps_rules.h"
+#include "wayland/fbwl_ipc.h"
 #include "wayland/fbwl_keybindings.h"
 #include "wayland/fbwl_keys_parse.h"
 #include "wayland/fbwl_menu.h"
@@ -396,14 +397,6 @@ struct fbwl_input_method {
     struct wl_listener destroy;
 };
 
-struct fbwl_ipc_client {
-    struct fbwl_server *server;
-    int fd;
-    struct wl_event_source *source;
-    size_t len;
-    char buf[1024];
-};
-
 #ifdef HAVE_SYSTEMD
 struct fbwl_sni_watcher;
 
@@ -593,9 +586,7 @@ struct fbwl_server {
     bool session_lock_sent_locked;
     size_t session_lock_expected_surfaces;
 
-    int ipc_listen_fd;
-    struct wl_event_source *ipc_listen_source;
-    char *ipc_socket_path;
+    struct fbwl_ipc ipc;
 
 #ifdef HAVE_SYSTEMD
     struct fbwl_sni_watcher sni;
@@ -6459,53 +6450,6 @@ static void server_new_layer_surface(struct wl_listener *listener, void *data) {
     server_arrange_layer_surfaces_on_output(server, layer_surface->output);
 }
 
-static void ipc_sanitize_component(const char *in, char *out, size_t out_size) {
-    if (out_size == 0) {
-        return;
-    }
-
-    size_t j = 0;
-    for (size_t i = 0; in != NULL && in[i] != '\0' && j + 1 < out_size; i++) {
-        const unsigned char c = (unsigned char)in[i];
-        if (isalnum(c) || c == '-' || c == '_' || c == '.') {
-            out[j++] = (char)c;
-        } else {
-            out[j++] = '_';
-        }
-    }
-    out[j] = '\0';
-
-    if (j == 0) {
-        out[0] = 'x';
-        out[1] = '\0';
-    }
-}
-
-static char *ipc_default_socket_path(const char *wayland_socket_name) {
-    const char *runtime_dir = getenv("XDG_RUNTIME_DIR");
-    if (runtime_dir == NULL || *runtime_dir == '\0') {
-        runtime_dir = "/tmp";
-    }
-
-    const char *sock = wayland_socket_name;
-    if (sock == NULL || *sock == '\0') {
-        sock = getenv("WAYLAND_DISPLAY");
-    }
-    if (sock == NULL || *sock == '\0') {
-        sock = "wayland-0";
-    }
-
-    char sanitized[64];
-    ipc_sanitize_component(sock, sanitized, sizeof(sanitized));
-
-    char path[256];
-    int n = snprintf(path, sizeof(path), "%s/fluxbox-wayland-ipc-%s.sock", runtime_dir, sanitized);
-    if (n < 0 || (size_t)n >= sizeof(path)) {
-        return NULL;
-    }
-    return strdup(path);
-}
-
 static char *ipc_trim_inplace(char *s) {
     while (s != NULL && *s != '\0' && isspace((unsigned char)*s)) {
         s++;
@@ -6523,54 +6467,15 @@ static char *ipc_trim_inplace(char *s) {
     return s;
 }
 
-static bool ipc_write_all(int fd, const void *buf, size_t len) {
-    const uint8_t *p = buf;
-    while (len > 0) {
-        ssize_t n = write(fd, p, len);
-        if (n < 0) {
-            if (errno == EINTR) {
-                continue;
-            }
-            return false;
-        }
-        p += (size_t)n;
-        len -= (size_t)n;
-    }
-    return true;
-}
-
-static void ipc_send_line(int fd, const char *line) {
-    if (line == NULL) {
+static void server_ipc_command(void *userdata, int client_fd, char *line) {
+    struct fbwl_server *server = userdata;
+    if (server == NULL || line == NULL) {
         return;
     }
-
-    ipc_write_all(fd, line, strlen(line));
-    ipc_write_all(fd, "\n", 1);
-}
-
-static void ipc_client_destroy(struct fbwl_ipc_client *client) {
-    if (client == NULL) {
-        return;
-    }
-
-    if (client->source != NULL) {
-        wl_event_source_remove(client->source);
-        client->source = NULL;
-    }
-    fbwl_cleanup_fd(&client->fd);
-    free(client);
-}
-
-static void ipc_process_command(struct fbwl_ipc_client *client, char *line) {
-    if (client == NULL || client->server == NULL || line == NULL) {
-        return;
-    }
-
-    struct fbwl_server *server = client->server;
 
     line = ipc_trim_inplace(line);
     if (line == NULL || *line == '\0') {
-        ipc_send_line(client->fd, "err empty_command");
+        fbwl_ipc_send_line(client_fd, "err empty_command");
         return;
     }
 
@@ -6579,17 +6484,17 @@ static void ipc_process_command(struct fbwl_ipc_client *client, char *line) {
     char *saveptr = NULL;
     char *cmd = strtok_r(line, " \t", &saveptr);
     if (cmd == NULL) {
-        ipc_send_line(client->fd, "err empty_command");
+        fbwl_ipc_send_line(client_fd, "err empty_command");
         return;
     }
 
     if (strcasecmp(cmd, "ping") == 0) {
-        ipc_send_line(client->fd, "ok pong");
+        fbwl_ipc_send_line(client_fd, "ok pong");
         return;
     }
 
     if (strcasecmp(cmd, "quit") == 0 || strcasecmp(cmd, "exit") == 0) {
-        ipc_send_line(client->fd, "ok quitting");
+        fbwl_ipc_send_line(client_fd, "ok quitting");
         wl_display_terminate(server->wl_display);
         return;
     }
@@ -6597,27 +6502,27 @@ static void ipc_process_command(struct fbwl_ipc_client *client, char *line) {
     if (strcasecmp(cmd, "get-workspace") == 0 || strcasecmp(cmd, "getworkspace") == 0) {
         char resp[64];
         snprintf(resp, sizeof(resp), "ok workspace=%d", fbwm_core_workspace_current(&server->wm) + 1);
-        ipc_send_line(client->fd, resp);
+        fbwl_ipc_send_line(client_fd, resp);
         return;
     }
 
     if (strcasecmp(cmd, "workspace") == 0) {
         char *arg = strtok_r(NULL, " \t", &saveptr);
         if (arg == NULL) {
-            ipc_send_line(client->fd, "err workspace_requires_number");
+            fbwl_ipc_send_line(client_fd, "err workspace_requires_number");
             return;
         }
 
         char *end = NULL;
         long requested = strtol(arg, &end, 10);
         if (end == arg || (end != NULL && *end != '\0') || requested < 1) {
-            ipc_send_line(client->fd, "err invalid_workspace_number");
+            fbwl_ipc_send_line(client_fd, "err invalid_workspace_number");
             return;
         }
 
         int ws = (int)requested - 1;
         if (ws >= fbwm_core_workspace_count(&server->wm)) {
-            ipc_send_line(client->fd, "err workspace_out_of_range");
+            fbwl_ipc_send_line(client_fd, "err workspace_out_of_range");
             return;
         }
 
@@ -6626,7 +6531,7 @@ static void ipc_process_command(struct fbwl_ipc_client *client, char *line) {
 
         char resp[64];
         snprintf(resp, sizeof(resp), "ok workspace=%d", ws + 1);
-        ipc_send_line(client->fd, resp);
+        fbwl_ipc_send_line(client_fd, resp);
         return;
     }
 
@@ -6637,7 +6542,7 @@ static void ipc_process_command(struct fbwl_ipc_client *client, char *line) {
             fbwm_core_workspace_switch(&server->wm, (cur + 1) % count);
             apply_workspace_visibility(server, "ipc");
         }
-        ipc_send_line(client->fd, "ok");
+        fbwl_ipc_send_line(client_fd, "ok");
         return;
     }
 
@@ -6648,209 +6553,18 @@ static void ipc_process_command(struct fbwl_ipc_client *client, char *line) {
             fbwm_core_workspace_switch(&server->wm, (cur + count - 1) % count);
             apply_workspace_visibility(server, "ipc");
         }
-        ipc_send_line(client->fd, "ok");
+        fbwl_ipc_send_line(client_fd, "ok");
         return;
     }
 
     if (strcasecmp(cmd, "nextwindow") == 0 ||
             strcasecmp(cmd, "focus-next") == 0 || strcasecmp(cmd, "focusnext") == 0) {
         fbwm_core_focus_next(&server->wm);
-        ipc_send_line(client->fd, "ok");
+        fbwl_ipc_send_line(client_fd, "ok");
         return;
     }
 
-    ipc_send_line(client->fd, "err unknown_command");
-}
-
-static int ipc_handle_client_fd(int fd, uint32_t mask, void *data) {
-    (void)fd;
-    struct fbwl_ipc_client *client = data;
-    if (client == NULL) {
-        return 0;
-    }
-
-    if ((mask & (WL_EVENT_ERROR | WL_EVENT_HANGUP)) != 0) {
-        ipc_client_destroy(client);
-        return 0;
-    }
-
-    if ((mask & WL_EVENT_READABLE) == 0) {
-        return 0;
-    }
-
-    const size_t avail = sizeof(client->buf) - 1 - client->len;
-    if (avail == 0) {
-        ipc_send_line(client->fd, "err line_too_long");
-        ipc_client_destroy(client);
-        return 0;
-    }
-
-    ssize_t n = read(client->fd, client->buf + client->len, avail);
-    if (n <= 0) {
-        ipc_client_destroy(client);
-        return 0;
-    }
-
-    client->len += (size_t)n;
-    client->buf[client->len] = '\0';
-
-    char *nl = strchr(client->buf, '\n');
-    if (nl != NULL) {
-        *nl = '\0';
-        ipc_process_command(client, client->buf);
-        ipc_client_destroy(client);
-        return 0;
-    }
-
-    return 0;
-}
-
-static int ipc_handle_listen_fd(int fd, uint32_t mask, void *data) {
-    (void)fd;
-    struct fbwl_server *server = data;
-    if (server == NULL) {
-        return 0;
-    }
-
-    if ((mask & WL_EVENT_READABLE) == 0) {
-        return 0;
-    }
-
-    struct wl_event_loop *loop = wl_display_get_event_loop(server->wl_display);
-    for (;;) {
-        int client_fd = accept(server->ipc_listen_fd, NULL, NULL);
-        if (client_fd < 0) {
-            if (errno == EINTR) {
-                continue;
-            }
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                break;
-            }
-            wlr_log(WLR_ERROR, "IPC: accept failed: %s", strerror(errno));
-            break;
-        }
-
-        int clo = fcntl(client_fd, F_GETFD);
-        if (clo >= 0) {
-            (void)fcntl(client_fd, F_SETFD, clo | FD_CLOEXEC);
-        }
-
-        struct fbwl_ipc_client *client = calloc(1, sizeof(*client));
-        if (client == NULL) {
-            close(client_fd);
-            continue;
-        }
-
-        client->server = server;
-        client->fd = client_fd;
-        client->source = wl_event_loop_add_fd(loop, client_fd, WL_EVENT_READABLE,
-            ipc_handle_client_fd, client);
-        if (client->source == NULL) {
-            ipc_client_destroy(client);
-            continue;
-        }
-    }
-
-    return 0;
-}
-
-static bool server_ipc_start(struct fbwl_server *server, struct wl_event_loop *loop,
-        const char *wayland_socket_name, const char *ipc_socket_path_opt) {
-    if (server == NULL || loop == NULL) {
-        return false;
-    }
-
-    if (server->ipc_listen_fd >= 0) {
-        return true;
-    }
-
-    char *path = NULL;
-    if (ipc_socket_path_opt != NULL && *ipc_socket_path_opt != '\0') {
-        path = strdup(ipc_socket_path_opt);
-    } else {
-        path = ipc_default_socket_path(wayland_socket_name);
-    }
-
-    if (path == NULL || *path == '\0') {
-        wlr_log(WLR_ERROR, "IPC: failed to choose socket path");
-        free(path);
-        return false;
-    }
-
-    if (strlen(path) >= sizeof(((struct sockaddr_un){0}).sun_path)) {
-        wlr_log(WLR_ERROR, "IPC: socket path too long: %s", path);
-        free(path);
-        return false;
-    }
-
-    int fd = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
-    if (fd < 0) {
-        wlr_log(WLR_ERROR, "IPC: socket() failed: %s", strerror(errno));
-        free(path);
-        return false;
-    }
-
-    int flags = fcntl(fd, F_GETFL, 0);
-    if (flags >= 0) {
-        (void)fcntl(fd, F_SETFL, flags | O_NONBLOCK);
-    }
-
-    struct sockaddr_un addr = {0};
-    addr.sun_family = AF_UNIX;
-    snprintf(addr.sun_path, sizeof(addr.sun_path), "%s", path);
-
-    unlink(path);
-    if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        wlr_log(WLR_ERROR, "IPC: bind(%s) failed: %s", path, strerror(errno));
-        close(fd);
-        free(path);
-        return false;
-    }
-
-    if (listen(fd, 16) < 0) {
-        wlr_log(WLR_ERROR, "IPC: listen() failed: %s", strerror(errno));
-        unlink(path);
-        close(fd);
-        free(path);
-        return false;
-    }
-
-    (void)chmod(path, 0600);
-
-    server->ipc_socket_path = path;
-    server->ipc_listen_fd = fd;
-    server->ipc_listen_source = wl_event_loop_add_fd(loop, fd, WL_EVENT_READABLE,
-        ipc_handle_listen_fd, server);
-    if (server->ipc_listen_source == NULL) {
-        wlr_log(WLR_ERROR, "IPC: failed to add fd to wl_event_loop");
-        unlink(path);
-        fbwl_cleanup_fd(&server->ipc_listen_fd);
-        free(server->ipc_socket_path);
-        server->ipc_socket_path = NULL;
-        return false;
-    }
-
-    wlr_log(WLR_INFO, "IPC: listening on %s", server->ipc_socket_path);
-    return true;
-}
-
-static void server_ipc_finish(struct fbwl_server *server) {
-    if (server == NULL) {
-        return;
-    }
-
-    if (server->ipc_listen_source != NULL) {
-        wl_event_source_remove(server->ipc_listen_source);
-        server->ipc_listen_source = NULL;
-    }
-
-    fbwl_cleanup_fd(&server->ipc_listen_fd);
-
-    if (server->ipc_socket_path != NULL) {
-        unlink(server->ipc_socket_path);
-        free(server->ipc_socket_path);
-        server->ipc_socket_path = NULL;
-    }
+    fbwl_ipc_send_line(client_fd, "err unknown_command");
 }
 
 #ifdef HAVE_SYSTEMD
@@ -8866,7 +8580,7 @@ int main(int argc, char **argv) {
     server.startup_cmd = startup_cmd;
     server.terminal_cmd = terminal_cmd;
     server.has_pointer = false;
-    server.ipc_listen_fd = -1;
+    fbwl_ipc_init(&server.ipc);
     wl_list_init(&server.shortcuts_inhibitors);
 #ifdef HAVE_SYSTEMD
     wl_list_init(&server.sni.items);
@@ -9316,8 +9030,8 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    if (server_ipc_start(&server, loop, socket, ipc_socket_path)) {
-        setenv("FBWL_IPC_SOCKET", server.ipc_socket_path, true);
+    if (fbwl_ipc_start(&server.ipc, loop, socket, ipc_socket_path, server_ipc_command, &server)) {
+        setenv("FBWL_IPC_SOCKET", fbwl_ipc_socket_path(&server.ipc), true);
     }
 
 #ifdef HAVE_SYSTEMD
@@ -9333,7 +9047,7 @@ int main(int argc, char **argv) {
     wl_display_run(server.wl_display);
 
     wl_display_destroy_clients(server.wl_display);
-    server_ipc_finish(&server);
+    fbwl_ipc_finish(&server.ipc);
 #ifdef HAVE_SYSTEMD
     server_sni_finish(&server);
 #endif

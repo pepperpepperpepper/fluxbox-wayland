@@ -306,6 +306,8 @@ fluxbox_wayland_SOURCES = \
 	src/wmcore/fbwm_output.h \
 	src/wayland/fbwl_apps_rules.c \
 	src/wayland/fbwl_apps_rules.h \
+	src/wayland/fbwl_ipc.c \
+	src/wayland/fbwl_ipc.h \
 	src/wayland/fbwl_keybindings.h \
 	src/wayland/fbwl_util.c \
 	src/wayland/fbwl_util.h \
