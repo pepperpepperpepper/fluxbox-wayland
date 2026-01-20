@@ -88,6 +88,7 @@
 #include "wmcore/fbwm_core.h"
 #include "wmcore/fbwm_output.h"
 #include "wayland/fbwl_apps_rules.h"
+#include "wayland/fbwl_cursor.h"
 #include "wayland/fbwl_ipc.h"
 #include "wayland/fbwl_keybindings.h"
 #include "wayland/fbwl_keys_parse.h"
@@ -217,12 +218,6 @@ struct fbwl_init_settings {
     char *menu_file;
 };
 
-enum fbwl_cursor_mode {
-    FBWL_CURSOR_PASSTHROUGH,
-    FBWL_CURSOR_MOVE,
-    FBWL_CURSOR_RESIZE,
-};
-
 struct fbwl_grab {
     enum fbwl_cursor_mode mode;
     struct fbwl_view *view;
@@ -232,13 +227,6 @@ struct fbwl_grab {
     int view_x, view_y;
     int view_w, view_h;
     int last_w, last_h;
-};
-
-struct fbwl_pointer_constraint {
-    struct fbwl_server *server;
-    struct wlr_pointer_constraint_v1 *constraint;
-    struct wl_listener set_region;
-    struct wl_listener destroy;
 };
 
 struct fbwl_session_lock_surface {
@@ -1391,34 +1379,6 @@ static void view_set_minimized(struct fbwl_view *view, bool minimized, const cha
     }
 }
 
-static void server_update_pointer_constraint(struct fbwl_server *server) {
-    if (server == NULL || server->pointer_constraints == NULL || server->seat == NULL) {
-        return;
-    }
-
-    struct wlr_surface *focused_surface = server->seat->pointer_state.focused_surface;
-    struct wlr_pointer_constraint_v1 *constraint = NULL;
-    if (focused_surface != NULL) {
-        constraint = wlr_pointer_constraints_v1_constraint_for_surface(
-            server->pointer_constraints, focused_surface, server->seat);
-    }
-
-    if (constraint == server->active_pointer_constraint) {
-        return;
-    }
-
-    if (server->active_pointer_constraint != NULL) {
-        struct wlr_pointer_constraint_v1 *old = server->active_pointer_constraint;
-        server->active_pointer_constraint = NULL;
-        wlr_pointer_constraint_v1_send_deactivated(old);
-    }
-
-    if (constraint != NULL) {
-        server->active_pointer_constraint = constraint;
-        wlr_pointer_constraint_v1_send_activated(constraint);
-    }
-}
-
 static void server_set_idle_inhibited(struct fbwl_server *server, bool inhibited, const char *why) {
     if (server == NULL) {
         return;
@@ -1438,45 +1398,6 @@ static void server_notify_activity(struct fbwl_server *server) {
         return;
     }
     wlr_idle_notifier_v1_notify_activity(server->idle_notifier, server->seat);
-}
-
-static void process_cursor_motion(struct fbwl_server *server, uint32_t time_msec) {
-    if (server != NULL && server->menu_ui.open) {
-        const ssize_t idx =
-            server_menu_ui_index_at(&server->menu_ui, (int)server->cursor->x, (int)server->cursor->y);
-        if (idx >= 0) {
-            server_menu_ui_set_selected(server, (size_t)idx);
-        }
-
-        wlr_cursor_set_xcursor(server->cursor, server->cursor_mgr, "default");
-        struct wlr_surface *prev_surface = server->seat->pointer_state.focused_surface;
-        wlr_seat_pointer_clear_focus(server->seat);
-        if (prev_surface != server->seat->pointer_state.focused_surface) {
-            server_update_pointer_constraint(server);
-        }
-        return;
-    }
-
-    double sx = 0, sy = 0;
-    struct wlr_surface *surface = NULL;
-    (void)fbwl_view_at(server->scene, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
-
-    if (surface != NULL) {
-        struct wlr_surface *prev_surface = server->seat->pointer_state.focused_surface;
-        wlr_seat_pointer_notify_enter(server->seat, surface, sx, sy);
-        wlr_seat_pointer_notify_motion(server->seat, time_msec, sx, sy);
-        if (prev_surface != server->seat->pointer_state.focused_surface) {
-            server_update_pointer_constraint(server);
-        }
-        return;
-    }
-
-    wlr_cursor_set_xcursor(server->cursor, server->cursor_mgr, "default");
-    struct wlr_surface *prev_surface = server->seat->pointer_state.focused_surface;
-    wlr_seat_pointer_clear_focus(server->seat);
-    if (prev_surface != server->seat->pointer_state.focused_surface) {
-        server_update_pointer_constraint(server);
-    }
 }
 
 static uint32_t server_keyboard_modifiers(struct fbwl_server *server) {
@@ -1562,191 +1483,63 @@ static void grab_update(struct fbwl_server *server) {
     }
 }
 
-static void clamp_to_box(double *x, double *y, const struct wlr_box *box) {
-    if (x == NULL || y == NULL || box == NULL) {
-        return;
-    }
-
-    double min_x = box->x;
-    double min_y = box->y;
-    double max_x = box->x;
-    double max_y = box->y;
-    if (box->width > 0) {
-        max_x = box->x + box->width - 1;
-    }
-    if (box->height > 0) {
-        max_y = box->y + box->height - 1;
-    }
-
-    if (*x < min_x) {
-        *x = min_x;
-    }
-    if (*x > max_x) {
-        *x = max_x;
-    }
-    if (*y < min_y) {
-        *y = min_y;
-    }
-    if (*y > max_y) {
-        *y = max_y;
-    }
+static void cursor_grab_update(void *userdata) {
+    struct fbwl_server *server = userdata;
+    grab_update(server);
 }
 
-static bool server_get_confine_box(struct fbwl_server *server,
-        struct wlr_pointer_constraint_v1 *constraint,
-        struct wlr_box *box) {
-    if (server == NULL || constraint == NULL || box == NULL) {
-        return false;
-    }
-    if (constraint->type != WLR_POINTER_CONSTRAINT_V1_CONFINED || constraint->surface == NULL) {
-        return false;
-    }
+static bool cursor_menu_is_open(void *userdata) {
+    const struct fbwl_server *server = userdata;
+    return server != NULL && server->menu_ui.open;
+}
 
-    struct wlr_surface *surface = NULL;
-    double sx = 0, sy = 0;
-    (void)fbwl_view_at(server->scene, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
-    if (surface != constraint->surface) {
-        return false;
+static ssize_t cursor_menu_index_at(void *userdata, int lx, int ly) {
+    const struct fbwl_server *server = userdata;
+    if (server == NULL) {
+        return -1;
     }
+    return server_menu_ui_index_at(&server->menu_ui, lx, ly);
+}
 
-    const double origin_x = server->cursor->x - sx;
-    const double origin_y = server->cursor->y - sy;
-
-    int32_t x1 = 0;
-    int32_t y1 = 0;
-    int32_t x2 = constraint->surface->current.width;
-    int32_t y2 = constraint->surface->current.height;
-
-    if (pixman_region32_not_empty(&constraint->region)) {
-        const pixman_box32_t *ext = pixman_region32_extents(&constraint->region);
-        if (ext != NULL) {
-            x1 = ext->x1;
-            y1 = ext->y1;
-            x2 = ext->x2;
-            y2 = ext->y2;
-        }
+static void cursor_menu_set_selected(void *userdata, size_t idx) {
+    struct fbwl_server *server = userdata;
+    if (server == NULL) {
+        return;
     }
+    server_menu_ui_set_selected(server, idx);
+}
 
-    if (x2 <= x1) {
-        x2 = x1 + 1;
-    }
-    if (y2 <= y1) {
-        y2 = y1 + 1;
-    }
-
-    box->x = (int)(origin_x + x1);
-    box->y = (int)(origin_y + y1);
-    box->width = x2 - x1;
-    box->height = y2 - y1;
-    return true;
+static struct fbwl_cursor_menu_hooks cursor_menu_hooks(struct fbwl_server *server) {
+    return (struct fbwl_cursor_menu_hooks){
+        .userdata = server,
+        .is_open = cursor_menu_is_open,
+        .index_at = cursor_menu_index_at,
+        .set_selected = cursor_menu_set_selected,
+    };
 }
 
 static void server_cursor_motion(struct wl_listener *listener, void *data) {
     struct fbwl_server *server = wl_container_of(listener, server, cursor_motion);
     struct wlr_pointer_motion_event *event = data;
     server_notify_activity(server);
-
-    const double dx = event->delta_x;
-    const double dy = event->delta_y;
-    const double unaccel_dx = event->unaccel_dx;
-    const double unaccel_dy = event->unaccel_dy;
-
-    if (!server->pointer_phys_valid) {
-        server->pointer_phys_x = server->cursor->x;
-        server->pointer_phys_y = server->cursor->y;
-        server->pointer_phys_valid = true;
-    }
-    server->pointer_phys_x += dx;
-    server->pointer_phys_y += dy;
-
-    if (server->relative_pointer_mgr != NULL) {
-        wlr_relative_pointer_manager_v1_send_relative_motion(server->relative_pointer_mgr,
-            server->seat, (uint64_t)event->time_msec * 1000, dx, dy, unaccel_dx, unaccel_dy);
-    }
-
-    if (server->grab.mode != FBWL_CURSOR_PASSTHROUGH) {
-        wlr_cursor_move(server->cursor, &event->pointer->base, dx, dy);
-        grab_update(server);
-        return;
-    }
-
-    if (server->active_pointer_constraint != NULL &&
-            server->active_pointer_constraint->type == WLR_POINTER_CONSTRAINT_V1_LOCKED) {
-        process_cursor_motion(server, event->time_msec);
-        return;
-    }
-
-    if (server->active_pointer_constraint != NULL &&
-            server->active_pointer_constraint->type == WLR_POINTER_CONSTRAINT_V1_CONFINED) {
-        double x = server->cursor->x + dx;
-        double y = server->cursor->y + dy;
-        struct wlr_box box = {0};
-        if (server_get_confine_box(server, server->active_pointer_constraint, &box)) {
-            clamp_to_box(&x, &y, &box);
-            if (!wlr_cursor_warp(server->cursor, &event->pointer->base, x, y)) {
-                wlr_cursor_move(server->cursor, &event->pointer->base, dx, dy);
-            }
-        } else {
-            wlr_cursor_move(server->cursor, &event->pointer->base, dx, dy);
-        }
-    } else {
-        wlr_cursor_move(server->cursor, &event->pointer->base, dx, dy);
-    }
-
-    process_cursor_motion(server, event->time_msec);
+    const struct fbwl_cursor_menu_hooks hooks = cursor_menu_hooks(server);
+    fbwl_cursor_handle_motion(server->cursor, server->cursor_mgr, server->scene, server->seat,
+        server->relative_pointer_mgr, server->pointer_constraints, &server->active_pointer_constraint,
+        &server->pointer_phys_valid, &server->pointer_phys_x, &server->pointer_phys_y,
+        server->grab.mode, cursor_grab_update, server,
+        &hooks, event);
 }
 
 static void server_cursor_motion_absolute(struct wl_listener *listener, void *data) {
     struct fbwl_server *server = wl_container_of(listener, server, cursor_motion_absolute);
     struct wlr_pointer_motion_absolute_event *event = data;
     server_notify_activity(server);
-
-    double lx = 0, ly = 0;
-    wlr_cursor_absolute_to_layout_coords(server->cursor, &event->pointer->base,
-        event->x, event->y, &lx, &ly);
-
-    double dx = 0, dy = 0;
-    if (server->pointer_phys_valid) {
-        dx = lx - server->pointer_phys_x;
-        dy = ly - server->pointer_phys_y;
-    }
-    server->pointer_phys_x = lx;
-    server->pointer_phys_y = ly;
-    server->pointer_phys_valid = true;
-
-    if (server->relative_pointer_mgr != NULL) {
-        wlr_relative_pointer_manager_v1_send_relative_motion(server->relative_pointer_mgr,
-            server->seat, (uint64_t)event->time_msec * 1000, dx, dy, dx, dy);
-    }
-
-    if (server->grab.mode != FBWL_CURSOR_PASSTHROUGH) {
-        wlr_cursor_warp_absolute(server->cursor, &event->pointer->base, event->x, event->y);
-        grab_update(server);
-        return;
-    }
-
-    if (server->active_pointer_constraint != NULL &&
-            server->active_pointer_constraint->type == WLR_POINTER_CONSTRAINT_V1_LOCKED) {
-        process_cursor_motion(server, event->time_msec);
-        return;
-    }
-
-    if (server->active_pointer_constraint != NULL &&
-            server->active_pointer_constraint->type == WLR_POINTER_CONSTRAINT_V1_CONFINED) {
-        struct wlr_box box = {0};
-        if (server_get_confine_box(server, server->active_pointer_constraint, &box)) {
-            double x = lx;
-            double y = ly;
-            clamp_to_box(&x, &y, &box);
-            wlr_cursor_warp_closest(server->cursor, &event->pointer->base, x, y);
-        } else {
-            wlr_cursor_warp_absolute(server->cursor, &event->pointer->base, event->x, event->y);
-        }
-    } else {
-        wlr_cursor_warp_absolute(server->cursor, &event->pointer->base, event->x, event->y);
-    }
-
-    process_cursor_motion(server, event->time_msec);
+    const struct fbwl_cursor_menu_hooks hooks = cursor_menu_hooks(server);
+    fbwl_cursor_handle_motion_absolute(server->cursor, server->cursor_mgr, server->scene, server->seat,
+        server->relative_pointer_mgr, server->pointer_constraints, &server->active_pointer_constraint,
+        &server->pointer_phys_valid, &server->pointer_phys_x, &server->pointer_phys_y,
+        server->grab.mode, cursor_grab_update, server,
+        &hooks, event);
 }
 
 static void server_cursor_button(struct wl_listener *listener, void *data) {
@@ -3897,28 +3690,10 @@ static void seat_request_cursor(struct wl_listener *listener, void *data) {
 
 static void cursor_shape_request_set_shape(struct wl_listener *listener, void *data) {
     struct fbwl_server *server = wl_container_of(listener, server, cursor_shape_request_set_shape);
-    struct wlr_cursor_shape_manager_v1_request_set_shape_event *event = data;
-
-    if (server == NULL || server->seat == NULL || server->cursor == NULL || server->cursor_mgr == NULL) {
-        return;
-    }
-
-    struct wlr_seat_client *focused_client =
-        server->seat->pointer_state.focused_client;
-    if (focused_client != event->seat_client) {
-        return;
-    }
-    if (event->device_type != WLR_CURSOR_SHAPE_MANAGER_V1_DEVICE_TYPE_POINTER) {
-        return;
-    }
-
-    const char *name = wlr_cursor_shape_v1_name(event->shape);
-    if (name == NULL) {
-        name = "default";
-    }
-
-    wlr_log(WLR_INFO, "CursorShape: name=%s", name);
-    wlr_cursor_set_xcursor(server->cursor, server->cursor_mgr, name);
+    fbwl_cursor_handle_shape_request(server != NULL ? server->seat : NULL,
+        server != NULL ? server->cursor : NULL,
+        server != NULL ? server->cursor_mgr : NULL,
+        data);
 }
 
 static void seat_request_set_selection(struct wl_listener *listener, void *data) {
@@ -3936,56 +3711,12 @@ static void seat_request_start_drag(struct wl_listener *listener, void *data) {
     fbwl_seat_handle_request_start_drag(server->seat, data);
 }
 
-static void pointer_constraint_set_region(struct wl_listener *listener, void *data) {
-    (void)data;
-    struct fbwl_pointer_constraint *pc = wl_container_of(listener, pc, set_region);
-    struct fbwl_server *server = pc->server;
-    if (server == NULL || pc->constraint == NULL) {
-        return;
-    }
-    if (pc->constraint != server->active_pointer_constraint) {
-        return;
-    }
-    if (pc->constraint->type != WLR_POINTER_CONSTRAINT_V1_CONFINED) {
-        return;
-    }
-
-    struct wlr_box box = {0};
-    if (!server_get_confine_box(server, pc->constraint, &box)) {
-        return;
-    }
-    double x = server->cursor->x;
-    double y = server->cursor->y;
-    clamp_to_box(&x, &y, &box);
-    (void)wlr_cursor_warp(server->cursor, NULL, x, y);
-    process_cursor_motion(server, 0);
-}
-
-static void pointer_constraint_destroy(struct wl_listener *listener, void *data) {
-    (void)data;
-    struct fbwl_pointer_constraint *pc = wl_container_of(listener, pc, destroy);
-    struct fbwl_server *server = pc->server;
-    if (server != NULL && server->active_pointer_constraint == pc->constraint) {
-        server->active_pointer_constraint = NULL;
-    }
-    fbwl_cleanup_listener(&pc->set_region);
-    fbwl_cleanup_listener(&pc->destroy);
-    free(pc);
-}
-
 static void server_new_pointer_constraint(struct wl_listener *listener, void *data) {
     struct fbwl_server *server = wl_container_of(listener, server, new_pointer_constraint);
     struct wlr_pointer_constraint_v1 *constraint = data;
-
-    struct fbwl_pointer_constraint *pc = calloc(1, sizeof(*pc));
-    pc->server = server;
-    pc->constraint = constraint;
-    pc->set_region.notify = pointer_constraint_set_region;
-    wl_signal_add(&constraint->events.set_region, &pc->set_region);
-    pc->destroy.notify = pointer_constraint_destroy;
-    wl_signal_add(&constraint->events.destroy, &pc->destroy);
-
-    server_update_pointer_constraint(server);
+    const struct fbwl_cursor_menu_hooks hooks = cursor_menu_hooks(server);
+    fbwl_cursor_handle_new_pointer_constraint(server->cursor, server->cursor_mgr, server->scene, server->seat,
+        server->pointer_constraints, &server->active_pointer_constraint, &hooks, constraint);
 }
 
 static void xdg_decoration_apply(struct fbwl_xdg_decoration *xd) {
