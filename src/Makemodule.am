@@ -311,6 +311,10 @@ fluxbox_wayland_SOURCES = \
 	src/wayland/fbwl_ui_text.h \
 	src/wayland/fbwl_keys_parse.c \
 	src/wayland/fbwl_keys_parse.h \
+	src/wayland/fbwl_menu.c \
+	src/wayland/fbwl_menu.h \
+	src/wayland/fbwl_menu_parse.c \
+	src/wayland/fbwl_menu_parse.h \
 	src/wayland/fbwl_style_parse.c \
 	src/wayland/fbwl_style_parse.h \
 	src/wayland/fbwl_ui_decor_theme.h \
