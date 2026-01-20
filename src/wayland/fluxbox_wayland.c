@@ -105,6 +105,7 @@
 #include "wayland/fbwl_view.h"
 #include "wayland/fbwl_view_foreign_toplevel.h"
 #include "wayland/fbwl_xdg_shell.h"
+#include "wayland/fbwl_xwayland.h"
 
 struct fbwl_server;
 
@@ -4405,6 +4406,19 @@ static struct fbwl_xdg_shell_hooks xdg_shell_hooks(struct fbwl_server *server) {
     };
 }
 
+static struct fbwl_xwayland_hooks xwayland_hooks(struct fbwl_server *server) {
+    return (struct fbwl_xwayland_hooks){
+        .userdata = server,
+        .apply_workspace_visibility = xdg_shell_apply_workspace_visibility,
+        .toolbar_rebuild = xdg_shell_toolbar_rebuild,
+        .clear_keyboard_focus = xdg_shell_clear_keyboard_focus,
+        .clear_focused_view_if_matches = xdg_shell_clear_focused_view_if_matches,
+        .apps_rules_apply_pre_map = server_apps_rules_apply_pre_map,
+        .apps_rules_apply_post_map = server_apps_rules_apply_post_map,
+        .view_set_minimized = view_set_minimized,
+    };
+}
+
 static void xdg_toplevel_map(struct wl_listener *listener, void *data) {
     (void)data;
     struct fbwl_view *view = wl_container_of(listener, view, map);
@@ -4522,183 +4536,56 @@ static void foreign_toplevel_request_close(struct wl_listener *listener, void *d
 static void xwayland_surface_map(struct wl_listener *listener, void *data) {
     (void)data;
     struct fbwl_view *view = wl_container_of(listener, view, map);
-    if (view->xwayland_surface == NULL) {
-        return;
-    }
-
-    if (!view->placed) {
-        fbwl_view_place_initial(view, &view->server->wm, view->server->output_layout, &view->server->outputs,
-            view->server->cursor->x, view->server->cursor->y);
-        view->placed = true;
-    }
-
-    const int w = fbwl_view_current_width(view);
-    const int h = fbwl_view_current_height(view);
-    if (w > 0 && h > 0) {
-        wlr_xwayland_surface_configure(view->xwayland_surface, view->x, view->y,
-            (uint16_t)w, (uint16_t)h);
-    }
-
-    view->mapped = true;
-    view->minimized = false;
-    if (view->foreign_toplevel != NULL) {
-        wlr_foreign_toplevel_handle_v1_set_minimized(view->foreign_toplevel, false);
-    }
-    view->wm_view.workspace = fbwm_core_workspace_current(&view->server->wm);
-
-    const struct fbwl_apps_rule *apps_rule = NULL;
-    size_t apps_rule_idx = 0;
-    if (!view->apps_rules_applied) {
-        const char *app_id = fbwl_view_app_id(view);
-        const char *instance = NULL;
-        if (view->type == FBWL_VIEW_XWAYLAND && view->xwayland_surface != NULL) {
-            instance = view->xwayland_surface->instance;
-        } else {
-            instance = app_id;
-        }
-        const char *title = fbwl_view_title(view);
-        apps_rule = fbwl_apps_rules_match(view->server->apps_rules, view->server->apps_rule_count,
-            app_id, instance, title, &apps_rule_idx);
-        if (apps_rule != NULL) {
-            wlr_log(WLR_INFO, "Apps: match rule=%zu title=%s app_id=%s",
-                apps_rule_idx,
-                fbwl_view_title(view) != NULL ? fbwl_view_title(view) : "(no-title)",
-                fbwl_view_app_id(view) != NULL ? fbwl_view_app_id(view) : "(no-app-id)");
-
-            server_apps_rules_apply_pre_map(view, apps_rule);
-            view->apps_rules_applied = true;
-
-            wlr_log(WLR_INFO,
-                "Apps: applied title=%s app_id=%s workspace_id=%d sticky=%d jump=%d minimized=%d maximized=%d fullscreen=%d",
-                fbwl_view_display_title(view),
-                fbwl_view_app_id(view) != NULL ? fbwl_view_app_id(view) : "(no-app-id)",
-                apps_rule->set_workspace ? apps_rule->workspace : -1,
-                apps_rule->set_sticky ? (apps_rule->sticky ? 1 : 0) : -1,
-                apps_rule->set_jump ? (apps_rule->jump ? 1 : 0) : -1,
-                apps_rule->set_minimized ? (apps_rule->minimized ? 1 : 0) : -1,
-                apps_rule->set_maximized ? (apps_rule->maximized ? 1 : 0) : -1,
-                apps_rule->set_fullscreen ? (apps_rule->fullscreen ? 1 : 0) : -1);
-        }
-    }
-
-    fbwm_core_view_map(&view->server->wm, &view->wm_view);
-    apply_workspace_visibility(view->server, "xwayland-map");
-    if (apps_rule != NULL) {
-        server_apps_rules_apply_post_map(view, apps_rule);
-    }
-    fbwm_core_focus_view(&view->server->wm, &view->wm_view);
-    wlr_log(WLR_INFO, "XWayland: map title=%s class=%s",
-        fbwl_view_title(view) != NULL ? fbwl_view_title(view) : "(no-title)",
-        fbwl_view_app_id(view) != NULL ? fbwl_view_app_id(view) : "(no-class)");
+    struct fbwl_server *server = view->server;
+    struct fbwl_xwayland_hooks hooks = xwayland_hooks(server);
+    fbwl_xwayland_handle_surface_map(view, &server->wm, server->output_layout, &server->outputs,
+        server->cursor->x, server->cursor->y, server->apps_rules, server->apps_rule_count, &hooks);
 }
 
 static void xwayland_surface_unmap(struct wl_listener *listener, void *data) {
     (void)data;
     struct fbwl_view *view = wl_container_of(listener, view, unmap);
-    view->mapped = false;
-    view->minimized = false;
-    if (view->foreign_toplevel != NULL) {
-        wlr_foreign_toplevel_handle_v1_set_minimized(view->foreign_toplevel, false);
-    }
-    fbwm_core_view_unmap(&view->server->wm, &view->wm_view);
-    apply_workspace_visibility(view->server, "xwayland-unmap");
-    wlr_log(WLR_INFO, "XWayland: unmap title=%s", fbwl_view_display_title(view));
+    struct fbwl_server *server = view->server;
+    struct fbwl_xwayland_hooks hooks = xwayland_hooks(server);
+    fbwl_xwayland_handle_surface_unmap(view, &server->wm, &hooks);
 }
 
 static void xwayland_surface_commit(struct wl_listener *listener, void *data) {
     (void)data;
     struct fbwl_view *view = wl_container_of(listener, view, commit);
-    struct wlr_surface *surface = fbwl_view_wlr_surface(view);
-    if (surface == NULL) {
-        return;
-    }
-
-    const int w = surface->current.width;
-    const int h = surface->current.height;
-    if (w > 0 && h > 0 && (w != view->width || h != view->height)) {
-        view->width = w;
-        view->height = h;
-        wlr_log(WLR_INFO, "Surface size: %s %dx%d", fbwl_view_display_title(view), w, h);
-    }
-    fbwl_view_decor_update(view, view->server != NULL ? &view->server->decor_theme : NULL);
+    struct fbwl_server *server = view->server;
+    fbwl_xwayland_handle_surface_commit(view, server != NULL ? &server->decor_theme : NULL);
 }
 
 static void xwayland_surface_associate(struct wl_listener *listener, void *data) {
     (void)data;
     struct fbwl_view *view = wl_container_of(listener, view, xwayland_associate);
-    struct wlr_xwayland_surface *xsurface = view->xwayland_surface;
-    if (view->server == NULL || xsurface == NULL || xsurface->surface == NULL) {
+    struct fbwl_server *server = view->server;
+    if (server == NULL) {
         return;
     }
 
     struct wlr_scene_tree *parent =
-        view->server->layer_normal != NULL ? view->server->layer_normal : &view->server->scene->tree;
-    view->scene_tree = wlr_scene_tree_create(parent);
-    if (view->scene_tree == NULL) {
-        return;
-    }
-    (void)wlr_scene_surface_create(view->scene_tree, xsurface->surface);
-    view->scene_tree->node.data = view;
-    fbwl_view_decor_create(view, view->server != NULL ? &view->server->decor_theme : NULL);
-    fbwl_view_decor_set_enabled(view, true);
-
-    view->x = xsurface->x;
-    view->y = xsurface->y;
-    wlr_scene_node_set_position(&view->scene_tree->node, view->x, view->y);
-    fbwl_view_foreign_update_output_from_position(view, view->server->output_layout);
-
-    view->map.notify = xwayland_surface_map;
-    wl_signal_add(&xsurface->surface->events.map, &view->map);
-    view->unmap.notify = xwayland_surface_unmap;
-    wl_signal_add(&xsurface->surface->events.unmap, &view->unmap);
-    view->commit.notify = xwayland_surface_commit;
-    wl_signal_add(&xsurface->surface->events.commit, &view->commit);
-
-    wlr_log(WLR_INFO, "XWayland: associate title=%s class=%s",
-        fbwl_view_title(view) != NULL ? fbwl_view_title(view) : "(no-title)",
-        fbwl_view_app_id(view) != NULL ? fbwl_view_app_id(view) : "(no-class)");
+        server->layer_normal != NULL ? server->layer_normal : &server->scene->tree;
+    fbwl_xwayland_handle_surface_associate(view, parent, &server->decor_theme, server->output_layout,
+        xwayland_surface_map, xwayland_surface_unmap, xwayland_surface_commit);
 }
 
 static void xwayland_surface_dissociate(struct wl_listener *listener, void *data) {
     (void)data;
     struct fbwl_view *view = wl_container_of(listener, view, xwayland_dissociate);
-    if (view->mapped) {
-        view->mapped = false;
-        fbwm_core_view_unmap(&view->server->wm, &view->wm_view);
-        apply_workspace_visibility(view->server, "xwayland-dissociate");
-    }
-
-    fbwl_cleanup_listener(&view->map);
-    fbwl_cleanup_listener(&view->unmap);
-    fbwl_cleanup_listener(&view->commit);
-
-    if (view->scene_tree != NULL) {
-        wlr_scene_node_destroy(&view->scene_tree->node);
-        view->scene_tree = NULL;
-    }
+    struct fbwl_server *server = view->server;
+    struct fbwl_xwayland_hooks hooks = xwayland_hooks(server);
+    fbwl_xwayland_handle_surface_dissociate(view, &server->wm, &hooks);
 }
 
 static void xwayland_surface_request_configure(struct wl_listener *listener, void *data) {
     struct fbwl_view *view = wl_container_of(listener, view, xwayland_request_configure);
     struct wlr_xwayland_surface_configure_event *event = data;
-    if (view->xwayland_surface == NULL || event == NULL) {
-        return;
-    }
-
-    view->x = event->x;
-    view->y = event->y;
-    view->width = event->width;
-    view->height = event->height;
-    if (view->scene_tree != NULL) {
-        wlr_scene_node_set_position(&view->scene_tree->node, view->x, view->y);
-    }
-    fbwl_view_decor_update(view, view->server != NULL ? &view->server->decor_theme : NULL);
-
-    wlr_xwayland_surface_configure(view->xwayland_surface, event->x, event->y,
-        event->width, event->height);
-    fbwl_view_foreign_update_output_from_position(view, view->server->output_layout);
-    wlr_log(WLR_INFO, "XWayland: request_configure title=%s x=%d y=%d w=%u h=%u mask=0x%x",
-        fbwl_view_display_title(view), event->x, event->y, event->width, event->height, event->mask);
+    struct fbwl_server *server = view->server;
+    fbwl_xwayland_handle_surface_request_configure(view, event,
+        server != NULL ? &server->decor_theme : NULL,
+        server != NULL ? server->output_layout : NULL);
 }
 
 static void xwayland_surface_request_activate(struct wl_listener *listener, void *data) {
@@ -4708,144 +4595,52 @@ static void xwayland_surface_request_activate(struct wl_listener *listener, void
     if (server == NULL) {
         return;
     }
-
-    if (view->minimized) {
-        view_set_minimized(view, false, "xwayland-request-activate");
-    }
-    if (!view->wm_view.sticky &&
-            view->wm_view.workspace != fbwm_core_workspace_current(&server->wm)) {
-        fbwm_core_workspace_switch(&server->wm, view->wm_view.workspace);
-        apply_workspace_visibility(server, "xwayland-request-activate-switch");
-    }
-    fbwm_core_focus_view(&server->wm, &view->wm_view);
+    struct fbwl_xwayland_hooks hooks = xwayland_hooks(server);
+    fbwl_xwayland_handle_surface_request_activate(view, &server->wm, &hooks);
 }
 
 static void xwayland_surface_request_close(struct wl_listener *listener, void *data) {
     (void)data;
     struct fbwl_view *view = wl_container_of(listener, view, xwayland_request_close);
-    if (view->xwayland_surface != NULL) {
-        wlr_xwayland_surface_close(view->xwayland_surface);
-    }
+    fbwl_xwayland_handle_surface_request_close(view);
 }
 
 static void xwayland_surface_set_title(struct wl_listener *listener, void *data) {
     (void)data;
     struct fbwl_view *view = wl_container_of(listener, view, xwayland_set_title);
-    fbwl_view_foreign_toplevel_set_title(view, fbwl_view_title(view));
-    fbwl_view_decor_update_title_text(view, view->server != NULL ? &view->server->decor_theme : NULL);
-    if (view->server != NULL) {
-        server_toolbar_ui_rebuild(view->server);
-    }
+    struct fbwl_server *server = view->server;
+    struct fbwl_xwayland_hooks hooks = xwayland_hooks(server);
+    fbwl_xwayland_handle_surface_set_title(view, server != NULL ? &server->decor_theme : NULL, &hooks);
 }
 
 static void xwayland_surface_set_class(struct wl_listener *listener, void *data) {
     (void)data;
     struct fbwl_view *view = wl_container_of(listener, view, xwayland_set_class);
-    fbwl_view_foreign_toplevel_set_app_id(view, fbwl_view_app_id(view));
-    if (view->server != NULL) {
-        server_toolbar_ui_rebuild(view->server);
-    }
+    struct fbwl_server *server = view->server;
+    struct fbwl_xwayland_hooks hooks = xwayland_hooks(server);
+    fbwl_xwayland_handle_surface_set_class(view, &hooks);
 }
 
 static void xwayland_surface_destroy(struct wl_listener *listener, void *data) {
     (void)data;
     struct fbwl_view *view = wl_container_of(listener, view, destroy);
-
-    fbwl_cleanup_listener(&view->map);
-    fbwl_cleanup_listener(&view->unmap);
-    fbwl_cleanup_listener(&view->commit);
-    fbwl_cleanup_listener(&view->destroy);
-    fbwl_cleanup_listener(&view->xwayland_associate);
-    fbwl_cleanup_listener(&view->xwayland_dissociate);
-    fbwl_cleanup_listener(&view->xwayland_request_configure);
-    fbwl_cleanup_listener(&view->xwayland_request_activate);
-    fbwl_cleanup_listener(&view->xwayland_request_close);
-    fbwl_cleanup_listener(&view->xwayland_set_title);
-    fbwl_cleanup_listener(&view->xwayland_set_class);
-
-    fbwl_cleanup_listener(&view->foreign_request_maximize);
-    fbwl_cleanup_listener(&view->foreign_request_minimize);
-    fbwl_cleanup_listener(&view->foreign_request_activate);
-    fbwl_cleanup_listener(&view->foreign_request_fullscreen);
-    fbwl_cleanup_listener(&view->foreign_request_close);
-
-    if (view->server != NULL && view->server->focused_view == view) {
-        view->server->focused_view = NULL;
-    }
-
-    free(view->decor_title_text_cache);
-    view->decor_title_text_cache = NULL;
-
-    if (view->scene_tree != NULL) {
-        wlr_scene_node_destroy(&view->scene_tree->node);
-        view->scene_tree = NULL;
-    }
-
-    fbwl_view_foreign_toplevel_destroy(view);
-
-    free(view->decor_title_text_cache);
-    view->decor_title_text_cache = NULL;
-
-    fbwm_core_view_destroy(&view->server->wm, &view->wm_view);
-    if (view->server->wm.focused == NULL) {
-        clear_keyboard_focus(view->server);
-    }
-    free(view);
+    struct fbwl_server *server = view->server;
+    struct fbwl_xwayland_hooks hooks = xwayland_hooks(server);
+    fbwl_xwayland_handle_surface_destroy(view, &server->wm, &hooks);
 }
 
 static void server_xwayland_ready(struct wl_listener *listener, void *data) {
     (void)data;
     struct fbwl_server *server = wl_container_of(listener, server, xwayland_ready);
     const char *display_name = server->xwayland != NULL ? server->xwayland->display_name : NULL;
-    if (display_name != NULL) {
-        setenv("DISPLAY", display_name, true);
-    }
-    wlr_log(WLR_INFO, "XWayland: ready DISPLAY=%s", display_name != NULL ? display_name : "(null)");
+    fbwl_xwayland_handle_ready(display_name);
 }
 
 static void server_xwayland_new_surface(struct wl_listener *listener, void *data) {
     struct fbwl_server *server = wl_container_of(listener, server, xwayland_new_surface);
     struct wlr_xwayland_surface *xsurface = data;
-    if (server == NULL || xsurface == NULL) {
-        return;
-    }
-
-    wlr_log(WLR_INFO, "XWayland: new_surface id=0x%x override_redirect=%d title=%s class=%s",
-        (unsigned)xsurface->window_id,
-        xsurface->override_redirect ? 1 : 0,
-        xsurface->title != NULL ? xsurface->title : "(no-title)",
-        xsurface->class != NULL ? xsurface->class : "(no-class)");
-
-    if (xsurface->override_redirect) {
-        return;
-    }
-
-    struct fbwl_view *view = calloc(1, sizeof(*view));
-    view->server = server;
-    view->type = FBWL_VIEW_XWAYLAND;
-    view->xwayland_surface = xsurface;
-    xsurface->data = view;
-
-    fbwm_view_init(&view->wm_view, &fbwl_wm_view_ops, view);
-
-    view->destroy.notify = xwayland_surface_destroy;
-    wl_signal_add(&xsurface->events.destroy, &view->destroy);
-    view->xwayland_associate.notify = xwayland_surface_associate;
-    wl_signal_add(&xsurface->events.associate, &view->xwayland_associate);
-    view->xwayland_dissociate.notify = xwayland_surface_dissociate;
-    wl_signal_add(&xsurface->events.dissociate, &view->xwayland_dissociate);
-    view->xwayland_request_configure.notify = xwayland_surface_request_configure;
-    wl_signal_add(&xsurface->events.request_configure, &view->xwayland_request_configure);
-    view->xwayland_request_activate.notify = xwayland_surface_request_activate;
-    wl_signal_add(&xsurface->events.request_activate, &view->xwayland_request_activate);
-    view->xwayland_request_close.notify = xwayland_surface_request_close;
-    wl_signal_add(&xsurface->events.request_close, &view->xwayland_request_close);
-    view->xwayland_set_title.notify = xwayland_surface_set_title;
-    wl_signal_add(&xsurface->events.set_title, &view->xwayland_set_title);
-    view->xwayland_set_class.notify = xwayland_surface_set_class;
-    wl_signal_add(&xsurface->events.set_class, &view->xwayland_set_class);
-
-    if (server->foreign_toplevel_mgr != NULL) {
+    const struct fbwl_view_foreign_toplevel_handlers *foreign_handlers = NULL;
+    if (server != NULL && server->foreign_toplevel_mgr != NULL) {
         static const struct fbwl_view_foreign_toplevel_handlers handlers = {
             .request_maximize = foreign_toplevel_request_maximize,
             .request_minimize = foreign_toplevel_request_minimize,
@@ -4853,8 +4648,20 @@ static void server_xwayland_new_surface(struct wl_listener *listener, void *data
             .request_fullscreen = foreign_toplevel_request_fullscreen,
             .request_close = foreign_toplevel_request_close,
         };
-        fbwl_view_foreign_toplevel_create(view, server->foreign_toplevel_mgr, xsurface->title, xsurface->class, &handlers);
+        foreign_handlers = &handlers;
     }
+
+    fbwl_xwayland_handle_new_surface(server, xsurface, &fbwl_wm_view_ops,
+        xwayland_surface_destroy,
+        xwayland_surface_associate,
+        xwayland_surface_dissociate,
+        xwayland_surface_request_configure,
+        xwayland_surface_request_activate,
+        xwayland_surface_request_close,
+        xwayland_surface_set_title,
+        xwayland_surface_set_class,
+        server != NULL ? server->foreign_toplevel_mgr : NULL,
+        foreign_handlers);
 }
 
 static void xdg_toplevel_destroy(struct wl_listener *listener, void *data) {
