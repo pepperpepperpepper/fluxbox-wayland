@@ -52,6 +52,7 @@ Makefile.in
 /util/startfluxbox
 /version.h
 /plan.md
+/refactor_plan.md
 
 # build artifacts from wlroots/Wayland smoke utilities
 /fbwl-*

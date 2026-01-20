@@ -91,6 +91,7 @@
 
 #include "wmcore/fbwm_core.h"
 #include "wmcore/fbwm_output.h"
+#include "wayland/fbwl_util.h"
 
 struct fbwl_server;
 struct fbwl_view;
@@ -696,21 +697,6 @@ struct fbwl_server {
 
     struct fbwl_grab grab;
 };
-
-static void cleanup_listener(struct wl_listener *listener) {
-    if (listener->link.prev != NULL && listener->link.next != NULL) {
-        wl_list_remove(&listener->link);
-        listener->link.prev = NULL;
-        listener->link.next = NULL;
-    }
-}
-
-static void cleanup_fd(int *fd) {
-    if (fd != NULL && *fd >= 0) {
-        close(*fd);
-        *fd = -1;
-    }
-}
 
 static struct wlr_surface *view_wlr_surface(const struct fbwl_view *view) {
     if (view == NULL) {
@@ -1402,8 +1388,8 @@ static void session_lock_surface_commit(struct wl_listener *listener, void *data
 static void session_lock_surface_destroy(struct wl_listener *listener, void *data) {
     (void)data;
     struct fbwl_session_lock_surface *ls = wl_container_of(listener, ls, destroy);
-    cleanup_listener(&ls->surface_commit);
-    cleanup_listener(&ls->destroy);
+    fbwl_cleanup_listener(&ls->surface_commit);
+    fbwl_cleanup_listener(&ls->destroy);
     if (ls->scene_tree != NULL) {
         wlr_scene_node_destroy(&ls->scene_tree->node);
         ls->scene_tree = NULL;
@@ -1499,14 +1485,14 @@ static void server_session_lock_destroy(struct wl_listener *listener, void *data
     server->session_lock_sent_locked = false;
     server->session_lock_expected_surfaces = 0;
 
-    cleanup_listener(&server->session_lock_new_surface);
-    cleanup_listener(&server->session_lock_unlock);
-    cleanup_listener(&server->session_lock_destroy);
+    fbwl_cleanup_listener(&server->session_lock_new_surface);
+    fbwl_cleanup_listener(&server->session_lock_unlock);
+    fbwl_cleanup_listener(&server->session_lock_destroy);
 
     struct fbwl_session_lock_surface *ls, *tmp;
     wl_list_for_each_safe(ls, tmp, &server->session_lock_surfaces, link) {
-        cleanup_listener(&ls->surface_commit);
-        cleanup_listener(&ls->destroy);
+        fbwl_cleanup_listener(&ls->surface_commit);
+        fbwl_cleanup_listener(&ls->destroy);
         if (ls->scene_tree != NULL) {
             wlr_scene_node_destroy(&ls->scene_tree->node);
             ls->scene_tree = NULL;
@@ -1769,9 +1755,9 @@ static void output_destroy(struct wl_listener *listener, void *data) {
         }
     }
 
-    cleanup_listener(&output->frame);
-    cleanup_listener(&output->request_state);
-    cleanup_listener(&output->destroy);
+    fbwl_cleanup_listener(&output->frame);
+    fbwl_cleanup_listener(&output->request_state);
+    fbwl_cleanup_listener(&output->destroy);
     if (output->background_rect != NULL) {
         wlr_scene_node_destroy(&output->background_rect->node);
         output->background_rect = NULL;
@@ -1965,10 +1951,10 @@ static void text_input_destroy(struct wl_listener *listener, void *data) {
         server_update_input_method(server);
     }
 
-    cleanup_listener(&ti->enable);
-    cleanup_listener(&ti->commit);
-    cleanup_listener(&ti->disable);
-    cleanup_listener(&ti->destroy);
+    fbwl_cleanup_listener(&ti->enable);
+    fbwl_cleanup_listener(&ti->commit);
+    fbwl_cleanup_listener(&ti->disable);
+    fbwl_cleanup_listener(&ti->destroy);
     free(ti);
 }
 
@@ -2060,8 +2046,8 @@ static void input_method_destroy(struct wl_listener *listener, void *data) {
         server_update_input_method(server);
     }
 
-    cleanup_listener(&fim->commit);
-    cleanup_listener(&fim->destroy);
+    fbwl_cleanup_listener(&fim->commit);
+    fbwl_cleanup_listener(&fim->destroy);
     free(fim);
 }
 
@@ -2165,7 +2151,7 @@ static void shortcuts_inhibitor_destroy(struct wl_listener *listener, void *data
         server->active_shortcuts_inhibitor = NULL;
     }
 
-    cleanup_listener(&si->destroy);
+    fbwl_cleanup_listener(&si->destroy);
     wl_list_remove(&si->link);
     free(si);
 }
@@ -6631,9 +6617,9 @@ static void keyboard_handle_destroy(struct wl_listener *listener, void *data) {
     (void)data;
     struct fbwl_keyboard *keyboard = wl_container_of(listener, keyboard, destroy);
 
-    cleanup_listener(&keyboard->modifiers);
-    cleanup_listener(&keyboard->key);
-    cleanup_listener(&keyboard->destroy);
+    fbwl_cleanup_listener(&keyboard->modifiers);
+    fbwl_cleanup_listener(&keyboard->key);
+    fbwl_cleanup_listener(&keyboard->destroy);
     wl_list_remove(&keyboard->link);
     free(keyboard);
 }
@@ -6765,8 +6751,8 @@ static void pointer_constraint_destroy(struct wl_listener *listener, void *data)
     if (server != NULL && server->active_pointer_constraint == pc->constraint) {
         server->active_pointer_constraint = NULL;
     }
-    cleanup_listener(&pc->set_region);
-    cleanup_listener(&pc->destroy);
+    fbwl_cleanup_listener(&pc->set_region);
+    fbwl_cleanup_listener(&pc->destroy);
     free(pc);
 }
 
@@ -6812,15 +6798,15 @@ static void xdg_decoration_surface_map(struct wl_listener *listener, void *data)
     (void)data;
     struct fbwl_xdg_decoration *xd = wl_container_of(listener, xd, surface_map);
     xdg_decoration_apply(xd);
-    cleanup_listener(&xd->surface_map);
+    fbwl_cleanup_listener(&xd->surface_map);
 }
 
 static void xdg_decoration_destroy(struct wl_listener *listener, void *data) {
     (void)data;
     struct fbwl_xdg_decoration *xd = wl_container_of(listener, xd, destroy);
-    cleanup_listener(&xd->surface_map);
-    cleanup_listener(&xd->request_mode);
-    cleanup_listener(&xd->destroy);
+    fbwl_cleanup_listener(&xd->surface_map);
+    fbwl_cleanup_listener(&xd->request_mode);
+    fbwl_cleanup_listener(&xd->destroy);
     free(xd);
 }
 
@@ -6878,7 +6864,7 @@ static void idle_inhibitor_destroy(struct wl_listener *listener, void *data) {
     (void)data;
     struct fbwl_idle_inhibitor *ii = wl_container_of(listener, ii, destroy);
     struct fbwl_server *server = ii->server;
-    cleanup_listener(&ii->destroy);
+    fbwl_cleanup_listener(&ii->destroy);
     if (server != NULL && server->idle_inhibitor_count > 0) {
         server->idle_inhibitor_count--;
         server_set_idle_inhibited(server, server->idle_inhibitor_count > 0, "destroy-inhibitor");
@@ -7287,9 +7273,9 @@ static void xwayland_surface_dissociate(struct wl_listener *listener, void *data
         apply_workspace_visibility(view->server, "xwayland-dissociate");
     }
 
-    cleanup_listener(&view->map);
-    cleanup_listener(&view->unmap);
-    cleanup_listener(&view->commit);
+    fbwl_cleanup_listener(&view->map);
+    fbwl_cleanup_listener(&view->unmap);
+    fbwl_cleanup_listener(&view->commit);
 
     if (view->scene_tree != NULL) {
         wlr_scene_node_destroy(&view->scene_tree->node);
@@ -7376,23 +7362,23 @@ static void xwayland_surface_destroy(struct wl_listener *listener, void *data) {
     (void)data;
     struct fbwl_view *view = wl_container_of(listener, view, destroy);
 
-    cleanup_listener(&view->map);
-    cleanup_listener(&view->unmap);
-    cleanup_listener(&view->commit);
-    cleanup_listener(&view->destroy);
-    cleanup_listener(&view->xwayland_associate);
-    cleanup_listener(&view->xwayland_dissociate);
-    cleanup_listener(&view->xwayland_request_configure);
-    cleanup_listener(&view->xwayland_request_activate);
-    cleanup_listener(&view->xwayland_request_close);
-    cleanup_listener(&view->xwayland_set_title);
-    cleanup_listener(&view->xwayland_set_class);
+    fbwl_cleanup_listener(&view->map);
+    fbwl_cleanup_listener(&view->unmap);
+    fbwl_cleanup_listener(&view->commit);
+    fbwl_cleanup_listener(&view->destroy);
+    fbwl_cleanup_listener(&view->xwayland_associate);
+    fbwl_cleanup_listener(&view->xwayland_dissociate);
+    fbwl_cleanup_listener(&view->xwayland_request_configure);
+    fbwl_cleanup_listener(&view->xwayland_request_activate);
+    fbwl_cleanup_listener(&view->xwayland_request_close);
+    fbwl_cleanup_listener(&view->xwayland_set_title);
+    fbwl_cleanup_listener(&view->xwayland_set_class);
 
-    cleanup_listener(&view->foreign_request_maximize);
-    cleanup_listener(&view->foreign_request_minimize);
-    cleanup_listener(&view->foreign_request_activate);
-    cleanup_listener(&view->foreign_request_fullscreen);
-    cleanup_listener(&view->foreign_request_close);
+    fbwl_cleanup_listener(&view->foreign_request_maximize);
+    fbwl_cleanup_listener(&view->foreign_request_minimize);
+    fbwl_cleanup_listener(&view->foreign_request_activate);
+    fbwl_cleanup_listener(&view->foreign_request_fullscreen);
+    fbwl_cleanup_listener(&view->foreign_request_close);
 
     if (view->server != NULL && view->server->focused_view == view) {
         view->server->focused_view = NULL;
@@ -7504,20 +7490,20 @@ static void xdg_toplevel_destroy(struct wl_listener *listener, void *data) {
     (void)data;
     struct fbwl_view *view = wl_container_of(listener, view, destroy);
 
-    cleanup_listener(&view->map);
-    cleanup_listener(&view->unmap);
-    cleanup_listener(&view->commit);
-    cleanup_listener(&view->destroy);
-    cleanup_listener(&view->request_maximize);
-    cleanup_listener(&view->request_fullscreen);
-    cleanup_listener(&view->request_minimize);
-    cleanup_listener(&view->set_title);
-    cleanup_listener(&view->set_app_id);
-    cleanup_listener(&view->foreign_request_maximize);
-    cleanup_listener(&view->foreign_request_minimize);
-    cleanup_listener(&view->foreign_request_activate);
-    cleanup_listener(&view->foreign_request_fullscreen);
-    cleanup_listener(&view->foreign_request_close);
+    fbwl_cleanup_listener(&view->map);
+    fbwl_cleanup_listener(&view->unmap);
+    fbwl_cleanup_listener(&view->commit);
+    fbwl_cleanup_listener(&view->destroy);
+    fbwl_cleanup_listener(&view->request_maximize);
+    fbwl_cleanup_listener(&view->request_fullscreen);
+    fbwl_cleanup_listener(&view->request_minimize);
+    fbwl_cleanup_listener(&view->set_title);
+    fbwl_cleanup_listener(&view->set_app_id);
+    fbwl_cleanup_listener(&view->foreign_request_maximize);
+    fbwl_cleanup_listener(&view->foreign_request_minimize);
+    fbwl_cleanup_listener(&view->foreign_request_activate);
+    fbwl_cleanup_listener(&view->foreign_request_fullscreen);
+    fbwl_cleanup_listener(&view->foreign_request_close);
 
     if (view->server != NULL && view->server->focused_view == view) {
         view->server->focused_view = NULL;
@@ -7613,8 +7599,8 @@ static void xdg_popup_commit(struct wl_listener *listener, void *data) {
 static void xdg_popup_destroy(struct wl_listener *listener, void *data) {
     (void)data;
     struct fbwl_popup *popup = wl_container_of(listener, popup, destroy);
-    cleanup_listener(&popup->commit);
-    cleanup_listener(&popup->destroy);
+    fbwl_cleanup_listener(&popup->commit);
+    fbwl_cleanup_listener(&popup->destroy);
     free(popup);
 }
 
@@ -7678,10 +7664,10 @@ static void layer_surface_destroy(struct wl_listener *listener, void *data) {
     const char *ns = ls->layer_surface->namespace != NULL ? ls->layer_surface->namespace : "(no-namespace)";
     wlr_log(WLR_INFO, "LayerShell: destroy ns=%s layer=%d", ns, (int)ls->layer);
 
-    cleanup_listener(&ls->map);
-    cleanup_listener(&ls->unmap);
-    cleanup_listener(&ls->commit);
-    cleanup_listener(&ls->destroy);
+    fbwl_cleanup_listener(&ls->map);
+    fbwl_cleanup_listener(&ls->unmap);
+    fbwl_cleanup_listener(&ls->commit);
+    fbwl_cleanup_listener(&ls->destroy);
     wl_list_remove(&ls->link);
     free(ls);
 
@@ -7836,7 +7822,7 @@ static void ipc_client_destroy(struct fbwl_ipc_client *client) {
         wl_event_source_remove(client->source);
         client->source = NULL;
     }
-    cleanup_fd(&client->fd);
+    fbwl_cleanup_fd(&client->fd);
     free(client);
 }
 
@@ -8103,7 +8089,7 @@ static bool server_ipc_start(struct fbwl_server *server, struct wl_event_loop *l
     if (server->ipc_listen_source == NULL) {
         wlr_log(WLR_ERROR, "IPC: failed to add fd to wl_event_loop");
         unlink(path);
-        cleanup_fd(&server->ipc_listen_fd);
+        fbwl_cleanup_fd(&server->ipc_listen_fd);
         free(server->ipc_socket_path);
         server->ipc_socket_path = NULL;
         return false;
@@ -8123,7 +8109,7 @@ static void server_ipc_finish(struct fbwl_server *server) {
         server->ipc_listen_source = NULL;
     }
 
-    cleanup_fd(&server->ipc_listen_fd);
+    fbwl_cleanup_fd(&server->ipc_listen_fd);
 
     if (server->ipc_socket_path != NULL) {
         unlink(server->ipc_socket_path);
@@ -10617,42 +10603,42 @@ int main(int argc, char **argv) {
     server_sni_finish(&server);
 #endif
 
-    cleanup_listener(&server.new_xdg_toplevel);
-    cleanup_listener(&server.new_xdg_popup);
-    cleanup_listener(&server.xdg_activation_request_activate);
-    cleanup_listener(&server.new_xdg_decoration);
-    cleanup_listener(&server.xwayland_ready);
-    cleanup_listener(&server.xwayland_new_surface);
-    cleanup_listener(&server.new_layer_surface);
+    fbwl_cleanup_listener(&server.new_xdg_toplevel);
+    fbwl_cleanup_listener(&server.new_xdg_popup);
+    fbwl_cleanup_listener(&server.xdg_activation_request_activate);
+    fbwl_cleanup_listener(&server.new_xdg_decoration);
+    fbwl_cleanup_listener(&server.xwayland_ready);
+    fbwl_cleanup_listener(&server.xwayland_new_surface);
+    fbwl_cleanup_listener(&server.new_layer_surface);
 
-    cleanup_listener(&server.cursor_motion);
-    cleanup_listener(&server.cursor_motion_absolute);
-    cleanup_listener(&server.cursor_button);
-    cleanup_listener(&server.cursor_axis);
-    cleanup_listener(&server.cursor_frame);
-    cleanup_listener(&server.cursor_shape_request_set_shape);
+    fbwl_cleanup_listener(&server.cursor_motion);
+    fbwl_cleanup_listener(&server.cursor_motion_absolute);
+    fbwl_cleanup_listener(&server.cursor_button);
+    fbwl_cleanup_listener(&server.cursor_axis);
+    fbwl_cleanup_listener(&server.cursor_frame);
+    fbwl_cleanup_listener(&server.cursor_shape_request_set_shape);
 
-    cleanup_listener(&server.new_input);
-    cleanup_listener(&server.request_cursor);
-    cleanup_listener(&server.request_set_selection);
-    cleanup_listener(&server.request_set_primary_selection);
-    cleanup_listener(&server.request_start_drag);
-    cleanup_listener(&server.new_shortcuts_inhibitor);
-    cleanup_listener(&server.new_virtual_keyboard);
-    cleanup_listener(&server.new_virtual_pointer);
-    cleanup_listener(&server.new_pointer_constraint);
-    cleanup_listener(&server.new_idle_inhibitor);
-    cleanup_listener(&server.new_session_lock);
-    cleanup_listener(&server.session_lock_new_surface);
-    cleanup_listener(&server.session_lock_unlock);
-    cleanup_listener(&server.session_lock_destroy);
-    cleanup_listener(&server.output_manager_apply);
-    cleanup_listener(&server.output_manager_test);
-    cleanup_listener(&server.output_power_set_mode);
-    cleanup_listener(&server.new_text_input);
-    cleanup_listener(&server.new_input_method);
+    fbwl_cleanup_listener(&server.new_input);
+    fbwl_cleanup_listener(&server.request_cursor);
+    fbwl_cleanup_listener(&server.request_set_selection);
+    fbwl_cleanup_listener(&server.request_set_primary_selection);
+    fbwl_cleanup_listener(&server.request_start_drag);
+    fbwl_cleanup_listener(&server.new_shortcuts_inhibitor);
+    fbwl_cleanup_listener(&server.new_virtual_keyboard);
+    fbwl_cleanup_listener(&server.new_virtual_pointer);
+    fbwl_cleanup_listener(&server.new_pointer_constraint);
+    fbwl_cleanup_listener(&server.new_idle_inhibitor);
+    fbwl_cleanup_listener(&server.new_session_lock);
+    fbwl_cleanup_listener(&server.session_lock_new_surface);
+    fbwl_cleanup_listener(&server.session_lock_unlock);
+    fbwl_cleanup_listener(&server.session_lock_destroy);
+    fbwl_cleanup_listener(&server.output_manager_apply);
+    fbwl_cleanup_listener(&server.output_manager_test);
+    fbwl_cleanup_listener(&server.output_power_set_mode);
+    fbwl_cleanup_listener(&server.new_text_input);
+    fbwl_cleanup_listener(&server.new_input_method);
 
-    cleanup_listener(&server.new_output);
+    fbwl_cleanup_listener(&server.new_output);
 
     if (server.xwayland != NULL) {
         wlr_xwayland_destroy(server.xwayland);
