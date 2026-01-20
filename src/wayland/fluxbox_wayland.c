@@ -96,6 +96,7 @@
 #include "wayland/fbwl_output.h"
 #include "wayland/fbwl_output_management.h"
 #include "wayland/fbwl_output_power.h"
+#include "wayland/fbwl_scene_layers.h"
 #include "wayland/fbwl_sni_tray.h"
 #include "wayland/fbwl_style_parse.h"
 #include "wayland/fbwl_ui_decor_theme.h"
@@ -316,19 +317,6 @@ struct fbwl_grab {
     int view_x, view_y;
     int view_w, view_h;
     int last_w, last_h;
-};
-
-struct fbwl_layer_surface {
-    struct wl_list link;
-    struct fbwl_server *server;
-    struct wlr_layer_surface_v1 *layer_surface;
-    struct wlr_scene_layer_surface_v1 *scene_layer_surface;
-    enum zwlr_layer_shell_v1_layer layer;
-
-    struct wl_listener map;
-    struct wl_listener unmap;
-    struct wl_listener commit;
-    struct wl_listener destroy;
 };
 
 struct fbwl_pointer_constraint {
@@ -1004,85 +992,13 @@ static struct fbwl_decor_hit view_decor_hit_test(const struct fbwl_view *view, d
     return hit;
 }
 
-static struct wlr_scene_tree *server_layer_tree_for_layer(struct fbwl_server *server,
-        enum zwlr_layer_shell_v1_layer layer) {
-    if (server == NULL) {
-        return NULL;
-    }
-
-    switch (layer) {
-    case ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND:
-        return server->layer_background;
-    case ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM:
-        return server->layer_bottom;
-    case ZWLR_LAYER_SHELL_V1_LAYER_TOP:
-        return server->layer_top;
-    case ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY:
-        return server->layer_overlay;
-    default:
-        return server->layer_top;
-    }
-}
-
-static void server_arrange_layer_surfaces_on_output(struct fbwl_server *server,
-        struct wlr_output *wlr_output) {
-    if (server == NULL || wlr_output == NULL) {
-        return;
-    }
-
-    struct wlr_box full = {0};
-    wlr_output_layout_get_box(server->output_layout, wlr_output, &full);
-    if (full.width < 1 || full.height < 1) {
-        return;
-    }
-
-    struct wlr_box usable = full;
-    const enum zwlr_layer_shell_v1_layer layers[] = {
-        ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND,
-        ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM,
-        ZWLR_LAYER_SHELL_V1_LAYER_TOP,
-        ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY,
-    };
-
-    for (size_t i = 0; i < sizeof(layers) / sizeof(layers[0]); i++) {
-        const enum zwlr_layer_shell_v1_layer layer = layers[i];
-        struct fbwl_layer_surface *ls;
-        wl_list_for_each(ls, &server->layer_surfaces, link) {
-            if (ls->layer_surface == NULL || ls->scene_layer_surface == NULL) {
-                continue;
-            }
-            if (ls->layer_surface->output != wlr_output) {
-                continue;
-            }
-            if (ls->layer != layer) {
-                continue;
-            }
-            if (!ls->layer_surface->initialized) {
-                continue;
-            }
-            wlr_scene_layer_surface_v1_configure(ls->scene_layer_surface, &full, &usable);
-
-            int lx = 0, ly = 0;
-            (void)wlr_scene_node_coords(&ls->scene_layer_surface->tree->node, &lx, &ly);
-            const char *ns = ls->layer_surface->namespace != NULL ? ls->layer_surface->namespace : "(no-namespace)";
-            const struct wlr_layer_surface_v1_state *st = &ls->layer_surface->current;
-            wlr_log(WLR_INFO, "LayerShell: surface ns=%s layer=%d pos=%d,%d size=%ux%u excl=%d",
-                ns, (int)ls->layer, lx, ly, st->actual_width, st->actual_height, st->exclusive_zone);
-        }
-    }
-
-    struct fbwl_output *out = fbwl_output_find(&server->outputs, wlr_output);
-    if (out != NULL) {
-        out->usable_area = usable;
-    }
-    wlr_log(WLR_INFO, "LayerShell: output=%s usable=%d,%d %dx%d",
-        wlr_output->name != NULL ? wlr_output->name : "(unnamed)",
-        usable.x, usable.y, usable.width, usable.height);
-}
-
 static void server_output_management_arrange_layers_on_output(void *userdata, struct wlr_output *wlr_output) {
     struct fbwl_server *server = userdata;
-    server_arrange_layer_surfaces_on_output(server, wlr_output);
+    if (server == NULL) {
+        return;
+    }
+    fbwl_scene_layers_arrange_layer_surfaces_on_output(server->output_layout, &server->outputs, &server->layer_surfaces,
+        wlr_output);
 }
 
 static void server_output_power_set_mode(struct wl_listener *listener, void *data) {
@@ -1448,7 +1364,8 @@ static void server_new_output(struct wl_listener *listener, void *data) {
     }
 
     server_background_update_output(server, output);
-    server_arrange_layer_surfaces_on_output(server, wlr_output);
+    fbwl_scene_layers_arrange_layer_surfaces_on_output(server->output_layout, &server->outputs, &server->layer_surfaces,
+        wlr_output);
     fbwl_output_manager_update(server->output_manager, &server->outputs, server->output_layout);
     server_toolbar_ui_update_position(server);
     server_cmd_dialog_ui_update_position(server);
@@ -6055,104 +5972,14 @@ static void server_new_xdg_popup(struct wl_listener *listener, void *data) {
     wl_signal_add(&xdg_popup->events.destroy, &popup->destroy);
 }
 
-static void layer_surface_map(struct wl_listener *listener, void *data) {
-    (void)data;
-    struct fbwl_layer_surface *ls = wl_container_of(listener, ls, map);
-    const char *ns = ls->layer_surface->namespace != NULL ? ls->layer_surface->namespace : "(no-namespace)";
-    wlr_log(WLR_INFO, "LayerShell: map ns=%s layer=%d", ns, (int)ls->layer);
-    server_arrange_layer_surfaces_on_output(ls->server, ls->layer_surface->output);
-}
-
-static void layer_surface_unmap(struct wl_listener *listener, void *data) {
-    (void)data;
-    struct fbwl_layer_surface *ls = wl_container_of(listener, ls, unmap);
-    const char *ns = ls->layer_surface->namespace != NULL ? ls->layer_surface->namespace : "(no-namespace)";
-    wlr_log(WLR_INFO, "LayerShell: unmap ns=%s layer=%d", ns, (int)ls->layer);
-    server_arrange_layer_surfaces_on_output(ls->server, ls->layer_surface->output);
-}
-
-static void layer_surface_commit(struct wl_listener *listener, void *data) {
-    (void)data;
-    struct fbwl_layer_surface *ls = wl_container_of(listener, ls, commit);
-
-    enum zwlr_layer_shell_v1_layer new_layer = ls->layer_surface->current.layer;
-    if (new_layer != ls->layer) {
-        ls->layer = new_layer;
-        struct wlr_scene_tree *parent = server_layer_tree_for_layer(ls->server, ls->layer);
-        if (parent != NULL && ls->scene_layer_surface != NULL) {
-            wlr_scene_node_reparent(&ls->scene_layer_surface->tree->node, parent);
-        }
-    }
-
-    server_arrange_layer_surfaces_on_output(ls->server, ls->layer_surface->output);
-}
-
-static void layer_surface_destroy(struct wl_listener *listener, void *data) {
-    (void)data;
-    struct fbwl_layer_surface *ls = wl_container_of(listener, ls, destroy);
-    struct fbwl_server *server = ls->server;
-    struct wlr_output *output = ls->layer_surface->output;
-    const char *ns = ls->layer_surface->namespace != NULL ? ls->layer_surface->namespace : "(no-namespace)";
-    wlr_log(WLR_INFO, "LayerShell: destroy ns=%s layer=%d", ns, (int)ls->layer);
-
-    fbwl_cleanup_listener(&ls->map);
-    fbwl_cleanup_listener(&ls->unmap);
-    fbwl_cleanup_listener(&ls->commit);
-    fbwl_cleanup_listener(&ls->destroy);
-    wl_list_remove(&ls->link);
-    free(ls);
-
-    server_arrange_layer_surfaces_on_output(server, output);
-}
-
 static void server_new_layer_surface(struct wl_listener *listener, void *data) {
     struct fbwl_server *server = wl_container_of(listener, server, new_layer_surface);
-    struct wlr_layer_surface_v1 *layer_surface = data;
-
-    if (layer_surface->output == NULL) {
-        layer_surface->output = wlr_output_layout_get_center_output(server->output_layout);
-        if (layer_surface->output == NULL && !wl_list_empty(&server->outputs)) {
-            struct fbwl_output *fallback = wl_container_of(server->outputs.next, fallback, link);
-            layer_surface->output = fallback->wlr_output;
-        }
-        if (layer_surface->output == NULL) {
-            wlr_log(WLR_ERROR, "LayerShell: new_surface without any outputs, closing");
-            wlr_layer_surface_v1_destroy(layer_surface);
-            return;
-        }
+    if (server == NULL) {
+        return;
     }
-
-    struct fbwl_layer_surface *ls = calloc(1, sizeof(*ls));
-    ls->server = server;
-    ls->layer_surface = layer_surface;
-    ls->layer = layer_surface->pending.layer;
-
-    struct wlr_scene_tree *parent = server_layer_tree_for_layer(server, ls->layer);
-    if (parent == NULL) {
-        parent = &server->scene->tree;
-    }
-    ls->scene_layer_surface = wlr_scene_layer_surface_v1_create(parent, layer_surface);
-
-    wl_list_insert(server->layer_surfaces.prev, &ls->link);
-
-    ls->map.notify = layer_surface_map;
-    wl_signal_add(&layer_surface->surface->events.map, &ls->map);
-    ls->unmap.notify = layer_surface_unmap;
-    wl_signal_add(&layer_surface->surface->events.unmap, &ls->unmap);
-    ls->commit.notify = layer_surface_commit;
-    wl_signal_add(&layer_surface->surface->events.commit, &ls->commit);
-
-    ls->destroy.notify = layer_surface_destroy;
-    wl_signal_add(&layer_surface->events.destroy, &ls->destroy);
-
-    layer_surface->data = ls;
-
-    const char *ns = layer_surface->namespace != NULL ? layer_surface->namespace : "(no-namespace)";
-    wlr_log(WLR_INFO, "LayerShell: new_surface ns=%s layer=%d output=%s",
-        ns, (int)ls->layer,
-        layer_surface->output->name != NULL ? layer_surface->output->name : "(unnamed)");
-
-    server_arrange_layer_surfaces_on_output(server, layer_surface->output);
+    fbwl_scene_layers_handle_new_layer_surface(data, server->output_layout, &server->outputs, &server->layer_surfaces,
+        server->layer_background, server->layer_bottom, server->layer_top, server->layer_overlay,
+        server->scene != NULL ? &server->scene->tree : NULL);
 }
 
 static char *ipc_trim_inplace(char *s) {
