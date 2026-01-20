@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include <sys/types.h>
 
+#include "wayland/fbwl_grabs.h"
+
 struct wlr_cursor;
 struct wlr_cursor_shape_manager_v1_request_set_shape_event;
 struct wlr_pointer_constraints_v1;
@@ -15,12 +17,6 @@ struct wlr_pointer_motion_absolute_event;
 struct wlr_scene;
 struct wlr_seat;
 struct wlr_xcursor_manager;
-
-enum fbwl_cursor_mode {
-    FBWL_CURSOR_PASSTHROUGH,
-    FBWL_CURSOR_MOVE,
-    FBWL_CURSOR_RESIZE,
-};
 
 struct fbwl_cursor_menu_hooks {
     void *userdata;

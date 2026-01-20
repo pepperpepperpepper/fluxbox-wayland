@@ -89,6 +89,7 @@
 #include "wmcore/fbwm_output.h"
 #include "wayland/fbwl_apps_rules.h"
 #include "wayland/fbwl_cursor.h"
+#include "wayland/fbwl_grabs.h"
 #include "wayland/fbwl_ipc.h"
 #include "wayland/fbwl_keybindings.h"
 #include "wayland/fbwl_keys_parse.h"
@@ -216,17 +217,6 @@ struct fbwl_init_settings {
     char *apps_file;
     char *style_file;
     char *menu_file;
-};
-
-struct fbwl_grab {
-    enum fbwl_cursor_mode mode;
-    struct fbwl_view *view;
-    uint32_t button;
-    uint32_t resize_edges;
-    double grab_x, grab_y;
-    int view_x, view_y;
-    int view_w, view_h;
-    int last_w, last_h;
 };
 
 struct fbwl_session_lock_surface {
@@ -1405,87 +1395,12 @@ static uint32_t server_keyboard_modifiers(struct fbwl_server *server) {
     return keyboard != NULL ? wlr_keyboard_get_modifiers(keyboard) : 0;
 }
 
-static void grab_update(struct fbwl_server *server) {
-    struct fbwl_view *view = server->grab.view;
-    if (view == NULL) {
-        return;
-    }
-
-    const double dx = server->cursor->x - server->grab.grab_x;
-    const double dy = server->cursor->y - server->grab.grab_y;
-
-    if (server->grab.mode == FBWL_CURSOR_MOVE) {
-        view->x = server->grab.view_x + (int)dx;
-        view->y = server->grab.view_y + (int)dy;
-        wlr_scene_node_set_position(&view->scene_tree->node, view->x, view->y);
-        if (view->type == FBWL_VIEW_XWAYLAND && view->xwayland_surface != NULL) {
-            const int w = fbwl_view_current_width(view);
-            const int h = fbwl_view_current_height(view);
-            if (w > 0 && h > 0) {
-                wlr_xwayland_surface_configure(view->xwayland_surface, view->x, view->y,
-                    (uint16_t)w, (uint16_t)h);
-            }
-        }
-        return;
-    }
-
-    if (server->grab.mode == FBWL_CURSOR_RESIZE) {
-        uint32_t edges = server->grab.resize_edges;
-        if (edges == WLR_EDGE_NONE) {
-            edges = WLR_EDGE_RIGHT | WLR_EDGE_BOTTOM;
-        }
-
-        int x = server->grab.view_x;
-        int y = server->grab.view_y;
-        int w = server->grab.view_w;
-        int h = server->grab.view_h;
-
-        if ((edges & WLR_EDGE_LEFT) != 0) {
-            x = server->grab.view_x + (int)dx;
-            w = server->grab.view_w - (int)dx;
-        } else if ((edges & WLR_EDGE_RIGHT) != 0) {
-            w = server->grab.view_w + (int)dx;
-        }
-
-        if ((edges & WLR_EDGE_TOP) != 0) {
-            y = server->grab.view_y + (int)dy;
-            h = server->grab.view_h - (int)dy;
-        } else if ((edges & WLR_EDGE_BOTTOM) != 0) {
-            h = server->grab.view_h + (int)dy;
-        }
-
-        if (w < 1) {
-            w = 1;
-            if ((edges & WLR_EDGE_LEFT) != 0) {
-                x = server->grab.view_x + (server->grab.view_w - 1);
-            }
-        }
-        if (h < 1) {
-            h = 1;
-            if ((edges & WLR_EDGE_TOP) != 0) {
-                y = server->grab.view_y + (server->grab.view_h - 1);
-            }
-        }
-
-        view->x = x;
-        view->y = y;
-        wlr_scene_node_set_position(&view->scene_tree->node, view->x, view->y);
-
-        server->grab.last_w = w;
-        server->grab.last_h = h;
-        if (view->type == FBWL_VIEW_XDG) {
-            wlr_xdg_toplevel_set_size(view->xdg_toplevel, w, h);
-        } else if (view->type == FBWL_VIEW_XWAYLAND && view->xwayland_surface != NULL) {
-            wlr_xwayland_surface_configure(view->xwayland_surface, view->x, view->y,
-                (uint16_t)w, (uint16_t)h);
-        }
-        return;
-    }
-}
-
 static void cursor_grab_update(void *userdata) {
     struct fbwl_server *server = userdata;
-    grab_update(server);
+    if (server == NULL) {
+        return;
+    }
+    fbwl_grab_update(&server->grab, server->cursor);
 }
 
 static bool cursor_menu_is_open(void *userdata) {
