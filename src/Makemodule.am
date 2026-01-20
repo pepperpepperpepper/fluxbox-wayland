@@ -330,13 +330,15 @@ fluxbox_wayland_SOURCES = \
 	src/wayland/fbwl_output_management.h \
 	src/wayland/fbwl_output_power.c \
 	src/wayland/fbwl_output_power.h \
-	src/wayland/fbwl_scene_layers.c \
-	src/wayland/fbwl_scene_layers.h \
-	src/wayland/fbwl_style_parse.c \
-	src/wayland/fbwl_style_parse.h \
-	src/wayland/fbwl_ui_decor_theme.h \
-	src/wayland/fluxbox_wayland.c \
-	src/wayland/protocol/xdg-shell-protocol.h
+		src/wayland/fbwl_scene_layers.c \
+		src/wayland/fbwl_scene_layers.h \
+		src/wayland/fbwl_style_parse.c \
+		src/wayland/fbwl_style_parse.h \
+		src/wayland/fbwl_ui_decor_theme.h \
+		src/wayland/fbwl_view.c \
+		src/wayland/fbwl_view.h \
+		src/wayland/fluxbox_wayland.c \
+		src/wayland/protocol/xdg-shell-protocol.h
 
 if HAVE_SYSTEMD
 fluxbox_wayland_CPPFLAGS += \

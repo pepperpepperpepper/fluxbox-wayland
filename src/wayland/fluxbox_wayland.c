@@ -102,14 +102,9 @@
 #include "wayland/fbwl_ui_decor_theme.h"
 #include "wayland/fbwl_util.h"
 #include "wayland/fbwl_ui_text.h"
+#include "wayland/fbwl_view.h"
 
 struct fbwl_server;
-struct fbwl_view;
-
-enum fbwl_view_type {
-    FBWL_VIEW_XDG,
-    FBWL_VIEW_XWAYLAND,
-};
 
 struct fbwl_keybinding {
     xkb_keysym_t sym;
@@ -224,67 +219,6 @@ struct fbwl_init_settings {
     char *apps_file;
     char *style_file;
     char *menu_file;
-};
-
-struct fbwl_view {
-    struct fbwl_server *server;
-    enum fbwl_view_type type;
-    struct wlr_xdg_toplevel *xdg_toplevel;
-    struct wlr_xwayland_surface *xwayland_surface;
-    struct wlr_scene_tree *scene_tree;
-    bool decor_enabled;
-    bool decor_active;
-    struct wlr_scene_tree *decor_tree;
-    struct wlr_scene_rect *decor_titlebar;
-    struct wlr_scene_buffer *decor_title_text;
-    char *decor_title_text_cache;
-    int decor_title_text_cache_w;
-    struct wlr_scene_rect *decor_border_top;
-    struct wlr_scene_rect *decor_border_bottom;
-    struct wlr_scene_rect *decor_border_left;
-    struct wlr_scene_rect *decor_border_right;
-    struct wlr_scene_rect *decor_btn_close;
-    struct wlr_scene_rect *decor_btn_max;
-    struct wlr_scene_rect *decor_btn_min;
-    struct wl_listener map;
-    struct wl_listener unmap;
-    struct wl_listener commit;
-    struct wl_listener destroy;
-    struct wl_listener request_maximize;
-    struct wl_listener request_fullscreen;
-    struct wl_listener request_minimize;
-    struct wl_listener set_title;
-    struct wl_listener set_app_id;
-
-    struct wl_listener xwayland_associate;
-    struct wl_listener xwayland_dissociate;
-    struct wl_listener xwayland_request_configure;
-    struct wl_listener xwayland_request_activate;
-    struct wl_listener xwayland_request_close;
-    struct wl_listener xwayland_set_title;
-    struct wl_listener xwayland_set_class;
-
-    struct wlr_foreign_toplevel_handle_v1 *foreign_toplevel;
-    struct wlr_output *foreign_output;
-    struct wl_listener foreign_request_maximize;
-    struct wl_listener foreign_request_minimize;
-    struct wl_listener foreign_request_activate;
-    struct wl_listener foreign_request_fullscreen;
-    struct wl_listener foreign_request_close;
-
-    int x, y;
-    int width, height;
-    bool mapped;
-    bool placed;
-
-    bool minimized;
-    bool maximized;
-    bool fullscreen;
-    int saved_x, saved_y;
-    int saved_w, saved_h;
-
-    bool apps_rules_applied;
-    struct fbwm_view wm_view;
 };
 
 struct fbwl_popup {
@@ -531,42 +465,6 @@ struct fbwl_server {
     struct fbwl_grab grab;
 };
 
-static struct wlr_surface *view_wlr_surface(const struct fbwl_view *view) {
-    if (view == NULL) {
-        return NULL;
-    }
-
-    switch (view->type) {
-    case FBWL_VIEW_XDG:
-        return view->xdg_toplevel != NULL ? view->xdg_toplevel->base->surface : NULL;
-    case FBWL_VIEW_XWAYLAND:
-        return view->xwayland_surface != NULL ? view->xwayland_surface->surface : NULL;
-    default:
-        return NULL;
-    }
-}
-
-static struct fbwl_view *server_view_from_surface(struct wlr_surface *surface) {
-    if (surface == NULL) {
-        return NULL;
-    }
-
-    struct wlr_xdg_toplevel *xdg_toplevel = wlr_xdg_toplevel_try_from_wlr_surface(surface);
-    if (xdg_toplevel != NULL && xdg_toplevel->base != NULL) {
-        struct wlr_scene_tree *tree = xdg_toplevel->base->data;
-        if (tree != NULL && tree->node.data != NULL) {
-            return tree->node.data;
-        }
-    }
-
-    struct wlr_xwayland_surface *xsurface = wlr_xwayland_surface_try_from_wlr_surface(surface);
-    if (xsurface != NULL && xsurface->data != NULL) {
-        return xsurface->data;
-    }
-
-    return NULL;
-}
-
 static void clear_keyboard_focus(struct fbwl_server *server);
 static void server_text_input_update_focus(struct fbwl_server *server, struct wlr_surface *surface);
 static void server_update_shortcuts_inhibitor(struct fbwl_server *server);
@@ -597,400 +495,6 @@ static void server_menu_ui_set_selected(struct fbwl_server *server, size_t idx);
 static void server_menu_free(struct fbwl_server *server);
 static void server_background_update_output(struct fbwl_server *server, struct fbwl_output *output);
 static void server_background_update_all(struct fbwl_server *server);
-
-static const char *view_title(const struct fbwl_view *view) {
-    if (view == NULL) {
-        return NULL;
-    }
-
-    switch (view->type) {
-    case FBWL_VIEW_XDG:
-        return view->xdg_toplevel != NULL ? view->xdg_toplevel->title : NULL;
-    case FBWL_VIEW_XWAYLAND:
-        return view->xwayland_surface != NULL ? view->xwayland_surface->title : NULL;
-    default:
-        return NULL;
-    }
-}
-
-static const char *view_app_id(const struct fbwl_view *view) {
-    if (view == NULL) {
-        return NULL;
-    }
-
-    switch (view->type) {
-    case FBWL_VIEW_XDG:
-        return view->xdg_toplevel != NULL ? view->xdg_toplevel->app_id : NULL;
-    case FBWL_VIEW_XWAYLAND:
-        return view->xwayland_surface != NULL ? view->xwayland_surface->class : NULL;
-    default:
-        return NULL;
-    }
-}
-
-static int view_current_width(const struct fbwl_view *view) {
-    if (view == NULL) {
-        return 0;
-    }
-    if (view->width > 0) {
-        return view->width;
-    }
-
-    struct wlr_surface *surface = view_wlr_surface(view);
-    if (surface != NULL) {
-        return surface->current.width;
-    }
-
-    if (view->type == FBWL_VIEW_XWAYLAND && view->xwayland_surface != NULL) {
-        return view->xwayland_surface->width;
-    }
-    return 0;
-}
-
-static int view_current_height(const struct fbwl_view *view) {
-    if (view == NULL) {
-        return 0;
-    }
-    if (view->height > 0) {
-        return view->height;
-    }
-
-    struct wlr_surface *surface = view_wlr_surface(view);
-    if (surface != NULL) {
-        return surface->current.height;
-    }
-
-    if (view->type == FBWL_VIEW_XWAYLAND && view->xwayland_surface != NULL) {
-        return view->xwayland_surface->height;
-    }
-    return 0;
-}
-
-static void view_set_activated(struct fbwl_view *view, bool activated) {
-    if (view == NULL) {
-        return;
-    }
-
-    switch (view->type) {
-    case FBWL_VIEW_XDG:
-        if (view->xdg_toplevel != NULL) {
-            wlr_xdg_toplevel_set_activated(view->xdg_toplevel, activated);
-        }
-        break;
-    case FBWL_VIEW_XWAYLAND:
-        if (view->xwayland_surface != NULL) {
-            wlr_xwayland_surface_activate(view->xwayland_surface, activated);
-            if (activated) {
-                wlr_xwayland_surface_offer_focus(view->xwayland_surface);
-            }
-        }
-        break;
-    default:
-        break;
-    }
-}
-
-static int decor_theme_button_size(const struct fbwl_decor_theme *theme) {
-    if (theme == NULL) {
-        return 0;
-    }
-    int size = theme->title_height - 2 * theme->button_margin;
-    if (size < 1) {
-        size = 1;
-    }
-    return size;
-}
-
-enum fbwl_decor_hit_kind {
-    FBWL_DECOR_HIT_NONE = 0,
-    FBWL_DECOR_HIT_TITLEBAR,
-    FBWL_DECOR_HIT_RESIZE,
-    FBWL_DECOR_HIT_BTN_CLOSE,
-    FBWL_DECOR_HIT_BTN_MAX,
-    FBWL_DECOR_HIT_BTN_MIN,
-};
-
-struct fbwl_decor_hit {
-    enum fbwl_decor_hit_kind kind;
-    uint32_t edges;
-};
-
-static void view_decor_apply_enabled(struct fbwl_view *view) {
-    if (view == NULL || view->decor_tree == NULL) {
-        return;
-    }
-
-    const bool show = view->decor_enabled && !view->fullscreen;
-    wlr_scene_node_set_enabled(&view->decor_tree->node, show);
-}
-
-static void view_decor_set_active(struct fbwl_view *view, bool active) {
-    if (view == NULL) {
-        return;
-    }
-    if (view->server == NULL) {
-        return;
-    }
-
-    view->decor_active = active;
-    if (view->decor_titlebar != NULL) {
-        const struct fbwl_decor_theme *theme = &view->server->decor_theme;
-        const float *color = active ? theme->titlebar_active : theme->titlebar_inactive;
-        wlr_scene_rect_set_color(view->decor_titlebar, color);
-    }
-}
-
-static void view_decor_update_title_text(struct fbwl_view *view) {
-    if (view == NULL || view->decor_tree == NULL || view->server == NULL) {
-        return;
-    }
-
-    const struct fbwl_decor_theme *theme = &view->server->decor_theme;
-    const int title_h = theme->title_height;
-    const int w = view_current_width(view);
-    if (w < 1 || title_h < 1) {
-        return;
-    }
-
-    if (view->decor_title_text == NULL) {
-        view->decor_title_text = wlr_scene_buffer_create(view->decor_tree, NULL);
-        if (view->decor_title_text == NULL) {
-            return;
-        }
-    }
-
-    wlr_scene_node_set_position(&view->decor_title_text->node, 0, -title_h);
-
-    if (!view->decor_enabled || view->fullscreen) {
-        wlr_scene_buffer_set_buffer(view->decor_title_text, NULL);
-        view->decor_title_text_cache_w = 0;
-        return;
-    }
-
-    const char *title = view_title(view);
-    if (title == NULL || *title == '\0') {
-        wlr_scene_buffer_set_buffer(view->decor_title_text, NULL);
-        view->decor_title_text_cache_w = 0;
-        return;
-    }
-
-    const int btn_size = decor_theme_button_size(theme);
-    const int reserved_right =
-        theme->button_margin + (btn_size * 3) + (theme->button_spacing * 2) + theme->button_margin;
-    int text_w = w - reserved_right;
-    if (text_w < 1) {
-        text_w = w;
-    }
-    if (text_w < 1) {
-        wlr_scene_buffer_set_buffer(view->decor_title_text, NULL);
-        view->decor_title_text_cache_w = 0;
-        return;
-    }
-
-    if (view->decor_title_text_cache != NULL &&
-            view->decor_title_text_cache_w == text_w &&
-            strcmp(view->decor_title_text_cache, title) == 0) {
-        return;
-    }
-
-    free(view->decor_title_text_cache);
-    view->decor_title_text_cache = strdup(title);
-    if (view->decor_title_text_cache == NULL) {
-        view->decor_title_text_cache_w = 0;
-        wlr_scene_buffer_set_buffer(view->decor_title_text, NULL);
-        return;
-    }
-    view->decor_title_text_cache_w = text_w;
-
-    const float fg[4] = {1.0f, 1.0f, 1.0f, 1.0f};
-    struct wlr_buffer *buf = fbwl_text_buffer_create(title, text_w, title_h, 8, fg);
-    if (buf == NULL) {
-        wlr_scene_buffer_set_buffer(view->decor_title_text, NULL);
-        view->decor_title_text_cache_w = 0;
-        return;
-    }
-
-    wlr_scene_buffer_set_buffer(view->decor_title_text, buf);
-    wlr_buffer_drop(buf);
-
-    wlr_log(WLR_INFO, "Decor: title-render %s", title);
-}
-
-static void view_decor_update(struct fbwl_view *view) {
-    if (view == NULL || view->decor_tree == NULL || view->server == NULL) {
-        return;
-    }
-
-    view_decor_apply_enabled(view);
-
-    const int w = view_current_width(view);
-    const int h = view_current_height(view);
-    if (w < 1 || h < 1) {
-        return;
-    }
-
-    const struct fbwl_decor_theme *theme = &view->server->decor_theme;
-    const int border = theme->border_width;
-    const int title_h = theme->title_height;
-
-    if (view->decor_titlebar != NULL) {
-        wlr_scene_rect_set_size(view->decor_titlebar, w, title_h);
-        wlr_scene_node_set_position(&view->decor_titlebar->node, 0, -title_h);
-        const float *color = view->decor_active ? theme->titlebar_active : theme->titlebar_inactive;
-        wlr_scene_rect_set_color(view->decor_titlebar, color);
-    }
-
-    if (view->decor_border_top != NULL) {
-        wlr_scene_rect_set_size(view->decor_border_top, w + 2 * border, border);
-        wlr_scene_node_set_position(&view->decor_border_top->node, -border, -title_h - border);
-    }
-    if (view->decor_border_bottom != NULL) {
-        wlr_scene_rect_set_size(view->decor_border_bottom, w + 2 * border, border);
-        wlr_scene_node_set_position(&view->decor_border_bottom->node, -border, h);
-    }
-    if (view->decor_border_left != NULL) {
-        wlr_scene_rect_set_size(view->decor_border_left, border, title_h + border + h + border);
-        wlr_scene_node_set_position(&view->decor_border_left->node, -border, -title_h - border);
-    }
-    if (view->decor_border_right != NULL) {
-        wlr_scene_rect_set_size(view->decor_border_right, border, title_h + border + h + border);
-        wlr_scene_node_set_position(&view->decor_border_right->node, w, -title_h - border);
-    }
-
-    const int btn_size = decor_theme_button_size(theme);
-    const int btn_y = -title_h + theme->button_margin;
-    int btn_x = w - theme->button_margin - btn_size;
-    if (view->decor_btn_close != NULL) {
-        wlr_scene_rect_set_size(view->decor_btn_close, btn_size, btn_size);
-        wlr_scene_node_set_position(&view->decor_btn_close->node, btn_x, btn_y);
-    }
-    btn_x -= btn_size + theme->button_spacing;
-    if (view->decor_btn_max != NULL) {
-        wlr_scene_rect_set_size(view->decor_btn_max, btn_size, btn_size);
-        wlr_scene_node_set_position(&view->decor_btn_max->node, btn_x, btn_y);
-    }
-    btn_x -= btn_size + theme->button_spacing;
-    if (view->decor_btn_min != NULL) {
-        wlr_scene_rect_set_size(view->decor_btn_min, btn_size, btn_size);
-        wlr_scene_node_set_position(&view->decor_btn_min->node, btn_x, btn_y);
-    }
-
-    view_decor_update_title_text(view);
-}
-
-static void view_decor_create(struct fbwl_view *view) {
-    if (view == NULL || view->scene_tree == NULL || view->decor_tree != NULL) {
-        return;
-    }
-
-    view->decor_tree = wlr_scene_tree_create(view->scene_tree);
-    if (view->decor_tree == NULL) {
-        return;
-    }
-
-    if (view->server != NULL) {
-        const struct fbwl_decor_theme *theme = &view->server->decor_theme;
-        view->decor_titlebar = wlr_scene_rect_create(view->decor_tree, 1, 1, theme->titlebar_inactive);
-        view->decor_title_text = wlr_scene_buffer_create(view->decor_tree, NULL);
-        view->decor_border_top = wlr_scene_rect_create(view->decor_tree, 1, 1, theme->border_color);
-        view->decor_border_bottom = wlr_scene_rect_create(view->decor_tree, 1, 1, theme->border_color);
-        view->decor_border_left = wlr_scene_rect_create(view->decor_tree, 1, 1, theme->border_color);
-        view->decor_border_right = wlr_scene_rect_create(view->decor_tree, 1, 1, theme->border_color);
-        view->decor_btn_close = wlr_scene_rect_create(view->decor_tree, 1, 1, theme->btn_close_color);
-        view->decor_btn_max = wlr_scene_rect_create(view->decor_tree, 1, 1, theme->btn_max_color);
-        view->decor_btn_min = wlr_scene_rect_create(view->decor_tree, 1, 1, theme->btn_min_color);
-    }
-
-    view->decor_enabled = false;
-    view->decor_active = false;
-    wlr_scene_node_set_enabled(&view->decor_tree->node, false);
-    view_decor_update(view);
-}
-
-static void view_decor_set_enabled(struct fbwl_view *view, bool enabled) {
-    if (view == NULL) {
-        return;
-    }
-
-    view->decor_enabled = enabled;
-    view_decor_apply_enabled(view);
-}
-
-static struct fbwl_decor_hit view_decor_hit_test(const struct fbwl_view *view, double lx, double ly) {
-    struct fbwl_decor_hit hit = {0};
-    if (view == NULL || view->decor_tree == NULL || view->server == NULL ||
-            !view->decor_enabled || view->fullscreen) {
-        return hit;
-    }
-
-    const int w = view_current_width(view);
-    const int h = view_current_height(view);
-    if (w < 1 || h < 1) {
-        return hit;
-    }
-
-    const struct fbwl_decor_theme *theme = &view->server->decor_theme;
-    const int border = theme->border_width;
-    const int title_h = theme->title_height;
-    const int btn_size = decor_theme_button_size(theme);
-    const int btn_margin = theme->button_margin;
-
-    const double x = lx - view->x;
-    const double y = ly - view->y;
-
-    if (x < -border || x >= w + border) {
-        return hit;
-    }
-    if (y < -title_h - border || y >= h + border) {
-        return hit;
-    }
-
-    // Titlebar buttons
-    if (y >= -title_h + btn_margin && y < -title_h + btn_margin + btn_size) {
-        const int close_x0 = w - btn_margin - btn_size;
-        const int max_x0 = close_x0 - theme->button_spacing - btn_size;
-        const int min_x0 = max_x0 - theme->button_spacing - btn_size;
-
-        if (x >= close_x0 && x < close_x0 + btn_size) {
-            hit.kind = FBWL_DECOR_HIT_BTN_CLOSE;
-            return hit;
-        }
-        if (x >= max_x0 && x < max_x0 + btn_size) {
-            hit.kind = FBWL_DECOR_HIT_BTN_MAX;
-            return hit;
-        }
-        if (x >= min_x0 && x < min_x0 + btn_size) {
-            hit.kind = FBWL_DECOR_HIT_BTN_MIN;
-            return hit;
-        }
-    }
-
-    // Titlebar drag
-    if (y >= -title_h && y < 0) {
-        hit.kind = FBWL_DECOR_HIT_TITLEBAR;
-        return hit;
-    }
-
-    uint32_t edges = WLR_EDGE_NONE;
-    if (x >= -border && x < 0) {
-        edges |= WLR_EDGE_LEFT;
-    }
-    if (x >= w && x < w + border) {
-        edges |= WLR_EDGE_RIGHT;
-    }
-    if (y >= -title_h - border && y < -title_h) {
-        edges |= WLR_EDGE_TOP;
-    }
-    if (y >= h && y < h + border) {
-        edges |= WLR_EDGE_BOTTOM;
-    }
-
-    if (edges != WLR_EDGE_NONE) {
-        hit.kind = FBWL_DECOR_HIT_RESIZE;
-        hit.edges = edges;
-    }
-    return hit;
-}
 
 static void server_output_management_arrange_layers_on_output(void *userdata, struct wlr_output *wlr_output) {
     struct fbwl_server *server = userdata;
@@ -1735,22 +1239,22 @@ static void focus_view(struct fbwl_view *view) {
     }
     struct wlr_seat *seat = server->seat;
 
-    struct wlr_surface *surface = view_wlr_surface(view);
+    struct wlr_surface *surface = fbwl_view_wlr_surface(view);
     struct wlr_surface *prev_surface = seat->keyboard_state.focused_surface;
     if (prev_surface == surface) {
         return;
     }
 
     wlr_log(WLR_INFO, "Focus: %s (%s)",
-        view_title(view) != NULL ? view_title(view) : "(no-title)",
-        view_app_id(view) != NULL ? view_app_id(view) : "(no-app-id)");
+        fbwl_view_title(view) != NULL ? fbwl_view_title(view) : "(no-title)",
+        fbwl_view_app_id(view) != NULL ? fbwl_view_app_id(view) : "(no-app-id)");
 
     struct fbwl_view *prev_view = server->focused_view;
     if (prev_view != NULL && prev_view != view && prev_view->foreign_toplevel != NULL) {
         wlr_foreign_toplevel_handle_v1_set_activated(prev_view->foreign_toplevel, false);
     }
     if (prev_view != NULL && prev_view != view) {
-        view_decor_set_active(prev_view, false);
+        fbwl_view_decor_set_active(prev_view, &server->decor_theme, false);
     }
 
     if (prev_surface != NULL) {
@@ -1770,8 +1274,8 @@ static void focus_view(struct fbwl_view *view) {
     struct wlr_keyboard *keyboard = wlr_seat_get_keyboard(seat);
     wlr_scene_node_raise_to_top(&view->scene_tree->node);
 
-    view_set_activated(view, true);
-    view_decor_set_active(view, true);
+    fbwl_view_set_activated(view, true);
+    fbwl_view_decor_set_active(view, &server->decor_theme, true);
     if (view->foreign_toplevel != NULL) {
         wlr_foreign_toplevel_handle_v1_set_activated(view->foreign_toplevel, true);
     }
@@ -1809,7 +1313,7 @@ static void clear_keyboard_focus(struct fbwl_server *server) {
         wlr_foreign_toplevel_handle_v1_set_activated(server->focused_view->foreign_toplevel, false);
     }
     if (server->focused_view != NULL) {
-        view_decor_set_active(server->focused_view, false);
+        fbwl_view_decor_set_active(server->focused_view, &server->decor_theme, false);
     }
     server->focused_view = NULL;
 
@@ -1857,318 +1361,6 @@ static void apply_workspace_visibility(struct fbwl_server *server, const char *w
     }
 }
 
-static const char *view_display_title(const struct fbwl_view *view) {
-    if (view == NULL) {
-        return "(no-view)";
-    }
-
-    const char *title = view_title(view);
-    if (title != NULL && *title != '\0') {
-        return title;
-    }
-
-    const char *app_id = view_app_id(view);
-    if (app_id != NULL && *app_id != '\0') {
-        return app_id;
-    }
-
-    return "(no-title)";
-}
-
-static void view_save_geometry(struct fbwl_view *view) {
-    if (view == NULL) {
-        return;
-    }
-
-    const int w = view_current_width(view);
-    const int h = view_current_height(view);
-
-    view->saved_x = view->x;
-    view->saved_y = view->y;
-    view->saved_w = w > 0 ? w : 0;
-    view->saved_h = h > 0 ? h : 0;
-}
-
-static void view_get_output_box(struct fbwl_view *view, struct wlr_output *preferred,
-        struct wlr_box *box) {
-    *box = (struct wlr_box){0};
-    if (view == NULL || view->server == NULL) {
-        return;
-    }
-
-    struct fbwl_server *server = view->server;
-    struct wlr_output *output = preferred;
-    if (output == NULL) {
-        const int w = view_current_width(view);
-        const int h = view_current_height(view);
-        double cx = view->x + (double)w / 2.0;
-        double cy = view->y + (double)h / 2.0;
-        output = wlr_output_layout_output_at(server->output_layout, cx, cy);
-    }
-    if (output == NULL) {
-        output = wlr_output_layout_get_center_output(server->output_layout);
-    }
-
-    wlr_output_layout_get_box(server->output_layout, output, box);
-}
-
-static void view_get_output_usable_box(struct fbwl_view *view, struct wlr_output *preferred,
-        struct wlr_box *box) {
-    *box = (struct wlr_box){0};
-    if (view == NULL || view->server == NULL) {
-        return;
-    }
-
-    struct fbwl_server *server = view->server;
-    struct wlr_output *output = preferred;
-    if (output == NULL) {
-        const int w = view_current_width(view);
-        const int h = view_current_height(view);
-        double cx = view->x + (double)w / 2.0;
-        double cy = view->y + (double)h / 2.0;
-        output = wlr_output_layout_output_at(server->output_layout, cx, cy);
-    }
-    if (output == NULL) {
-        output = wlr_output_layout_get_center_output(server->output_layout);
-    }
-    if (output == NULL) {
-        return;
-    }
-
-    struct fbwl_output *out = fbwl_output_find(&server->outputs, output);
-    if (out != NULL && out->usable_area.width > 0 && out->usable_area.height > 0) {
-        *box = out->usable_area;
-        return;
-    }
-
-    wlr_output_layout_get_box(server->output_layout, output, box);
-}
-
-static void view_foreign_set_output(struct fbwl_view *view, struct wlr_output *output) {
-    if (view == NULL || view->foreign_toplevel == NULL) {
-        return;
-    }
-
-    if (output == view->foreign_output) {
-        return;
-    }
-
-    if (view->foreign_output != NULL) {
-        wlr_foreign_toplevel_handle_v1_output_leave(view->foreign_toplevel, view->foreign_output);
-    }
-    view->foreign_output = output;
-    if (output != NULL) {
-        wlr_foreign_toplevel_handle_v1_output_enter(view->foreign_toplevel, output);
-    }
-}
-
-static void view_foreign_update_output_from_position(struct fbwl_view *view) {
-    if (view == NULL || view->server == NULL) {
-        return;
-    }
-
-    struct wlr_output *output = wlr_output_layout_output_at(view->server->output_layout,
-        view->x + 1, view->y + 1);
-    if (output == NULL) {
-        output = wlr_output_layout_get_center_output(view->server->output_layout);
-    }
-    view_foreign_set_output(view, output);
-}
-
-struct fbwl_wm_output {
-    struct fbwm_output wm_output;
-    struct fbwl_server *server;
-    struct wlr_output *wlr_output;
-};
-
-static const char *fbwl_wm_output_name(const struct fbwm_output *wm_output) {
-    const struct fbwl_wm_output *output = wm_output != NULL ? wm_output->userdata : NULL;
-    if (output == NULL || output->wlr_output == NULL) {
-        return NULL;
-    }
-    return output->wlr_output->name;
-}
-
-static bool fbwl_wm_output_full_box(const struct fbwm_output *wm_output, struct fbwm_box *out) {
-    if (out != NULL) {
-        *out = (struct fbwm_box){0};
-    }
-
-    const struct fbwl_wm_output *output = wm_output != NULL ? wm_output->userdata : NULL;
-    if (output == NULL || output->server == NULL || output->server->output_layout == NULL ||
-            output->wlr_output == NULL || out == NULL) {
-        return false;
-    }
-
-    struct wlr_box box = {0};
-    wlr_output_layout_get_box(output->server->output_layout, output->wlr_output, &box);
-    *out = (struct fbwm_box){
-        .x = box.x,
-        .y = box.y,
-        .width = box.width,
-        .height = box.height,
-    };
-    return true;
-}
-
-static bool fbwl_wm_output_usable_box(const struct fbwm_output *wm_output, struct fbwm_box *out) {
-    if (out != NULL) {
-        *out = (struct fbwm_box){0};
-    }
-
-    const struct fbwl_wm_output *output = wm_output != NULL ? wm_output->userdata : NULL;
-    if (output == NULL || output->server == NULL || output->wlr_output == NULL || out == NULL) {
-        return false;
-    }
-
-    struct fbwl_output *out_data = fbwl_output_find(&output->server->outputs, output->wlr_output);
-    if (out_data == NULL || out_data->usable_area.width < 1 || out_data->usable_area.height < 1) {
-        return false;
-    }
-
-    *out = (struct fbwm_box){
-        .x = out_data->usable_area.x,
-        .y = out_data->usable_area.y,
-        .width = out_data->usable_area.width,
-        .height = out_data->usable_area.height,
-    };
-    return true;
-}
-
-static const struct fbwm_output_ops fbwl_wm_output_ops = {
-    .name = fbwl_wm_output_name,
-    .full_box = fbwl_wm_output_full_box,
-    .usable_box = fbwl_wm_output_usable_box,
-};
-
-static void view_place_initial(struct fbwl_view *view) {
-    if (view == NULL || view->server == NULL) {
-        return;
-    }
-
-    struct fbwl_server *server = view->server;
-
-    struct wlr_output *output =
-        wlr_output_layout_output_at(server->output_layout, server->cursor->x, server->cursor->y);
-    if (output == NULL) {
-        output = wlr_output_layout_get_center_output(server->output_layout);
-    }
-
-    struct fbwl_wm_output wm_out = {0};
-    const struct fbwm_output *wm_output = NULL;
-    if (output != NULL) {
-        wm_out.server = server;
-        wm_out.wlr_output = output;
-        fbwm_output_init(&wm_out.wm_output, &fbwl_wm_output_ops, &wm_out);
-        wm_output = &wm_out.wm_output;
-    }
-
-    struct fbwm_box full = {0};
-    struct fbwm_box box = {0};
-    if (wm_output != NULL) {
-        (void)fbwm_output_get_full_box(wm_output, &full);
-        if (!fbwm_output_get_usable_box(wm_output, &box) || box.width < 1 || box.height < 1) {
-            box = full;
-        }
-    }
-
-    int x = 0;
-    int y = 0;
-    fbwm_core_place_next(&server->wm, wm_output, &x, &y);
-
-    view->x = x;
-    view->y = y;
-    wlr_scene_node_set_position(&view->scene_tree->node, view->x, view->y);
-
-    wlr_log(WLR_INFO, "Place: %s out=%s x=%d y=%d usable=%d,%d %dx%d full=%d,%d %dx%d",
-        view_display_title(view),
-        fbwm_output_name(wm_output) != NULL ? fbwm_output_name(wm_output) : "(none)",
-        view->x, view->y,
-        box.x, box.y, box.width, box.height,
-        full.x, full.y, full.width, full.height);
-    view_foreign_set_output(view, output);
-}
-
-static void view_set_maximized(struct fbwl_view *view, bool maximized) {
-    if (view == NULL) {
-        return;
-    }
-
-    if (view->fullscreen) {
-        if (view->type == FBWL_VIEW_XDG && view->xdg_toplevel->base->initialized) {
-            wlr_xdg_surface_schedule_configure(view->xdg_toplevel->base);
-        }
-        return;
-    }
-
-    if (maximized == view->maximized) {
-        if (view->type == FBWL_VIEW_XDG && view->xdg_toplevel->base->initialized) {
-            wlr_xdg_surface_schedule_configure(view->xdg_toplevel->base);
-        }
-        return;
-    }
-
-    if (maximized) {
-        view_save_geometry(view);
-
-        struct wlr_box box;
-        view_get_output_usable_box(view, NULL, &box);
-        if (box.width < 1 || box.height < 1) {
-            if (view->type == FBWL_VIEW_XDG && view->xdg_toplevel->base->initialized) {
-                wlr_xdg_surface_schedule_configure(view->xdg_toplevel->base);
-            }
-            return;
-        }
-
-        view->maximized = true;
-        view->x = box.x;
-        view->y = box.y;
-        wlr_scene_node_set_position(&view->scene_tree->node, view->x, view->y);
-        wlr_scene_node_raise_to_top(&view->scene_tree->node);
-        if (view->type == FBWL_VIEW_XDG) {
-            wlr_xdg_toplevel_set_maximized(view->xdg_toplevel, true);
-        } else if (view->type == FBWL_VIEW_XWAYLAND) {
-            wlr_xwayland_surface_set_maximized(view->xwayland_surface, true, true);
-        }
-        if (view->foreign_toplevel != NULL) {
-            wlr_foreign_toplevel_handle_v1_set_maximized(view->foreign_toplevel, true);
-        }
-        if (view->type == FBWL_VIEW_XDG) {
-            wlr_xdg_toplevel_set_size(view->xdg_toplevel, box.width, box.height);
-        } else if (view->type == FBWL_VIEW_XWAYLAND) {
-            wlr_xwayland_surface_configure(view->xwayland_surface, view->x, view->y,
-                (uint16_t)box.width, (uint16_t)box.height);
-        }
-        view_foreign_update_output_from_position(view);
-        wlr_log(WLR_INFO, "Maximize: %s on w=%d h=%d", view_display_title(view), box.width, box.height);
-    } else {
-        view->maximized = false;
-        if (view->type == FBWL_VIEW_XDG) {
-            wlr_xdg_toplevel_set_maximized(view->xdg_toplevel, false);
-        } else if (view->type == FBWL_VIEW_XWAYLAND) {
-            wlr_xwayland_surface_set_maximized(view->xwayland_surface, false, false);
-        }
-        if (view->foreign_toplevel != NULL) {
-            wlr_foreign_toplevel_handle_v1_set_maximized(view->foreign_toplevel, false);
-        }
-        view->x = view->saved_x;
-        view->y = view->saved_y;
-        wlr_scene_node_set_position(&view->scene_tree->node, view->x, view->y);
-        wlr_scene_node_raise_to_top(&view->scene_tree->node);
-        if (view->type == FBWL_VIEW_XDG) {
-            wlr_xdg_toplevel_set_size(view->xdg_toplevel,
-                view->saved_w > 0 ? view->saved_w : 0,
-                view->saved_h > 0 ? view->saved_h : 0);
-        } else if (view->type == FBWL_VIEW_XWAYLAND) {
-            wlr_xwayland_surface_configure(view->xwayland_surface, view->x, view->y,
-                (uint16_t)(view->saved_w > 0 ? view->saved_w : 1),
-                (uint16_t)(view->saved_h > 0 ? view->saved_h : 1));
-        }
-        view_foreign_update_output_from_position(view);
-        wlr_log(WLR_INFO, "Maximize: %s off", view_display_title(view));
-    }
-}
-
 static void view_set_minimized(struct fbwl_view *view, bool minimized, const char *why) {
     if (view == NULL || view->server == NULL) {
         return;
@@ -2189,7 +1381,7 @@ static void view_set_minimized(struct fbwl_view *view, bool minimized, const cha
         wlr_foreign_toplevel_handle_v1_set_minimized(view->foreign_toplevel, minimized);
     }
     wlr_log(WLR_INFO, "Minimize: %s %s reason=%s",
-        view_display_title(view),
+        fbwl_view_display_title(view),
         minimized ? "on" : "off",
         why != NULL ? why : "(null)");
 
@@ -2216,122 +1408,6 @@ static void view_set_minimized(struct fbwl_view *view, bool minimized, const cha
     if (view->server->wm.focused == NULL) {
         clear_keyboard_focus(view->server);
     }
-}
-
-static void view_set_fullscreen(struct fbwl_view *view, bool fullscreen, struct wlr_output *output) {
-    if (view == NULL) {
-        return;
-    }
-
-    if (fullscreen == view->fullscreen) {
-        if (view->type == FBWL_VIEW_XDG && view->xdg_toplevel->base->initialized) {
-            wlr_xdg_surface_schedule_configure(view->xdg_toplevel->base);
-        }
-        return;
-    }
-
-    if (fullscreen) {
-        if (view->maximized) {
-            view_set_maximized(view, false);
-        }
-
-        view_save_geometry(view);
-
-        struct wlr_box box;
-        view_get_output_box(view, output, &box);
-        if (box.width < 1 || box.height < 1) {
-            if (view->type == FBWL_VIEW_XDG && view->xdg_toplevel->base->initialized) {
-                wlr_xdg_surface_schedule_configure(view->xdg_toplevel->base);
-            }
-            return;
-        }
-
-        view->fullscreen = true;
-        view_decor_apply_enabled(view);
-        if (view->server->layer_fullscreen != NULL) {
-            wlr_scene_node_reparent(&view->scene_tree->node, view->server->layer_fullscreen);
-        }
-        view->x = box.x;
-        view->y = box.y;
-        wlr_scene_node_set_position(&view->scene_tree->node, view->x, view->y);
-        wlr_scene_node_raise_to_top(&view->scene_tree->node);
-        if (view->type == FBWL_VIEW_XDG) {
-            wlr_xdg_toplevel_set_fullscreen(view->xdg_toplevel, true);
-        } else if (view->type == FBWL_VIEW_XWAYLAND) {
-            wlr_xwayland_surface_set_fullscreen(view->xwayland_surface, true);
-        }
-        if (view->foreign_toplevel != NULL) {
-            wlr_foreign_toplevel_handle_v1_set_fullscreen(view->foreign_toplevel, true);
-        }
-        if (view->type == FBWL_VIEW_XDG) {
-            wlr_xdg_toplevel_set_size(view->xdg_toplevel, box.width, box.height);
-        } else if (view->type == FBWL_VIEW_XWAYLAND) {
-            wlr_xwayland_surface_configure(view->xwayland_surface, view->x, view->y,
-                (uint16_t)box.width, (uint16_t)box.height);
-        }
-        view_foreign_update_output_from_position(view);
-        wlr_log(WLR_INFO, "Fullscreen: %s on w=%d h=%d", view_display_title(view), box.width, box.height);
-    } else {
-        view->fullscreen = false;
-        view_decor_apply_enabled(view);
-        if (view->server->layer_normal != NULL) {
-            wlr_scene_node_reparent(&view->scene_tree->node, view->server->layer_normal);
-        }
-        if (view->type == FBWL_VIEW_XDG) {
-            wlr_xdg_toplevel_set_fullscreen(view->xdg_toplevel, false);
-        } else if (view->type == FBWL_VIEW_XWAYLAND) {
-            wlr_xwayland_surface_set_fullscreen(view->xwayland_surface, false);
-        }
-        if (view->foreign_toplevel != NULL) {
-            wlr_foreign_toplevel_handle_v1_set_fullscreen(view->foreign_toplevel, false);
-        }
-        view->x = view->saved_x;
-        view->y = view->saved_y;
-        wlr_scene_node_set_position(&view->scene_tree->node, view->x, view->y);
-        wlr_scene_node_raise_to_top(&view->scene_tree->node);
-        if (view->type == FBWL_VIEW_XDG) {
-            wlr_xdg_toplevel_set_size(view->xdg_toplevel,
-                view->saved_w > 0 ? view->saved_w : 0,
-                view->saved_h > 0 ? view->saved_h : 0);
-        } else if (view->type == FBWL_VIEW_XWAYLAND) {
-            wlr_xwayland_surface_configure(view->xwayland_surface, view->x, view->y,
-                (uint16_t)(view->saved_w > 0 ? view->saved_w : 1),
-                (uint16_t)(view->saved_h > 0 ? view->saved_h : 1));
-        }
-        view_foreign_update_output_from_position(view);
-        wlr_log(WLR_INFO, "Fullscreen: %s off", view_display_title(view));
-    }
-}
-
-static struct fbwl_view *view_at(struct fbwl_server *server, double lx, double ly,
-        struct wlr_surface **surface, double *sx, double *sy) {
-    *surface = NULL;
-    *sx = 0;
-    *sy = 0;
-
-    double node_x = 0, node_y = 0;
-    struct wlr_scene_node *node =
-        wlr_scene_node_at(&server->scene->tree.node, lx, ly, &node_x, &node_y);
-    if (node == NULL) {
-        return NULL;
-    }
-
-    if (node->type == WLR_SCENE_NODE_BUFFER) {
-        struct wlr_scene_buffer *scene_buffer = wlr_scene_buffer_from_node(node);
-        struct wlr_scene_surface *scene_surface =
-            wlr_scene_surface_try_from_buffer(scene_buffer);
-        if (scene_surface != NULL) {
-            *surface = scene_surface->surface;
-            *sx = node_x;
-            *sy = node_y;
-        }
-    }
-
-    struct wlr_scene_node *walk = node;
-    while (walk != NULL && walk->data == NULL) {
-        walk = walk->parent != NULL ? &walk->parent->node : NULL;
-    }
-    return walk != NULL ? walk->data : NULL;
 }
 
 static void server_update_pointer_constraint(struct fbwl_server *server) {
@@ -2402,7 +1478,7 @@ static void process_cursor_motion(struct fbwl_server *server, uint32_t time_msec
 
     double sx = 0, sy = 0;
     struct wlr_surface *surface = NULL;
-    (void)view_at(server, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
+    (void)fbwl_view_at(server->scene, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
 
     if (surface != NULL) {
         struct wlr_surface *prev_surface = server->seat->pointer_state.focused_surface;
@@ -2441,8 +1517,8 @@ static void grab_update(struct fbwl_server *server) {
         view->y = server->grab.view_y + (int)dy;
         wlr_scene_node_set_position(&view->scene_tree->node, view->x, view->y);
         if (view->type == FBWL_VIEW_XWAYLAND && view->xwayland_surface != NULL) {
-            const int w = view_current_width(view);
-            const int h = view_current_height(view);
+            const int w = fbwl_view_current_width(view);
+            const int h = fbwl_view_current_height(view);
             if (w > 0 && h > 0) {
                 wlr_xwayland_surface_configure(view->xwayland_surface, view->x, view->y,
                     (uint16_t)w, (uint16_t)h);
@@ -2547,7 +1623,7 @@ static bool server_get_confine_box(struct fbwl_server *server,
 
     struct wlr_surface *surface = NULL;
     double sx = 0, sy = 0;
-    (void)view_at(server, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
+    (void)fbwl_view_at(server->scene, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
     if (surface != constraint->surface) {
         return false;
     }
@@ -2703,12 +1779,12 @@ static void server_cursor_button(struct wl_listener *listener, void *data) {
             struct fbwl_view *view = server->grab.view;
             if (view != NULL && server->grab.mode == FBWL_CURSOR_MOVE) {
                 wlr_log(WLR_INFO, "Move: %s x=%d y=%d",
-                    view_display_title(view),
+                    fbwl_view_display_title(view),
                     view->x, view->y);
             }
             if (view != NULL && server->grab.mode == FBWL_CURSOR_RESIZE) {
                 wlr_log(WLR_INFO, "Resize: %s w=%d h=%d",
-                    view_display_title(view),
+                    fbwl_view_display_title(view),
                     server->grab.last_w, server->grab.last_h);
                 if (view->type == FBWL_VIEW_XDG) {
                     wlr_xdg_toplevel_set_resizing(view->xdg_toplevel, false);
@@ -2742,11 +1818,10 @@ static void server_cursor_button(struct wl_listener *listener, void *data) {
 
         double sx = 0, sy = 0;
         struct wlr_surface *surface = NULL;
-        struct fbwl_view *view = view_at(server, server->cursor->x, server->cursor->y,
-            &surface, &sx, &sy);
+        struct fbwl_view *view = fbwl_view_at(server->scene, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
         wlr_log(WLR_INFO, "Pointer press at %.1f,%.1f hit=%s",
             server->cursor->x, server->cursor->y,
-            view != NULL ? view_display_title(view) : "(none)");
+            view != NULL ? fbwl_view_display_title(view) : "(none)");
 
         const uint32_t modifiers = server_keyboard_modifiers(server);
         const bool alt = (modifiers & WLR_MODIFIER_ALT) != 0;
@@ -2767,9 +1842,9 @@ static void server_cursor_button(struct wl_listener *listener, void *data) {
             server->grab.view_x = view->x;
             server->grab.view_y = view->y;
             server->grab.view_w =
-                view_current_width(view);
+                fbwl_view_current_width(view);
             server->grab.view_h =
-                view_current_height(view);
+                fbwl_view_current_height(view);
             server->grab.last_w = server->grab.view_w;
             server->grab.last_h = server->grab.view_h;
 
@@ -2786,7 +1861,7 @@ static void server_cursor_button(struct wl_listener *listener, void *data) {
 
         if (view != NULL && surface == NULL && event->button == BTN_RIGHT) {
             const struct fbwl_decor_hit hit =
-                view_decor_hit_test(view, server->cursor->x, server->cursor->y);
+                fbwl_view_decor_hit_test(view, &server->decor_theme, server->cursor->x, server->cursor->y);
             if (hit.kind == FBWL_DECOR_HIT_TITLEBAR) {
                 server_menu_ui_open_window(server, view, (int)server->cursor->x, (int)server->cursor->y);
                 return;
@@ -2795,7 +1870,7 @@ static void server_cursor_button(struct wl_listener *listener, void *data) {
 
         if (view != NULL && surface == NULL && event->button == BTN_LEFT) {
             const struct fbwl_decor_hit hit =
-                view_decor_hit_test(view, server->cursor->x, server->cursor->y);
+                fbwl_view_decor_hit_test(view, &server->decor_theme, server->cursor->x, server->cursor->y);
             if (hit.kind != FBWL_DECOR_HIT_NONE) {
                 fbwm_core_focus_view(&server->wm, &view->wm_view);
 
@@ -2807,8 +1882,8 @@ static void server_cursor_button(struct wl_listener *listener, void *data) {
                     server->grab.grab_y = server->cursor->y;
                     server->grab.view_x = view->x;
                     server->grab.view_y = view->y;
-                    server->grab.view_w = view_current_width(view);
-                    server->grab.view_h = view_current_height(view);
+                    server->grab.view_w = fbwl_view_current_width(view);
+                    server->grab.view_h = fbwl_view_current_height(view);
                     server->grab.last_w = server->grab.view_w;
                     server->grab.last_h = server->grab.view_h;
                     server->grab.mode = FBWL_CURSOR_MOVE;
@@ -2822,8 +1897,8 @@ static void server_cursor_button(struct wl_listener *listener, void *data) {
                     server->grab.grab_y = server->cursor->y;
                     server->grab.view_x = view->x;
                     server->grab.view_y = view->y;
-                    server->grab.view_w = view_current_width(view);
-                    server->grab.view_h = view_current_height(view);
+                    server->grab.view_w = fbwl_view_current_width(view);
+                    server->grab.view_h = fbwl_view_current_height(view);
                     server->grab.last_w = server->grab.view_w;
                     server->grab.last_h = server->grab.view_h;
                     server->grab.mode = FBWL_CURSOR_RESIZE;
@@ -2841,7 +1916,7 @@ static void server_cursor_button(struct wl_listener *listener, void *data) {
                     return;
                 }
                 if (hit.kind == FBWL_DECOR_HIT_BTN_MAX) {
-                    view_set_maximized(view, !view->maximized);
+                    fbwl_view_set_maximized(view, !view->maximized, server->output_layout, &server->outputs);
                     return;
                 }
                 if (hit.kind == FBWL_DECOR_HIT_BTN_MIN) {
@@ -2961,7 +2036,7 @@ static bool server_keybindings_execute(struct fbwl_server *server, const struct 
         if (wm_view != NULL) {
             struct fbwl_view *view = wm_view->userdata;
             if (view != NULL) {
-                view_set_maximized(view, !view->maximized);
+                fbwl_view_set_maximized(view, !view->maximized, server->output_layout, &server->outputs);
             }
         }
         return true;
@@ -2971,7 +2046,8 @@ static bool server_keybindings_execute(struct fbwl_server *server, const struct 
         if (wm_view != NULL) {
             struct fbwl_view *view = wm_view->userdata;
             if (view != NULL) {
-                view_set_fullscreen(view, !view->fullscreen, NULL);
+                fbwl_view_set_fullscreen(view, !view->fullscreen, server->output_layout, &server->outputs,
+                    server->layer_normal, server->layer_fullscreen, NULL);
             }
         }
         return true;
@@ -3778,7 +2854,7 @@ static void server_toolbar_ui_rebuild(struct fbwl_server *server) {
                     wlr_scene_node_set_position(&ui->iconbar_items[idx]->node, xoff, 0);
                 }
 
-                struct wlr_buffer *buf = fbwl_text_buffer_create(view_display_title(view), iw, ui->height, 8, fg);
+                struct wlr_buffer *buf = fbwl_text_buffer_create(fbwl_view_display_title(view), iw, ui->height, 8, fg);
                 if (buf != NULL) {
                     struct wlr_scene_buffer *sb = wlr_scene_buffer_create(ui->tree, buf);
                     if (sb != NULL) {
@@ -3789,7 +2865,7 @@ static void server_toolbar_ui_rebuild(struct fbwl_server *server) {
                 }
 
                 wlr_log(WLR_INFO, "Toolbar: iconbar item idx=%zu lx=%d w=%d title=%s minimized=%d",
-                    idx, xoff, iw, view_display_title(view), view->minimized ? 1 : 0);
+                    idx, xoff, iw, fbwl_view_display_title(view), view->minimized ? 1 : 0);
 
                 xoff += iw;
                 idx++;
@@ -4016,7 +3092,7 @@ static bool server_toolbar_ui_handle_click(struct fbwl_server *server, int lx, i
                 return true;
             }
 
-            wlr_log(WLR_INFO, "Toolbar: click iconbar idx=%zu title=%s", i, view_display_title(view));
+            wlr_log(WLR_INFO, "Toolbar: click iconbar idx=%zu title=%s", i, fbwl_view_display_title(view));
 
             if (view->minimized) {
                 view_set_minimized(view, false, "toolbar-iconbar");
@@ -4630,7 +3706,7 @@ static void server_menu_ui_open_window(struct fbwl_server *server, struct fbwl_v
 
     server_menu_ui_rebuild(server);
     wlr_log(WLR_INFO, "Menu: open-window title=%s x=%d y=%d items=%zu",
-        view_display_title(view), x, y, ui->current->item_count);
+        fbwl_view_display_title(view), x, y, ui->current->item_count);
 }
 
 static ssize_t server_menu_ui_index_at(const struct fbwl_menu_ui *ui, int lx, int ly) {
@@ -4710,7 +3786,7 @@ static void server_menu_ui_activate_selected(struct fbwl_server *server) {
 
         switch (it->view_action) {
         case FBWL_MENU_VIEW_CLOSE:
-            wlr_log(WLR_INFO, "Menu: window-close title=%s", view_display_title(view));
+            wlr_log(WLR_INFO, "Menu: window-close title=%s", fbwl_view_display_title(view));
             if (view->type == FBWL_VIEW_XDG) {
                 wlr_xdg_toplevel_send_close(view->xdg_toplevel);
             } else if (view->type == FBWL_VIEW_XWAYLAND) {
@@ -4719,18 +3795,19 @@ static void server_menu_ui_activate_selected(struct fbwl_server *server) {
             server_menu_ui_close(server, "window-close");
             return;
         case FBWL_MENU_VIEW_TOGGLE_MINIMIZE:
-            wlr_log(WLR_INFO, "Menu: window-minimize title=%s", view_display_title(view));
+            wlr_log(WLR_INFO, "Menu: window-minimize title=%s", fbwl_view_display_title(view));
             view_set_minimized(view, !view->minimized, "window-menu");
             server_menu_ui_close(server, "window-minimize");
             return;
         case FBWL_MENU_VIEW_TOGGLE_MAXIMIZE:
-            wlr_log(WLR_INFO, "Menu: window-maximize title=%s", view_display_title(view));
-            view_set_maximized(view, !view->maximized);
+            wlr_log(WLR_INFO, "Menu: window-maximize title=%s", fbwl_view_display_title(view));
+            fbwl_view_set_maximized(view, !view->maximized, server->output_layout, &server->outputs);
             server_menu_ui_close(server, "window-maximize");
             return;
         case FBWL_MENU_VIEW_TOGGLE_FULLSCREEN:
-            wlr_log(WLR_INFO, "Menu: window-fullscreen title=%s", view_display_title(view));
-            view_set_fullscreen(view, !view->fullscreen, NULL);
+            wlr_log(WLR_INFO, "Menu: window-fullscreen title=%s", fbwl_view_display_title(view));
+            fbwl_view_set_fullscreen(view, !view->fullscreen, server->output_layout, &server->outputs,
+                server->layer_normal, server->layer_fullscreen, NULL);
             server_menu_ui_close(server, "window-fullscreen");
             return;
         default:
@@ -4821,12 +3898,12 @@ static void server_apps_rules_apply_pre_map(struct fbwl_view *view,
     if (rule->set_workspace) {
         int ws = rule->workspace;
         const int count = fbwm_core_workspace_count(&server->wm);
-        if (ws < 0 || ws >= count) {
-            wlr_log(WLR_ERROR, "Apps: ignoring out-of-range workspace_id=%d (count=%d) for %s",
-                ws, count, view_display_title(view));
-        } else {
-            view->wm_view.workspace = ws;
-        }
+            if (ws < 0 || ws >= count) {
+                wlr_log(WLR_ERROR, "Apps: ignoring out-of-range workspace_id=%d (count=%d) for %s",
+                ws, count, fbwl_view_display_title(view));
+            } else {
+                view->wm_view.workspace = ws;
+            }
     }
 
     if (rule->set_sticky) {
@@ -4848,10 +3925,11 @@ static void server_apps_rules_apply_post_map(struct fbwl_view *view,
     }
 
     if (rule->set_maximized) {
-        view_set_maximized(view, rule->maximized);
+        fbwl_view_set_maximized(view, rule->maximized, view->server->output_layout, &view->server->outputs);
     }
     if (rule->set_fullscreen) {
-        view_set_fullscreen(view, rule->fullscreen, NULL);
+        fbwl_view_set_fullscreen(view, rule->fullscreen, view->server->output_layout, &view->server->outputs,
+            view->server->layer_normal, view->server->layer_fullscreen, NULL);
     }
     if (rule->set_minimized) {
         view_set_minimized(view, rule->minimized, "apps");
@@ -5118,9 +4196,9 @@ static void xdg_decoration_apply(struct fbwl_xdg_decoration *xd) {
         view = tree->node.data;
     }
     if (view != NULL) {
-        view_decor_create(view);
-        view_decor_set_enabled(view, xd->desired_mode == WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
-        view_decor_update(view);
+        fbwl_view_decor_create(view, view->server != NULL ? &view->server->decor_theme : NULL);
+        fbwl_view_decor_set_enabled(view, xd->desired_mode == WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
+        fbwl_view_decor_update(view, view->server != NULL ? &view->server->decor_theme : NULL);
     }
 }
 
@@ -5178,7 +4256,7 @@ static void server_xdg_activation_request_activate(struct wl_listener *listener,
         return;
     }
 
-    struct fbwl_view *view = server_view_from_surface(event->surface);
+    struct fbwl_view *view = fbwl_view_from_surface(event->surface);
     if (view == NULL) {
         wlr_log(WLR_INFO, "XDG activation: request for unknown surface");
         return;
@@ -5275,12 +4353,12 @@ static bool fbwl_wm_view_is_mapped(const struct fbwm_view *wm_view) {
 
 static const char *fbwl_wm_view_title(const struct fbwm_view *wm_view) {
     const struct fbwl_view *view = wm_view->userdata;
-    return view_title(view);
+    return fbwl_view_title(view);
 }
 
 static const char *fbwl_wm_view_app_id(const struct fbwm_view *wm_view) {
     const struct fbwl_view *view = wm_view->userdata;
-    return view_app_id(view);
+    return fbwl_view_app_id(view);
 }
 
 static const struct fbwm_view_ops fbwl_wm_view_ops = {
@@ -5294,7 +4372,8 @@ static void xdg_toplevel_map(struct wl_listener *listener, void *data) {
     (void)data;
     struct fbwl_view *view = wl_container_of(listener, view, map);
     if (!view->placed) {
-        view_place_initial(view);
+        fbwl_view_place_initial(view, &view->server->wm, view->server->output_layout, &view->server->outputs,
+            view->server->cursor->x, view->server->cursor->y);
         view->placed = true;
     }
     view->mapped = true;
@@ -5307,29 +4386,29 @@ static void xdg_toplevel_map(struct wl_listener *listener, void *data) {
     const struct fbwl_apps_rule *apps_rule = NULL;
     size_t apps_rule_idx = 0;
     if (!view->apps_rules_applied) {
-        const char *app_id = view_app_id(view);
+        const char *app_id = fbwl_view_app_id(view);
         const char *instance = NULL;
         if (view->type == FBWL_VIEW_XWAYLAND && view->xwayland_surface != NULL) {
             instance = view->xwayland_surface->instance;
         } else {
             instance = app_id;
         }
-        const char *title = view_title(view);
+        const char *title = fbwl_view_title(view);
         apps_rule = fbwl_apps_rules_match(view->server->apps_rules, view->server->apps_rule_count,
             app_id, instance, title, &apps_rule_idx);
         if (apps_rule != NULL) {
             wlr_log(WLR_INFO, "Apps: match rule=%zu title=%s app_id=%s",
                 apps_rule_idx,
-                view_title(view) != NULL ? view_title(view) : "(no-title)",
-                view_app_id(view) != NULL ? view_app_id(view) : "(no-app-id)");
+                fbwl_view_title(view) != NULL ? fbwl_view_title(view) : "(no-title)",
+                fbwl_view_app_id(view) != NULL ? fbwl_view_app_id(view) : "(no-app-id)");
 
             server_apps_rules_apply_pre_map(view, apps_rule);
             view->apps_rules_applied = true;
 
             wlr_log(WLR_INFO,
                 "Apps: applied title=%s app_id=%s workspace_id=%d sticky=%d jump=%d minimized=%d maximized=%d fullscreen=%d",
-                view_display_title(view),
-                view_app_id(view) != NULL ? view_app_id(view) : "(no-app-id)",
+                fbwl_view_display_title(view),
+                fbwl_view_app_id(view) != NULL ? fbwl_view_app_id(view) : "(no-app-id)",
                 apps_rule->set_workspace ? apps_rule->workspace : -1,
                 apps_rule->set_sticky ? (apps_rule->sticky ? 1 : 0) : -1,
                 apps_rule->set_jump ? (apps_rule->jump ? 1 : 0) : -1,
@@ -5366,29 +4445,31 @@ static void xdg_toplevel_commit(struct wl_listener *listener, void *data) {
         wlr_xdg_toplevel_set_size(view->xdg_toplevel, 0, 0);
     }
 
-    struct wlr_surface *surface = view_wlr_surface(view);
+    struct wlr_surface *surface = fbwl_view_wlr_surface(view);
     const int w = surface->current.width;
     const int h = surface->current.height;
     if (w > 0 && h > 0 && (w != view->width || h != view->height)) {
         view->width = w;
         view->height = h;
         wlr_log(WLR_INFO, "Surface size: %s %dx%d",
-            view_display_title(view),
+            fbwl_view_display_title(view),
             w, h);
     }
-    view_decor_update(view);
+    fbwl_view_decor_update(view, &view->server->decor_theme);
 }
 
 static void xdg_toplevel_request_maximize(struct wl_listener *listener, void *data) {
     (void)data;
     struct fbwl_view *view = wl_container_of(listener, view, request_maximize);
-    view_set_maximized(view, view->xdg_toplevel->requested.maximized);
+    fbwl_view_set_maximized(view, view->xdg_toplevel->requested.maximized, view->server->output_layout,
+        &view->server->outputs);
 }
 
 static void xdg_toplevel_request_fullscreen(struct wl_listener *listener, void *data) {
     (void)data;
     struct fbwl_view *view = wl_container_of(listener, view, request_fullscreen);
-    view_set_fullscreen(view, view->xdg_toplevel->requested.fullscreen,
+    fbwl_view_set_fullscreen(view, view->xdg_toplevel->requested.fullscreen, view->server->output_layout,
+        &view->server->outputs, view->server->layer_normal, view->server->layer_fullscreen,
         view->xdg_toplevel->requested.fullscreen_output);
 }
 
@@ -5405,7 +4486,7 @@ static void xdg_toplevel_set_title(struct wl_listener *listener, void *data) {
         wlr_foreign_toplevel_handle_v1_set_title(view->foreign_toplevel,
             view->xdg_toplevel->title != NULL ? view->xdg_toplevel->title : "");
     }
-    view_decor_update_title_text(view);
+    fbwl_view_decor_update_title_text(view, view->server != NULL ? &view->server->decor_theme : NULL);
     if (view->server != NULL) {
         server_toolbar_ui_rebuild(view->server);
     }
@@ -5426,7 +4507,7 @@ static void xdg_toplevel_set_app_id(struct wl_listener *listener, void *data) {
 static void foreign_toplevel_request_maximize(struct wl_listener *listener, void *data) {
     const struct wlr_foreign_toplevel_handle_v1_maximized_event *event = data;
     struct fbwl_view *view = wl_container_of(listener, view, foreign_request_maximize);
-    view_set_maximized(view, event->maximized);
+    fbwl_view_set_maximized(view, event->maximized, view->server->output_layout, &view->server->outputs);
 }
 
 static void foreign_toplevel_request_minimize(struct wl_listener *listener, void *data) {
@@ -5460,7 +4541,8 @@ static void foreign_toplevel_request_activate(struct wl_listener *listener, void
 static void foreign_toplevel_request_fullscreen(struct wl_listener *listener, void *data) {
     const struct wlr_foreign_toplevel_handle_v1_fullscreen_event *event = data;
     struct fbwl_view *view = wl_container_of(listener, view, foreign_request_fullscreen);
-    view_set_fullscreen(view, event->fullscreen, event->output);
+    fbwl_view_set_fullscreen(view, event->fullscreen, view->server->output_layout, &view->server->outputs,
+        view->server->layer_normal, view->server->layer_fullscreen, event->output);
 }
 
 static void foreign_toplevel_request_close(struct wl_listener *listener, void *data) {
@@ -5481,12 +4563,13 @@ static void xwayland_surface_map(struct wl_listener *listener, void *data) {
     }
 
     if (!view->placed) {
-        view_place_initial(view);
+        fbwl_view_place_initial(view, &view->server->wm, view->server->output_layout, &view->server->outputs,
+            view->server->cursor->x, view->server->cursor->y);
         view->placed = true;
     }
 
-    const int w = view_current_width(view);
-    const int h = view_current_height(view);
+    const int w = fbwl_view_current_width(view);
+    const int h = fbwl_view_current_height(view);
     if (w > 0 && h > 0) {
         wlr_xwayland_surface_configure(view->xwayland_surface, view->x, view->y,
             (uint16_t)w, (uint16_t)h);
@@ -5502,29 +4585,29 @@ static void xwayland_surface_map(struct wl_listener *listener, void *data) {
     const struct fbwl_apps_rule *apps_rule = NULL;
     size_t apps_rule_idx = 0;
     if (!view->apps_rules_applied) {
-        const char *app_id = view_app_id(view);
+        const char *app_id = fbwl_view_app_id(view);
         const char *instance = NULL;
         if (view->type == FBWL_VIEW_XWAYLAND && view->xwayland_surface != NULL) {
             instance = view->xwayland_surface->instance;
         } else {
             instance = app_id;
         }
-        const char *title = view_title(view);
+        const char *title = fbwl_view_title(view);
         apps_rule = fbwl_apps_rules_match(view->server->apps_rules, view->server->apps_rule_count,
             app_id, instance, title, &apps_rule_idx);
         if (apps_rule != NULL) {
             wlr_log(WLR_INFO, "Apps: match rule=%zu title=%s app_id=%s",
                 apps_rule_idx,
-                view_title(view) != NULL ? view_title(view) : "(no-title)",
-                view_app_id(view) != NULL ? view_app_id(view) : "(no-app-id)");
+                fbwl_view_title(view) != NULL ? fbwl_view_title(view) : "(no-title)",
+                fbwl_view_app_id(view) != NULL ? fbwl_view_app_id(view) : "(no-app-id)");
 
             server_apps_rules_apply_pre_map(view, apps_rule);
             view->apps_rules_applied = true;
 
             wlr_log(WLR_INFO,
                 "Apps: applied title=%s app_id=%s workspace_id=%d sticky=%d jump=%d minimized=%d maximized=%d fullscreen=%d",
-                view_display_title(view),
-                view_app_id(view) != NULL ? view_app_id(view) : "(no-app-id)",
+                fbwl_view_display_title(view),
+                fbwl_view_app_id(view) != NULL ? fbwl_view_app_id(view) : "(no-app-id)",
                 apps_rule->set_workspace ? apps_rule->workspace : -1,
                 apps_rule->set_sticky ? (apps_rule->sticky ? 1 : 0) : -1,
                 apps_rule->set_jump ? (apps_rule->jump ? 1 : 0) : -1,
@@ -5541,8 +4624,8 @@ static void xwayland_surface_map(struct wl_listener *listener, void *data) {
     }
     fbwm_core_focus_view(&view->server->wm, &view->wm_view);
     wlr_log(WLR_INFO, "XWayland: map title=%s class=%s",
-        view_title(view) != NULL ? view_title(view) : "(no-title)",
-        view_app_id(view) != NULL ? view_app_id(view) : "(no-class)");
+        fbwl_view_title(view) != NULL ? fbwl_view_title(view) : "(no-title)",
+        fbwl_view_app_id(view) != NULL ? fbwl_view_app_id(view) : "(no-class)");
 }
 
 static void xwayland_surface_unmap(struct wl_listener *listener, void *data) {
@@ -5555,13 +4638,13 @@ static void xwayland_surface_unmap(struct wl_listener *listener, void *data) {
     }
     fbwm_core_view_unmap(&view->server->wm, &view->wm_view);
     apply_workspace_visibility(view->server, "xwayland-unmap");
-    wlr_log(WLR_INFO, "XWayland: unmap title=%s", view_display_title(view));
+    wlr_log(WLR_INFO, "XWayland: unmap title=%s", fbwl_view_display_title(view));
 }
 
 static void xwayland_surface_commit(struct wl_listener *listener, void *data) {
     (void)data;
     struct fbwl_view *view = wl_container_of(listener, view, commit);
-    struct wlr_surface *surface = view_wlr_surface(view);
+    struct wlr_surface *surface = fbwl_view_wlr_surface(view);
     if (surface == NULL) {
         return;
     }
@@ -5571,9 +4654,9 @@ static void xwayland_surface_commit(struct wl_listener *listener, void *data) {
     if (w > 0 && h > 0 && (w != view->width || h != view->height)) {
         view->width = w;
         view->height = h;
-        wlr_log(WLR_INFO, "Surface size: %s %dx%d", view_display_title(view), w, h);
+        wlr_log(WLR_INFO, "Surface size: %s %dx%d", fbwl_view_display_title(view), w, h);
     }
-    view_decor_update(view);
+    fbwl_view_decor_update(view, view->server != NULL ? &view->server->decor_theme : NULL);
 }
 
 static void xwayland_surface_associate(struct wl_listener *listener, void *data) {
@@ -5592,13 +4675,13 @@ static void xwayland_surface_associate(struct wl_listener *listener, void *data)
     }
     (void)wlr_scene_surface_create(view->scene_tree, xsurface->surface);
     view->scene_tree->node.data = view;
-    view_decor_create(view);
-    view_decor_set_enabled(view, true);
+    fbwl_view_decor_create(view, view->server != NULL ? &view->server->decor_theme : NULL);
+    fbwl_view_decor_set_enabled(view, true);
 
     view->x = xsurface->x;
     view->y = xsurface->y;
     wlr_scene_node_set_position(&view->scene_tree->node, view->x, view->y);
-    view_foreign_update_output_from_position(view);
+    fbwl_view_foreign_update_output_from_position(view, view->server->output_layout);
 
     view->map.notify = xwayland_surface_map;
     wl_signal_add(&xsurface->surface->events.map, &view->map);
@@ -5608,8 +4691,8 @@ static void xwayland_surface_associate(struct wl_listener *listener, void *data)
     wl_signal_add(&xsurface->surface->events.commit, &view->commit);
 
     wlr_log(WLR_INFO, "XWayland: associate title=%s class=%s",
-        view_title(view) != NULL ? view_title(view) : "(no-title)",
-        view_app_id(view) != NULL ? view_app_id(view) : "(no-class)");
+        fbwl_view_title(view) != NULL ? fbwl_view_title(view) : "(no-title)",
+        fbwl_view_app_id(view) != NULL ? fbwl_view_app_id(view) : "(no-class)");
 }
 
 static void xwayland_surface_dissociate(struct wl_listener *listener, void *data) {
@@ -5645,13 +4728,13 @@ static void xwayland_surface_request_configure(struct wl_listener *listener, voi
     if (view->scene_tree != NULL) {
         wlr_scene_node_set_position(&view->scene_tree->node, view->x, view->y);
     }
-    view_decor_update(view);
+    fbwl_view_decor_update(view, view->server != NULL ? &view->server->decor_theme : NULL);
 
     wlr_xwayland_surface_configure(view->xwayland_surface, event->x, event->y,
         event->width, event->height);
-    view_foreign_update_output_from_position(view);
+    fbwl_view_foreign_update_output_from_position(view, view->server->output_layout);
     wlr_log(WLR_INFO, "XWayland: request_configure title=%s x=%d y=%d w=%u h=%u mask=0x%x",
-        view_display_title(view), event->x, event->y, event->width, event->height, event->mask);
+        fbwl_view_display_title(view), event->x, event->y, event->width, event->height, event->mask);
 }
 
 static void xwayland_surface_request_activate(struct wl_listener *listener, void *data) {
@@ -5686,9 +4769,9 @@ static void xwayland_surface_set_title(struct wl_listener *listener, void *data)
     struct fbwl_view *view = wl_container_of(listener, view, xwayland_set_title);
     if (view->foreign_toplevel != NULL) {
         wlr_foreign_toplevel_handle_v1_set_title(view->foreign_toplevel,
-            view_title(view) != NULL ? view_title(view) : "");
+            fbwl_view_title(view) != NULL ? fbwl_view_title(view) : "");
     }
-    view_decor_update_title_text(view);
+    fbwl_view_decor_update_title_text(view, view->server != NULL ? &view->server->decor_theme : NULL);
     if (view->server != NULL) {
         server_toolbar_ui_rebuild(view->server);
     }
@@ -5699,7 +4782,7 @@ static void xwayland_surface_set_class(struct wl_listener *listener, void *data)
     struct fbwl_view *view = wl_container_of(listener, view, xwayland_set_class);
     if (view->foreign_toplevel != NULL) {
         wlr_foreign_toplevel_handle_v1_set_app_id(view->foreign_toplevel,
-            view_app_id(view) != NULL ? view_app_id(view) : "");
+            fbwl_view_app_id(view) != NULL ? fbwl_view_app_id(view) : "");
     }
     if (view->server != NULL) {
         server_toolbar_ui_rebuild(view->server);
@@ -5883,7 +4966,7 @@ static void server_new_xdg_toplevel(struct wl_listener *listener, void *data) {
             xdg_toplevel->base);
     view->scene_tree->node.data = view;
     xdg_toplevel->base->data = view->scene_tree;
-    view_decor_create(view);
+    fbwl_view_decor_create(view, &server->decor_theme);
 
     fbwm_view_init(&view->wm_view, &fbwl_wm_view_ops, view);
 
