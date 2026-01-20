@@ -306,13 +306,18 @@ fluxbox_wayland_SOURCES = \
 	src/wmcore/fbwm_output.h \
 	src/wayland/fbwl_apps_rules.c \
 	src/wayland/fbwl_apps_rules.h \
-	src/wayland/fbwl_ipc.c \
-	src/wayland/fbwl_ipc.h \
-	src/wayland/fbwl_keybindings.h \
-	src/wayland/fbwl_util.c \
-	src/wayland/fbwl_util.h \
-	src/wayland/fbwl_ui_text.c \
-	src/wayland/fbwl_ui_text.h \
+		src/wayland/fbwl_ipc.c \
+		src/wayland/fbwl_ipc.h \
+		src/wayland/fbwl_keybindings.h \
+		src/wayland/fbwl_sni_icon.c \
+		src/wayland/fbwl_sni_item.c \
+		src/wayland/fbwl_sni_tray.c \
+		src/wayland/fbwl_sni_tray.h \
+		src/wayland/fbwl_sni_tray_internal.h \
+		src/wayland/fbwl_util.c \
+		src/wayland/fbwl_util.h \
+		src/wayland/fbwl_ui_text.c \
+		src/wayland/fbwl_ui_text.h \
 	src/wayland/fbwl_keys_parse.c \
 	src/wayland/fbwl_keys_parse.h \
 	src/wayland/fbwl_menu.c \
