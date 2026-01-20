@@ -97,6 +97,7 @@
 #include "wayland/fbwl_output_management.h"
 #include "wayland/fbwl_output_power.h"
 #include "wayland/fbwl_scene_layers.h"
+#include "wayland/fbwl_seat.h"
 #include "wayland/fbwl_sni_tray.h"
 #include "wayland/fbwl_style_parse.h"
 #include "wayland/fbwl_ui_decor_theme.h"
@@ -214,15 +215,6 @@ struct fbwl_init_settings {
     char *apps_file;
     char *style_file;
     char *menu_file;
-};
-
-struct fbwl_keyboard {
-    struct wl_list link;
-    struct fbwl_server *server;
-    struct wlr_keyboard *wlr_keyboard;
-    struct wl_listener modifiers;
-    struct wl_listener key;
-    struct wl_listener destroy;
 };
 
 enum fbwl_cursor_mode {
@@ -1937,15 +1929,6 @@ static void server_cursor_frame(struct wl_listener *listener, void *data) {
     (void)data;
     struct fbwl_server *server = wl_container_of(listener, server, cursor_frame);
     wlr_seat_pointer_notify_frame(server->seat);
-}
-
-static void keyboard_handle_modifiers(struct wl_listener *listener, void *data) {
-    (void)data;
-    struct fbwl_keyboard *keyboard = wl_container_of(listener, keyboard, modifiers);
-    server_notify_activity(keyboard->server);
-    wlr_seat_set_keyboard(keyboard->server->seat, keyboard->wlr_keyboard);
-    wlr_seat_keyboard_notify_modifiers(keyboard->server->seat,
-        &keyboard->wlr_keyboard->modifiers);
 }
 
 static bool server_keybindings_add_from_keys_file(void *userdata, xkb_keysym_t sym, uint32_t modifiers,
@@ -3669,6 +3652,50 @@ static void server_menu_ui_activate_selected(struct fbwl_server *server) {
     }
 }
 
+static bool server_menu_ui_handle_keypress(struct fbwl_server *server, xkb_keysym_t sym) {
+    if (server == NULL) {
+        return false;
+    }
+    if (!server->menu_ui.open) {
+        return false;
+    }
+
+    if (sym == XKB_KEY_Escape) {
+        server_menu_ui_close(server, "escape");
+        return true;
+    }
+    if (sym == XKB_KEY_Return || sym == XKB_KEY_KP_Enter) {
+        server_menu_ui_activate_selected(server);
+        return true;
+    }
+    if (sym == XKB_KEY_Down) {
+        server_menu_ui_set_selected(server, server->menu_ui.selected + 1);
+        return true;
+    }
+    if (sym == XKB_KEY_Up) {
+        size_t idx = server->menu_ui.selected;
+        if (idx > 0) {
+            idx--;
+        }
+        server_menu_ui_set_selected(server, idx);
+        return true;
+    }
+    if (sym == XKB_KEY_Left || sym == XKB_KEY_BackSpace) {
+        if (server->menu_ui.depth > 0) {
+            server->menu_ui.depth--;
+            server->menu_ui.current = server->menu_ui.stack[server->menu_ui.depth];
+            server->menu_ui.selected = 0;
+            server_menu_ui_rebuild(server);
+            wlr_log(WLR_INFO, "Menu: back items=%zu", server->menu_ui.current != NULL ? server->menu_ui.current->item_count : 0);
+        } else {
+            server_menu_ui_close(server, "back");
+        }
+        return true;
+    }
+
+    return false;
+}
+
 static bool server_menu_ui_handle_click(struct fbwl_server *server, int lx, int ly, uint32_t button) {
     if (server == NULL) {
         return false;
@@ -3814,143 +3841,58 @@ static void server_apps_rules_apply_post_map(struct fbwl_view *view,
     }
 }
 
-static void keyboard_handle_key(struct wl_listener *listener, void *data) {
-    struct fbwl_keyboard *keyboard = wl_container_of(listener, keyboard, key);
-    struct fbwl_server *server = keyboard->server;
-    struct wlr_keyboard_key_event *event = data;
+static void seat_notify_activity(void *userdata) {
+    struct fbwl_server *server = userdata;
     server_notify_activity(server);
-
-    uint32_t keycode = event->keycode + 8;
-    const xkb_keysym_t *syms;
-    int nsyms = xkb_state_key_get_syms(
-        keyboard->wlr_keyboard->xkb_state, keycode, &syms);
-
-    bool handled = false;
-    uint32_t modifiers = wlr_keyboard_get_modifiers(keyboard->wlr_keyboard);
-
-    if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED && server->menu_ui.open) {
-        for (int i = 0; i < nsyms; i++) {
-            const xkb_keysym_t sym = syms[i];
-            if (sym == XKB_KEY_Escape) {
-                server_menu_ui_close(server, "escape");
-                handled = true;
-                break;
-            }
-            if (sym == XKB_KEY_Return || sym == XKB_KEY_KP_Enter) {
-                server_menu_ui_activate_selected(server);
-                handled = true;
-                break;
-            }
-            if (sym == XKB_KEY_Down) {
-                server_menu_ui_set_selected(server, server->menu_ui.selected + 1);
-                handled = true;
-                break;
-            }
-            if (sym == XKB_KEY_Up) {
-                size_t idx = server->menu_ui.selected;
-                if (idx > 0) {
-                    idx--;
-                }
-                server_menu_ui_set_selected(server, idx);
-                handled = true;
-                break;
-            }
-            if (sym == XKB_KEY_Left || sym == XKB_KEY_BackSpace) {
-                if (server->menu_ui.depth > 0) {
-                    server->menu_ui.depth--;
-                    server->menu_ui.current = server->menu_ui.stack[server->menu_ui.depth];
-                    server->menu_ui.selected = 0;
-                    server_menu_ui_rebuild(server);
-                    wlr_log(WLR_INFO, "Menu: back items=%zu", server->menu_ui.current != NULL ? server->menu_ui.current->item_count : 0);
-                } else {
-                    server_menu_ui_close(server, "back");
-                }
-                handled = true;
-                break;
-            }
-        }
-    }
-
-    if (!handled && server->cmd_dialog_ui.open) {
-        if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
-            for (int i = 0; i < nsyms; i++) {
-                if (server_cmd_dialog_ui_handle_key(server, syms[i], modifiers)) {
-                    break;
-                }
-            }
-        }
-        handled = true;
-    }
-
-    if (!handled && !server_keyboard_shortcuts_inhibited(server) &&
-            event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
-        const struct fbwl_keybindings_hooks hooks = keybindings_hooks(server);
-        for (int i = 0; i < nsyms; i++) {
-            handled = fbwl_keybindings_handle(server->keybindings, server->keybinding_count, syms[i], modifiers, &hooks);
-            if (handled) {
-                break;
-            }
-        }
-    }
-
-    if (!handled) {
-        wlr_seat_set_keyboard(server->seat, keyboard->wlr_keyboard);
-        wlr_seat_keyboard_notify_key(server->seat,
-            event->time_msec, event->keycode, event->state);
-    }
 }
 
-static void keyboard_handle_destroy(struct wl_listener *listener, void *data) {
-    (void)data;
-    struct fbwl_keyboard *keyboard = wl_container_of(listener, keyboard, destroy);
-
-    fbwl_cleanup_listener(&keyboard->modifiers);
-    fbwl_cleanup_listener(&keyboard->key);
-    fbwl_cleanup_listener(&keyboard->destroy);
-    wl_list_remove(&keyboard->link);
-    free(keyboard);
+static bool seat_menu_is_open(void *userdata) {
+    struct fbwl_server *server = userdata;
+    return server != NULL && server->menu_ui.open;
 }
 
-static void server_new_keyboard(struct fbwl_server *server, struct wlr_input_device *device) {
-    struct wlr_keyboard *wlr_keyboard = wlr_keyboard_from_input_device(device);
+static bool seat_menu_handle_key(void *userdata, xkb_keysym_t sym) {
+    struct fbwl_server *server = userdata;
+    return server_menu_ui_handle_keypress(server, sym);
+}
 
-    struct fbwl_keyboard *keyboard = calloc(1, sizeof(*keyboard));
-    keyboard->server = server;
-    keyboard->wlr_keyboard = wlr_keyboard;
+static bool seat_cmd_dialog_is_open(void *userdata) {
+    struct fbwl_server *server = userdata;
+    return server != NULL && server->cmd_dialog_ui.open;
+}
 
-    if (wlr_input_device_get_virtual_keyboard(device) == NULL) {
-        struct xkb_context *context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
-        struct xkb_keymap *keymap = xkb_keymap_new_from_names(context, NULL,
-            XKB_KEYMAP_COMPILE_NO_FLAGS);
+static bool seat_cmd_dialog_handle_key(void *userdata, xkb_keysym_t sym, uint32_t modifiers) {
+    struct fbwl_server *server = userdata;
+    return server_cmd_dialog_ui_handle_key(server, sym, modifiers);
+}
 
-        wlr_keyboard_set_keymap(wlr_keyboard, keymap);
-        xkb_keymap_unref(keymap);
-        xkb_context_unref(context);
-        wlr_keyboard_set_repeat_info(wlr_keyboard, 25, 600);
-    }
+static bool seat_shortcuts_inhibited(void *userdata) {
+    struct fbwl_server *server = userdata;
+    return server_keyboard_shortcuts_inhibited(server);
+}
 
-    keyboard->modifiers.notify = keyboard_handle_modifiers;
-    wl_signal_add(&wlr_keyboard->events.modifiers, &keyboard->modifiers);
-    keyboard->key.notify = keyboard_handle_key;
-    wl_signal_add(&wlr_keyboard->events.key, &keyboard->key);
+static bool seat_keybindings_handle(void *userdata, xkb_keysym_t sym, uint32_t modifiers) {
+    struct fbwl_server *server = userdata;
+    const struct fbwl_keybindings_hooks hooks = keybindings_hooks(server);
+    return fbwl_keybindings_handle(server->keybindings, server->keybinding_count, sym, modifiers, &hooks);
+}
 
-    keyboard->destroy.notify = keyboard_handle_destroy;
-    wl_signal_add(&device->events.destroy, &keyboard->destroy);
-
-    wl_list_insert(&server->keyboards, &keyboard->link);
-    wlr_seat_set_keyboard(server->seat, wlr_keyboard);
+static struct fbwl_seat_keyboard_hooks seat_keyboard_hooks(struct fbwl_server *server) {
+    return (struct fbwl_seat_keyboard_hooks){
+        .userdata = server,
+        .notify_activity = seat_notify_activity,
+        .menu_is_open = seat_menu_is_open,
+        .menu_handle_key = seat_menu_handle_key,
+        .cmd_dialog_is_open = seat_cmd_dialog_is_open,
+        .cmd_dialog_handle_key = seat_cmd_dialog_handle_key,
+        .shortcuts_inhibited = seat_shortcuts_inhibited,
+        .keybindings_handle = seat_keybindings_handle,
+    };
 }
 
 static void seat_request_cursor(struct wl_listener *listener, void *data) {
     struct fbwl_server *server = wl_container_of(listener, server, request_cursor);
-    struct wlr_seat_pointer_request_set_cursor_event *event = data;
-
-    struct wlr_seat_client *focused_client =
-        server->seat->pointer_state.focused_client;
-    if (focused_client == event->seat_client) {
-        wlr_cursor_set_surface(server->cursor, event->surface,
-            event->hotspot_x, event->hotspot_y);
-    }
+    fbwl_seat_handle_request_cursor(server->seat, server->cursor, data);
 }
 
 static void cursor_shape_request_set_shape(struct wl_listener *listener, void *data) {
@@ -3981,29 +3923,17 @@ static void cursor_shape_request_set_shape(struct wl_listener *listener, void *d
 
 static void seat_request_set_selection(struct wl_listener *listener, void *data) {
     struct fbwl_server *server = wl_container_of(listener, server, request_set_selection);
-    struct wlr_seat_request_set_selection_event *event = data;
-    wlr_seat_set_selection(server->seat, event->source, event->serial);
+    fbwl_seat_handle_request_set_selection(server->seat, data);
 }
 
 static void seat_request_set_primary_selection(struct wl_listener *listener, void *data) {
     struct fbwl_server *server = wl_container_of(listener, server, request_set_primary_selection);
-    struct wlr_seat_request_set_primary_selection_event *event = data;
-    wlr_seat_set_primary_selection(server->seat, event->source, event->serial);
+    fbwl_seat_handle_request_set_primary_selection(server->seat, data);
 }
 
 static void seat_request_start_drag(struct wl_listener *listener, void *data) {
     struct fbwl_server *server = wl_container_of(listener, server, request_start_drag);
-    struct wlr_seat_request_start_drag_event *event = data;
-
-    if (!wlr_seat_validate_pointer_grab_serial(server->seat, event->origin, event->serial)) {
-        wlr_log(WLR_ERROR, "DnD: rejected start_drag request due to invalid serial");
-        if (event->drag != NULL && event->drag->source != NULL) {
-            wlr_data_source_destroy(event->drag->source);
-        }
-        return;
-    }
-
-    wlr_seat_start_pointer_drag(server->seat, event->drag, event->serial);
+    fbwl_seat_handle_request_start_drag(server->seat, data);
 }
 
 static void pointer_constraint_set_region(struct wl_listener *listener, void *data) {
@@ -4173,51 +4103,29 @@ static void server_new_idle_inhibitor(struct wl_listener *listener, void *data) 
     server_set_idle_inhibited(server, true, "new-inhibitor");
 }
 
-static void server_add_input_device(struct fbwl_server *server, struct wlr_input_device *device);
-
 static void server_new_input(struct wl_listener *listener, void *data) {
     struct fbwl_server *server = wl_container_of(listener, server, new_input);
     struct wlr_input_device *device = data;
-    server_add_input_device(server, device);
-}
-
-static void server_add_input_device(struct fbwl_server *server, struct wlr_input_device *device) {
-    wlr_log(WLR_INFO, "New input device: type=%d name=%s",
-        device->type, device->name != NULL ? device->name : "(null)");
-    switch (device->type) {
-    case WLR_INPUT_DEVICE_KEYBOARD:
-        server_new_keyboard(server, device);
-        break;
-    case WLR_INPUT_DEVICE_POINTER:
-        server->has_pointer = true;
-        wlr_cursor_attach_input_device(server->cursor, device);
-        break;
-    default:
-        break;
-    }
-
-    uint32_t caps = 0;
-    if (!wl_list_empty(&server->keyboards)) {
-        caps |= WL_SEAT_CAPABILITY_KEYBOARD;
-    }
-    if (server->has_pointer) {
-        caps |= WL_SEAT_CAPABILITY_POINTER;
-    }
-    wlr_seat_set_capabilities(server->seat, caps);
+    const struct fbwl_seat_keyboard_hooks hooks = seat_keyboard_hooks(server);
+    fbwl_seat_add_input_device(server->seat, server->cursor, &server->keyboards, &server->has_pointer, device, &hooks);
 }
 
 static void server_new_virtual_keyboard(struct wl_listener *listener, void *data) {
     struct fbwl_server *server = wl_container_of(listener, server, new_virtual_keyboard);
     struct wlr_virtual_keyboard_v1 *vkbd = data;
     wlr_log(WLR_INFO, "New virtual keyboard");
-    server_add_input_device(server, &vkbd->keyboard.base);
+    const struct fbwl_seat_keyboard_hooks hooks = seat_keyboard_hooks(server);
+    fbwl_seat_add_input_device(server->seat, server->cursor, &server->keyboards, &server->has_pointer,
+        &vkbd->keyboard.base, &hooks);
 }
 
 static void server_new_virtual_pointer(struct wl_listener *listener, void *data) {
     struct fbwl_server *server = wl_container_of(listener, server, new_virtual_pointer);
     struct wlr_virtual_pointer_v1_new_pointer_event *event = data;
     wlr_log(WLR_INFO, "New virtual pointer");
-    server_add_input_device(server, &event->new_pointer->pointer.base);
+    const struct fbwl_seat_keyboard_hooks hooks = seat_keyboard_hooks(server);
+    fbwl_seat_add_input_device(server->seat, server->cursor, &server->keyboards, &server->has_pointer,
+        &event->new_pointer->pointer.base, &hooks);
 }
 
 static void fbwl_wm_view_focus(struct fbwm_view *wm_view) {
