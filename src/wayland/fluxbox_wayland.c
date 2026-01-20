@@ -103,6 +103,7 @@
 #include "wayland/fbwl_util.h"
 #include "wayland/fbwl_ui_text.h"
 #include "wayland/fbwl_view.h"
+#include "wayland/fbwl_view_foreign_toplevel.h"
 
 struct fbwl_server;
 
@@ -4482,10 +4483,7 @@ static void xdg_toplevel_request_minimize(struct wl_listener *listener, void *da
 static void xdg_toplevel_set_title(struct wl_listener *listener, void *data) {
     (void)data;
     struct fbwl_view *view = wl_container_of(listener, view, set_title);
-    if (view->foreign_toplevel != NULL) {
-        wlr_foreign_toplevel_handle_v1_set_title(view->foreign_toplevel,
-            view->xdg_toplevel->title != NULL ? view->xdg_toplevel->title : "");
-    }
+    fbwl_view_foreign_toplevel_set_title(view, view->xdg_toplevel->title);
     fbwl_view_decor_update_title_text(view, view->server != NULL ? &view->server->decor_theme : NULL);
     if (view->server != NULL) {
         server_toolbar_ui_rebuild(view->server);
@@ -4495,10 +4493,7 @@ static void xdg_toplevel_set_title(struct wl_listener *listener, void *data) {
 static void xdg_toplevel_set_app_id(struct wl_listener *listener, void *data) {
     (void)data;
     struct fbwl_view *view = wl_container_of(listener, view, set_app_id);
-    if (view->foreign_toplevel != NULL) {
-        wlr_foreign_toplevel_handle_v1_set_app_id(view->foreign_toplevel,
-            view->xdg_toplevel->app_id != NULL ? view->xdg_toplevel->app_id : "");
-    }
+    fbwl_view_foreign_toplevel_set_app_id(view, view->xdg_toplevel->app_id);
     if (view->server != NULL) {
         server_toolbar_ui_rebuild(view->server);
     }
@@ -4767,10 +4762,7 @@ static void xwayland_surface_request_close(struct wl_listener *listener, void *d
 static void xwayland_surface_set_title(struct wl_listener *listener, void *data) {
     (void)data;
     struct fbwl_view *view = wl_container_of(listener, view, xwayland_set_title);
-    if (view->foreign_toplevel != NULL) {
-        wlr_foreign_toplevel_handle_v1_set_title(view->foreign_toplevel,
-            fbwl_view_title(view) != NULL ? fbwl_view_title(view) : "");
-    }
+    fbwl_view_foreign_toplevel_set_title(view, fbwl_view_title(view));
     fbwl_view_decor_update_title_text(view, view->server != NULL ? &view->server->decor_theme : NULL);
     if (view->server != NULL) {
         server_toolbar_ui_rebuild(view->server);
@@ -4780,10 +4772,7 @@ static void xwayland_surface_set_title(struct wl_listener *listener, void *data)
 static void xwayland_surface_set_class(struct wl_listener *listener, void *data) {
     (void)data;
     struct fbwl_view *view = wl_container_of(listener, view, xwayland_set_class);
-    if (view->foreign_toplevel != NULL) {
-        wlr_foreign_toplevel_handle_v1_set_app_id(view->foreign_toplevel,
-            fbwl_view_app_id(view) != NULL ? fbwl_view_app_id(view) : "");
-    }
+    fbwl_view_foreign_toplevel_set_app_id(view, fbwl_view_app_id(view));
     if (view->server != NULL) {
         server_toolbar_ui_rebuild(view->server);
     }
@@ -4823,11 +4812,7 @@ static void xwayland_surface_destroy(struct wl_listener *listener, void *data) {
         view->scene_tree = NULL;
     }
 
-    if (view->foreign_toplevel != NULL) {
-        wlr_foreign_toplevel_handle_v1_destroy(view->foreign_toplevel);
-        view->foreign_toplevel = NULL;
-    }
-    view->foreign_output = NULL;
+    fbwl_view_foreign_toplevel_destroy(view);
 
     free(view->decor_title_text_cache);
     view->decor_title_text_cache = NULL;
@@ -4892,28 +4877,14 @@ static void server_xwayland_new_surface(struct wl_listener *listener, void *data
     wl_signal_add(&xsurface->events.set_class, &view->xwayland_set_class);
 
     if (server->foreign_toplevel_mgr != NULL) {
-        view->foreign_toplevel = wlr_foreign_toplevel_handle_v1_create(server->foreign_toplevel_mgr);
-        if (view->foreign_toplevel != NULL) {
-            view->foreign_toplevel->data = view;
-            wlr_foreign_toplevel_handle_v1_set_title(view->foreign_toplevel,
-                xsurface->title != NULL ? xsurface->title : "");
-            wlr_foreign_toplevel_handle_v1_set_app_id(view->foreign_toplevel,
-                xsurface->class != NULL ? xsurface->class : "");
-            wlr_foreign_toplevel_handle_v1_set_maximized(view->foreign_toplevel, view->maximized);
-            wlr_foreign_toplevel_handle_v1_set_minimized(view->foreign_toplevel, view->minimized);
-            wlr_foreign_toplevel_handle_v1_set_fullscreen(view->foreign_toplevel, view->fullscreen);
-
-            view->foreign_request_maximize.notify = foreign_toplevel_request_maximize;
-            wl_signal_add(&view->foreign_toplevel->events.request_maximize, &view->foreign_request_maximize);
-            view->foreign_request_minimize.notify = foreign_toplevel_request_minimize;
-            wl_signal_add(&view->foreign_toplevel->events.request_minimize, &view->foreign_request_minimize);
-            view->foreign_request_activate.notify = foreign_toplevel_request_activate;
-            wl_signal_add(&view->foreign_toplevel->events.request_activate, &view->foreign_request_activate);
-            view->foreign_request_fullscreen.notify = foreign_toplevel_request_fullscreen;
-            wl_signal_add(&view->foreign_toplevel->events.request_fullscreen, &view->foreign_request_fullscreen);
-            view->foreign_request_close.notify = foreign_toplevel_request_close;
-            wl_signal_add(&view->foreign_toplevel->events.request_close, &view->foreign_request_close);
-        }
+        static const struct fbwl_view_foreign_toplevel_handlers handlers = {
+            .request_maximize = foreign_toplevel_request_maximize,
+            .request_minimize = foreign_toplevel_request_minimize,
+            .request_activate = foreign_toplevel_request_activate,
+            .request_fullscreen = foreign_toplevel_request_fullscreen,
+            .request_close = foreign_toplevel_request_close,
+        };
+        fbwl_view_foreign_toplevel_create(view, server->foreign_toplevel_mgr, xsurface->title, xsurface->class, &handlers);
     }
 }
 
@@ -4940,11 +4911,7 @@ static void xdg_toplevel_destroy(struct wl_listener *listener, void *data) {
         view->server->focused_view = NULL;
     }
 
-    if (view->foreign_toplevel != NULL) {
-        wlr_foreign_toplevel_handle_v1_destroy(view->foreign_toplevel);
-        view->foreign_toplevel = NULL;
-    }
-    view->foreign_output = NULL;
+    fbwl_view_foreign_toplevel_destroy(view);
 
     fbwm_core_view_destroy(&view->server->wm, &view->wm_view);
     if (view->server->wm.focused == NULL) {
@@ -4993,29 +4960,15 @@ static void server_new_xdg_toplevel(struct wl_listener *listener, void *data) {
     wl_signal_add(&xdg_toplevel->events.set_app_id, &view->set_app_id);
 
     if (server->foreign_toplevel_mgr != NULL) {
-        view->foreign_toplevel = wlr_foreign_toplevel_handle_v1_create(server->foreign_toplevel_mgr);
-        if (view->foreign_toplevel != NULL) {
-            view->foreign_toplevel->data = view;
-
-            wlr_foreign_toplevel_handle_v1_set_title(view->foreign_toplevel,
-                xdg_toplevel->title != NULL ? xdg_toplevel->title : "");
-            wlr_foreign_toplevel_handle_v1_set_app_id(view->foreign_toplevel,
-                xdg_toplevel->app_id != NULL ? xdg_toplevel->app_id : "");
-            wlr_foreign_toplevel_handle_v1_set_maximized(view->foreign_toplevel, view->maximized);
-            wlr_foreign_toplevel_handle_v1_set_minimized(view->foreign_toplevel, view->minimized);
-            wlr_foreign_toplevel_handle_v1_set_fullscreen(view->foreign_toplevel, view->fullscreen);
-
-            view->foreign_request_maximize.notify = foreign_toplevel_request_maximize;
-            wl_signal_add(&view->foreign_toplevel->events.request_maximize, &view->foreign_request_maximize);
-            view->foreign_request_minimize.notify = foreign_toplevel_request_minimize;
-            wl_signal_add(&view->foreign_toplevel->events.request_minimize, &view->foreign_request_minimize);
-            view->foreign_request_activate.notify = foreign_toplevel_request_activate;
-            wl_signal_add(&view->foreign_toplevel->events.request_activate, &view->foreign_request_activate);
-            view->foreign_request_fullscreen.notify = foreign_toplevel_request_fullscreen;
-            wl_signal_add(&view->foreign_toplevel->events.request_fullscreen, &view->foreign_request_fullscreen);
-            view->foreign_request_close.notify = foreign_toplevel_request_close;
-            wl_signal_add(&view->foreign_toplevel->events.request_close, &view->foreign_request_close);
-        }
+        static const struct fbwl_view_foreign_toplevel_handlers handlers = {
+            .request_maximize = foreign_toplevel_request_maximize,
+            .request_minimize = foreign_toplevel_request_minimize,
+            .request_activate = foreign_toplevel_request_activate,
+            .request_fullscreen = foreign_toplevel_request_fullscreen,
+            .request_close = foreign_toplevel_request_close,
+        };
+        fbwl_view_foreign_toplevel_create(view, server->foreign_toplevel_mgr, xdg_toplevel->title, xdg_toplevel->app_id,
+            &handlers);
     }
 }
 
