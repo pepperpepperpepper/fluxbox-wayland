@@ -311,6 +311,9 @@ fluxbox_wayland_SOURCES = \
 	src/wayland/fbwl_ui_text.h \
 	src/wayland/fbwl_keys_parse.c \
 	src/wayland/fbwl_keys_parse.h \
+	src/wayland/fbwl_style_parse.c \
+	src/wayland/fbwl_style_parse.h \
+	src/wayland/fbwl_ui_decor_theme.h \
 	src/wayland/fluxbox_wayland.c \
 	src/wayland/protocol/xdg-shell-protocol.h
 

@@ -93,6 +93,8 @@
 #include "wmcore/fbwm_output.h"
 #include "wayland/fbwl_keybindings.h"
 #include "wayland/fbwl_keys_parse.h"
+#include "wayland/fbwl_style_parse.h"
+#include "wayland/fbwl_ui_decor_theme.h"
 #include "wayland/fbwl_util.h"
 #include "wayland/fbwl_ui_text.h"
 
@@ -110,19 +112,6 @@ struct fbwl_keybinding {
     enum fbwl_keybinding_action action;
     int arg;
     char *cmd;
-};
-
-struct fbwl_decor_theme {
-    int border_width;
-    int title_height;
-    int button_margin;
-    int button_spacing;
-    float titlebar_active[4];
-    float titlebar_inactive[4];
-    float border_color[4];
-    float btn_close_color[4];
-    float btn_max_color[4];
-    float btn_min_color[4];
 };
 
 enum fbwl_menu_item_kind {
@@ -3763,129 +3752,6 @@ static void decor_theme_set_defaults(struct fbwl_decor_theme *theme) {
     theme->btn_min_color[1] = 0.65f;
     theme->btn_min_color[2] = 0.15f;
     theme->btn_min_color[3] = 1.0f;
-}
-
-static bool parse_hex_color(const char *s, float rgba[4]) {
-    if (s == NULL || rgba == NULL) {
-        return false;
-    }
-
-    while (*s != '\0' && isspace((unsigned char)*s)) {
-        s++;
-    }
-    if (*s == '#') {
-        s++;
-    }
-
-    const size_t len = strlen(s);
-    if (len != 6 && len != 8) {
-        return false;
-    }
-
-    uint32_t comps[4] = {0, 0, 0, 255};
-    for (size_t i = 0; i < len; i++) {
-        if (!isxdigit((unsigned char)s[i])) {
-            return false;
-        }
-    }
-
-    char buf[3] = {0};
-    for (size_t i = 0; i < len / 2; i++) {
-        buf[0] = s[i * 2];
-        buf[1] = s[i * 2 + 1];
-        char *end = NULL;
-        unsigned long v = strtoul(buf, &end, 16);
-        if (end == NULL || *end != '\0' || v > 255) {
-            return false;
-        }
-        comps[i] = (uint32_t)v;
-    }
-
-    rgba[0] = (float)comps[0] / 255.0f;
-    rgba[1] = (float)comps[1] / 255.0f;
-    rgba[2] = (float)comps[2] / 255.0f;
-    rgba[3] = (float)comps[3] / 255.0f;
-    return true;
-}
-
-static bool decor_theme_load_style_file(struct fbwl_decor_theme *theme, const char *path) {
-    if (theme == NULL || path == NULL || *path == '\0') {
-        return false;
-    }
-
-    FILE *f = fopen(path, "r");
-    if (f == NULL) {
-        wlr_log(WLR_ERROR, "Style: failed to open %s: %s", path, strerror(errno));
-        return false;
-    }
-
-    char *line = NULL;
-    size_t cap = 0;
-    ssize_t nread;
-    while ((nread = getline(&line, &cap, f)) != -1) {
-        if (nread > 0 && line[nread - 1] == '\n') {
-            line[nread - 1] = '\0';
-        }
-
-        char *s = trim_inplace(line);
-        if (s == NULL || *s == '\0') {
-            continue;
-        }
-        if (*s == '#' || *s == '!') {
-            continue;
-        }
-
-        char *sep = strchr(s, ':');
-        if (sep == NULL) {
-            continue;
-        }
-        *sep = '\0';
-        char *key = trim_inplace(s);
-        char *val = trim_inplace(sep + 1);
-        if (key == NULL || *key == '\0' || val == NULL || *val == '\0') {
-            continue;
-        }
-
-        if (strcasecmp(key, "window.borderWidth") == 0) {
-            char *end = NULL;
-            long v = strtol(val, &end, 10);
-            if (end != val && (end == NULL || *trim_inplace(end) == '\0') && v > 0 && v < 1000) {
-                theme->border_width = (int)v;
-            }
-            continue;
-        }
-
-        if (strcasecmp(key, "window.title.height") == 0) {
-            char *end = NULL;
-            long v = strtol(val, &end, 10);
-            if (end != val && (end == NULL || *trim_inplace(end) == '\0') && v > 0 && v < 1000) {
-                theme->title_height = (int)v;
-            }
-            continue;
-        }
-
-        if (strcasecmp(key, "window.borderColor") == 0) {
-            (void)parse_hex_color(val, theme->border_color);
-            continue;
-        }
-
-        if (strcasecmp(key, "window.title.focus.color") == 0) {
-            (void)parse_hex_color(val, theme->titlebar_active);
-            continue;
-        }
-
-        if (strcasecmp(key, "window.title.unfocus.color") == 0) {
-            (void)parse_hex_color(val, theme->titlebar_inactive);
-            continue;
-        }
-    }
-
-    free(line);
-    fclose(f);
-
-    wlr_log(WLR_INFO, "Style: loaded %s (border=%d title_h=%d)",
-        path, theme->border_width, theme->title_height);
-    return true;
 }
 
 static void fbwl_menu_free(struct fbwl_menu *menu) {
@@ -9695,7 +9561,7 @@ int main(int argc, char **argv) {
             enable_xwayland = false;
             break;
         case 11:
-            if (!parse_hex_color(optarg, background_color)) {
+            if (!fbwl_parse_hex_color(optarg, background_color)) {
                 fprintf(stderr, "invalid --bg-color (expected #RRGGBB or #RRGGBBAA): %s\n", optarg);
                 return 1;
             }
@@ -10067,7 +9933,7 @@ int main(int argc, char **argv) {
     }
 
     if (style_file != NULL) {
-        (void)decor_theme_load_style_file(&server.decor_theme, style_file);
+        (void)fbwl_style_load_file(&server.decor_theme, style_file);
     }
 
     free(keys_file_owned);
