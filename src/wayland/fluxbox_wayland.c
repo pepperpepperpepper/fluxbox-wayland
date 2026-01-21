@@ -103,6 +103,7 @@
 #include "wayland/fbwl_seat.h"
 #include "wayland/fbwl_sni_tray.h"
 #include "wayland/fbwl_style_parse.h"
+#include "wayland/fbwl_text_input.h"
 #include "wayland/fbwl_ui_cmd_dialog.h"
 #include "wayland/fbwl_ui_decor_theme.h"
 #include "wayland/fbwl_ui_osd.h"
@@ -154,22 +155,6 @@ struct fbwl_xdg_decoration {
 struct fbwl_idle_inhibitor {
     struct fbwl_server *server;
     struct wlr_idle_inhibitor_v1 *inhibitor;
-    struct wl_listener destroy;
-};
-
-struct fbwl_text_input {
-    struct fbwl_server *server;
-    struct wlr_text_input_v3 *text_input;
-    struct wl_listener enable;
-    struct wl_listener commit;
-    struct wl_listener disable;
-    struct wl_listener destroy;
-};
-
-struct fbwl_input_method {
-    struct fbwl_server *server;
-    struct wlr_input_method_v2 *input_method;
-    struct wl_listener commit;
     struct wl_listener destroy;
 };
 
@@ -258,13 +243,7 @@ struct fbwl_server {
     struct wl_listener request_set_primary_selection;
     struct wl_listener request_start_drag;
 
-    struct wlr_text_input_manager_v3 *text_input_mgr;
-    struct wl_listener new_text_input;
-    struct wlr_text_input_v3 *active_text_input;
-
-    struct wlr_input_method_manager_v2 *input_method_mgr;
-    struct wl_listener new_input_method;
-    struct wlr_input_method_v2 *input_method;
+    struct fbwl_text_input_state text_input;
 
     struct wlr_virtual_keyboard_manager_v1 *virtual_keyboard_mgr;
     struct wlr_virtual_pointer_manager_v1 *virtual_pointer_mgr;
@@ -739,256 +718,12 @@ static void server_new_output(struct wl_listener *listener, void *data) {
     server_osd_ui_update_position(server);
 }
 
-static void server_update_input_method(struct fbwl_server *server) {
-    if (server == NULL || server->input_method == NULL) {
-        return;
-    }
-
-    struct wlr_input_method_v2 *im = server->input_method;
-    struct wlr_text_input_v3 *ti = server->active_text_input;
-
-    const bool want_active =
-        ti != NULL && ti->current_enabled && ti->focused_surface != NULL;
-
-    if (want_active) {
-        if (!im->client_active) {
-            wlr_input_method_v2_send_activate(im);
-        }
-
-        const struct wlr_text_input_v3_state *st = &ti->current;
-        if ((ti->active_features & WLR_TEXT_INPUT_V3_FEATURE_SURROUNDING_TEXT) != 0) {
-            const char *txt = st->surrounding.text != NULL ? st->surrounding.text : "";
-            wlr_input_method_v2_send_surrounding_text(im, txt,
-                st->surrounding.cursor, st->surrounding.anchor);
-            wlr_input_method_v2_send_text_change_cause(im, st->text_change_cause);
-        }
-        if ((ti->active_features & WLR_TEXT_INPUT_V3_FEATURE_CONTENT_TYPE) != 0) {
-            wlr_input_method_v2_send_content_type(im,
-                st->content_type.hint, st->content_type.purpose);
-        }
-
-        wlr_input_method_v2_send_done(im);
-    } else {
-        if (im->client_active) {
-            wlr_input_method_v2_send_deactivate(im);
-            wlr_input_method_v2_send_done(im);
-        }
-    }
-}
-
 static void server_text_input_update_focus(struct fbwl_server *server, struct wlr_surface *surface) {
-    if (server == NULL || server->text_input_mgr == NULL) {
+    if (server == NULL) {
         return;
     }
 
-    struct wl_client *focused_client = NULL;
-    if (surface != NULL && surface->resource != NULL) {
-        focused_client = wl_resource_get_client(surface->resource);
-    }
-
-    struct wlr_text_input_v3 *ti;
-    wl_list_for_each(ti, &server->text_input_mgr->text_inputs, link) {
-        if (ti->resource == NULL) {
-            continue;
-        }
-
-        struct wl_client *client = wl_resource_get_client(ti->resource);
-        if (surface != NULL && client == focused_client) {
-            if (ti->focused_surface != surface) {
-                wlr_text_input_v3_send_enter(ti, surface);
-            }
-        } else if (ti->focused_surface != NULL) {
-            wlr_text_input_v3_send_leave(ti);
-        }
-    }
-
-    if (server->active_text_input != NULL &&
-            server->active_text_input->focused_surface != surface) {
-        server->active_text_input = NULL;
-        server_update_input_method(server);
-    }
-}
-
-static void text_input_enable(struct wl_listener *listener, void *data) {
-    struct fbwl_text_input *ti = wl_container_of(listener, ti, enable);
-    struct fbwl_server *server = ti->server;
-    struct wlr_text_input_v3 *text_input = data;
-
-    if (server == NULL || text_input == NULL) {
-        return;
-    }
-
-    if (server->active_text_input != NULL && server->active_text_input != text_input) {
-        wlr_log(WLR_INFO, "TextInput: ignoring enable (another text input already enabled)");
-        return;
-    }
-
-    server->active_text_input = text_input;
-    wlr_log(WLR_INFO, "TextInput: enable features=0x%x", text_input->active_features);
-    server_update_input_method(server);
-}
-
-static void text_input_commit(struct wl_listener *listener, void *data) {
-    struct fbwl_text_input *ti = wl_container_of(listener, ti, commit);
-    struct fbwl_server *server = ti->server;
-    struct wlr_text_input_v3 *text_input = data;
-    if (server == NULL || text_input == NULL) {
-        return;
-    }
-    if (server->active_text_input == text_input) {
-        server_update_input_method(server);
-    }
-}
-
-static void text_input_disable(struct wl_listener *listener, void *data) {
-    struct fbwl_text_input *ti = wl_container_of(listener, ti, disable);
-    struct fbwl_server *server = ti->server;
-    struct wlr_text_input_v3 *text_input = data;
-    if (server == NULL || text_input == NULL) {
-        return;
-    }
-    if (server->active_text_input == text_input) {
-        server->active_text_input = NULL;
-        wlr_log(WLR_INFO, "TextInput: disable");
-        server_update_input_method(server);
-    }
-}
-
-static void text_input_destroy(struct wl_listener *listener, void *data) {
-    (void)data;
-    struct fbwl_text_input *ti = wl_container_of(listener, ti, destroy);
-    struct fbwl_server *server = ti->server;
-    if (server != NULL && server->active_text_input == ti->text_input) {
-        server->active_text_input = NULL;
-        server_update_input_method(server);
-    }
-
-    fbwl_cleanup_listener(&ti->enable);
-    fbwl_cleanup_listener(&ti->commit);
-    fbwl_cleanup_listener(&ti->disable);
-    fbwl_cleanup_listener(&ti->destroy);
-    free(ti);
-}
-
-static void server_new_text_input(struct wl_listener *listener, void *data) {
-    struct fbwl_server *server = wl_container_of(listener, server, new_text_input);
-    struct wlr_text_input_v3 *text_input = data;
-
-    struct fbwl_text_input *ti = calloc(1, sizeof(*ti));
-    if (ti == NULL) {
-        wlr_log(WLR_ERROR, "TextInput: out of memory");
-        return;
-    }
-    ti->server = server;
-    ti->text_input = text_input;
-
-    ti->enable.notify = text_input_enable;
-    wl_signal_add(&text_input->events.enable, &ti->enable);
-    ti->commit.notify = text_input_commit;
-    wl_signal_add(&text_input->events.commit, &ti->commit);
-    ti->disable.notify = text_input_disable;
-    wl_signal_add(&text_input->events.disable, &ti->disable);
-    ti->destroy.notify = text_input_destroy;
-    wl_signal_add(&text_input->events.destroy, &ti->destroy);
-
-    struct wlr_surface *focused = NULL;
-    if (server->seat != NULL) {
-        focused = server->seat->keyboard_state.focused_surface;
-    }
-    if (focused != NULL && focused->resource != NULL && text_input->resource != NULL) {
-        struct wl_client *focused_client = wl_resource_get_client(focused->resource);
-        struct wl_client *client = wl_resource_get_client(text_input->resource);
-        if (client == focused_client) {
-            wlr_text_input_v3_send_enter(text_input, focused);
-        }
-    }
-}
-
-static void input_method_commit(struct wl_listener *listener, void *data) {
-    struct fbwl_input_method *fim = wl_container_of(listener, fim, commit);
-    struct fbwl_server *server = fim->server;
-    struct wlr_input_method_v2 *im = data;
-    if (server == NULL || im == NULL) {
-        return;
-    }
-
-    struct wlr_text_input_v3 *ti = server->active_text_input;
-    if (ti == NULL || !ti->current_enabled) {
-        return;
-    }
-
-    const uint32_t del_before = im->current.delete.before_length != 0 || im->current.delete.after_length != 0
-        ? im->current.delete.before_length
-        : im->pending.delete.before_length;
-    const uint32_t del_after = im->current.delete.before_length != 0 || im->current.delete.after_length != 0
-        ? im->current.delete.after_length
-        : im->pending.delete.after_length;
-
-    const struct wlr_input_method_v2_preedit_string *preedit =
-        im->current.preedit.text != NULL ? &im->current.preedit : &im->pending.preedit;
-    const char *commit_text =
-        im->current.commit_text != NULL ? im->current.commit_text : im->pending.commit_text;
-
-    bool sent = false;
-    if (del_before > 0 || del_after > 0) {
-        wlr_text_input_v3_send_delete_surrounding_text(ti, del_before, del_after);
-        sent = true;
-    }
-    if (preedit->text != NULL) {
-        wlr_text_input_v3_send_preedit_string(ti, preedit->text,
-            preedit->cursor_begin, preedit->cursor_end);
-        sent = true;
-    }
-    if (commit_text != NULL) {
-        wlr_log(WLR_INFO, "InputMethod: commit '%s'", commit_text);
-        wlr_text_input_v3_send_commit_string(ti, commit_text);
-        sent = true;
-    }
-    if (sent) {
-        wlr_text_input_v3_send_done(ti);
-    }
-}
-
-static void input_method_destroy(struct wl_listener *listener, void *data) {
-    (void)data;
-    struct fbwl_input_method *fim = wl_container_of(listener, fim, destroy);
-    struct fbwl_server *server = fim->server;
-    if (server != NULL && server->input_method == fim->input_method) {
-        server->input_method = NULL;
-        server_update_input_method(server);
-    }
-
-    fbwl_cleanup_listener(&fim->commit);
-    fbwl_cleanup_listener(&fim->destroy);
-    free(fim);
-}
-
-static void server_new_input_method(struct wl_listener *listener, void *data) {
-    struct fbwl_server *server = wl_container_of(listener, server, new_input_method);
-    struct wlr_input_method_v2 *input_method = data;
-
-    if (server->input_method != NULL && server->input_method != input_method) {
-        wlr_log(WLR_INFO, "InputMethod: refusing second input method");
-        wlr_input_method_v2_send_unavailable(input_method);
-        return;
-    }
-
-    struct fbwl_input_method *fim = calloc(1, sizeof(*fim));
-    if (fim == NULL) {
-        wlr_log(WLR_ERROR, "InputMethod: out of memory");
-        wlr_input_method_v2_send_unavailable(input_method);
-        return;
-    }
-    fim->server = server;
-    fim->input_method = input_method;
-
-    fim->commit.notify = input_method_commit;
-    wl_signal_add(&input_method->events.commit, &fim->commit);
-    fim->destroy.notify = input_method_destroy;
-    wl_signal_add(&input_method->events.destroy, &fim->destroy);
-
-    server->input_method = input_method;
-    server_update_input_method(server);
+    fbwl_text_input_update_focus(&server->text_input, surface);
 }
 
 static bool server_keyboard_shortcuts_inhibited(struct fbwl_server *server) {
@@ -3564,23 +3299,9 @@ int main(int argc, char **argv) {
     server.request_start_drag.notify = seat_request_start_drag;
     wl_signal_add(&server.seat->events.request_start_drag, &server.request_start_drag);
 
-    server.text_input_mgr = wlr_text_input_manager_v3_create(server.wl_display);
-    if (server.text_input_mgr == NULL) {
-        wlr_log(WLR_ERROR, "failed to create text input manager");
+    if (!fbwl_text_input_init(&server.text_input, server.wl_display, server.seat)) {
         return 1;
     }
-    server.new_text_input.notify = server_new_text_input;
-    wl_signal_add(&server.text_input_mgr->events.text_input, &server.new_text_input);
-    server.active_text_input = NULL;
-
-    server.input_method_mgr = wlr_input_method_manager_v2_create(server.wl_display);
-    if (server.input_method_mgr == NULL) {
-        wlr_log(WLR_ERROR, "failed to create input method manager");
-        return 1;
-    }
-    server.new_input_method.notify = server_new_input_method;
-    wl_signal_add(&server.input_method_mgr->events.input_method, &server.new_input_method);
-    server.input_method = NULL;
 
     if (enable_xwayland) {
         server.xwayland = wlr_xwayland_create(server.wl_display, server.compositor, false);
@@ -3680,8 +3401,7 @@ int main(int argc, char **argv) {
     fbwl_cleanup_listener(&server.output_manager_apply);
     fbwl_cleanup_listener(&server.output_manager_test);
     fbwl_cleanup_listener(&server.output_power_set_mode);
-    fbwl_cleanup_listener(&server.new_text_input);
-    fbwl_cleanup_listener(&server.new_input_method);
+    fbwl_text_input_finish(&server.text_input);
 
     fbwl_cleanup_listener(&server.new_output);
 
