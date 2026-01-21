@@ -64,3 +64,4 @@ Makefile.in
 
 # off source build directory
 build
+/build-wayland-only/
