@@ -317,6 +317,8 @@ fluxbox_wayland_SOURCES = \
 		src/wayland/fbwl_sni_tray_internal.h \
 		src/wayland/fbwl_util.c \
 		src/wayland/fbwl_util.h \
+		src/wayland/fbwl_ui_cmd_dialog.c \
+		src/wayland/fbwl_ui_cmd_dialog.h \
 		src/wayland/fbwl_ui_text.c \
 		src/wayland/fbwl_ui_text.h \
 	src/wayland/fbwl_keys_parse.c \
