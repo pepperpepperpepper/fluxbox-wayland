@@ -95,6 +95,7 @@
 #include "wayland/fbwl_keys_parse.h"
 #include "wayland/fbwl_menu.h"
 #include "wayland/fbwl_menu_parse.h"
+#include "wayland/fbwl_ui_menu.h"
 #include "wayland/fbwl_output.h"
 #include "wayland/fbwl_output_management.h"
 #include "wayland/fbwl_output_power.h"
@@ -113,26 +114,6 @@
 #include "wayland/fbwl_xwayland.h"
 
 struct fbwl_server;
-
-struct fbwl_menu_ui {
-    bool open;
-    struct fbwl_menu *current;
-    struct fbwl_menu *stack[16];
-    size_t depth;
-    size_t selected;
-    struct fbwl_view *target_view;
-
-    int x;
-    int y;
-    int width;
-    int item_h;
-
-    struct wlr_scene_tree *tree;
-    struct wlr_scene_rect *bg;
-    struct wlr_scene_rect *highlight;
-    struct wlr_scene_rect **item_rects;
-    size_t item_rect_count;
-};
 
 struct fbwl_toolbar_ui {
     bool enabled;
@@ -2716,123 +2697,78 @@ static void server_osd_ui_destroy(struct fbwl_server *server) {
     fbwl_ui_osd_destroy(&server->osd_ui);
 }
 
-static void server_menu_ui_destroy_scene(struct fbwl_menu_ui *ui) {
-    if (ui == NULL) {
+static void menu_ui_spawn(void *userdata, const char *cmd) {
+    (void)userdata;
+    fbwl_spawn(cmd);
+}
+
+static void menu_ui_terminate(void *userdata) {
+    struct fbwl_server *server = userdata;
+    if (server == NULL) {
         return;
     }
-    if (ui->tree != NULL) {
-        wlr_scene_node_destroy(&ui->tree->node);
-        ui->tree = NULL;
+    wl_display_terminate(server->wl_display);
+}
+
+static void menu_ui_view_close(void *userdata, struct fbwl_view *view) {
+    (void)userdata;
+    if (view == NULL) {
+        return;
     }
-    ui->bg = NULL;
-    ui->highlight = NULL;
-    free(ui->item_rects);
-    ui->item_rects = NULL;
-    ui->item_rect_count = 0;
+    if (view->type == FBWL_VIEW_XDG) {
+        wlr_xdg_toplevel_send_close(view->xdg_toplevel);
+    } else if (view->type == FBWL_VIEW_XWAYLAND) {
+        wlr_xwayland_surface_close(view->xwayland_surface);
+    }
+}
+
+static void menu_ui_view_set_minimized(void *userdata, struct fbwl_view *view, bool minimized, const char *why) {
+    (void)userdata;
+    view_set_minimized(view, minimized, why);
+}
+
+static void menu_ui_view_set_maximized(void *userdata, struct fbwl_view *view, bool maximized) {
+    struct fbwl_server *server = userdata;
+    if (server == NULL) {
+        return;
+    }
+    fbwl_view_set_maximized(view, maximized, server->output_layout, &server->outputs);
+}
+
+static void menu_ui_view_set_fullscreen(void *userdata, struct fbwl_view *view, bool fullscreen) {
+    struct fbwl_server *server = userdata;
+    if (server == NULL) {
+        return;
+    }
+    fbwl_view_set_fullscreen(view, fullscreen, server->output_layout, &server->outputs,
+        server->layer_normal, server->layer_fullscreen, NULL);
+}
+
+static struct fbwl_ui_menu_env menu_ui_env(struct fbwl_server *server) {
+    return (struct fbwl_ui_menu_env){
+        .scene = server != NULL ? server->scene : NULL,
+        .layer_overlay = server != NULL ? server->layer_overlay : NULL,
+        .decor_theme = server != NULL ? &server->decor_theme : NULL,
+    };
+}
+
+static struct fbwl_ui_menu_hooks menu_ui_hooks(struct fbwl_server *server) {
+    return (struct fbwl_ui_menu_hooks){
+        .userdata = server,
+        .spawn = menu_ui_spawn,
+        .terminate = menu_ui_terminate,
+        .view_close = menu_ui_view_close,
+        .view_set_minimized = menu_ui_view_set_minimized,
+        .view_set_maximized = menu_ui_view_set_maximized,
+        .view_set_fullscreen = menu_ui_view_set_fullscreen,
+    };
 }
 
 static void server_menu_ui_close(struct fbwl_server *server, const char *why) {
     if (server == NULL) {
         return;
     }
-
-    if (!server->menu_ui.open) {
-        return;
-    }
-
-    server_menu_ui_destroy_scene(&server->menu_ui);
-    server->menu_ui.open = false;
-    server->menu_ui.current = NULL;
-    server->menu_ui.depth = 0;
-    server->menu_ui.selected = 0;
-    server->menu_ui.target_view = NULL;
-
-    wlr_log(WLR_INFO, "Menu: close reason=%s", why != NULL ? why : "(null)");
-}
-
-static void server_menu_ui_rebuild(struct fbwl_server *server) {
-    if (server == NULL || server->scene == NULL) {
-        return;
-    }
-    struct fbwl_menu_ui *ui = &server->menu_ui;
-    if (!ui->open || ui->current == NULL) {
-        return;
-    }
-
-    server_menu_ui_destroy_scene(ui);
-
-    struct wlr_scene_tree *parent =
-        server->layer_overlay != NULL ? server->layer_overlay : &server->scene->tree;
-    ui->tree = wlr_scene_tree_create(parent);
-    if (ui->tree == NULL) {
-        ui->open = false;
-        ui->current = NULL;
-        ui->depth = 0;
-        ui->selected = 0;
-        return;
-    }
-    wlr_scene_node_set_position(&ui->tree->node, ui->x, ui->y);
-
-    const int count = (int)ui->current->item_count;
-    const int item_h = ui->item_h > 0 ? ui->item_h : server->decor_theme.title_height;
-    const int w = ui->width > 0 ? ui->width : 200;
-    const int h = count > 0 ? count * item_h : item_h;
-
-    float bg[4] = {server->decor_theme.titlebar_inactive[0], server->decor_theme.titlebar_inactive[1],
-        server->decor_theme.titlebar_inactive[2], 0.95f};
-    float hi[4] = {server->decor_theme.titlebar_active[0], server->decor_theme.titlebar_active[1],
-        server->decor_theme.titlebar_active[2], 0.95f};
-
-    ui->bg = wlr_scene_rect_create(ui->tree, w, h, bg);
-    if (ui->bg != NULL) {
-        wlr_scene_node_set_position(&ui->bg->node, 0, 0);
-    }
-
-    if (ui->selected >= ui->current->item_count) {
-        ui->selected = ui->current->item_count > 0 ? ui->current->item_count - 1 : 0;
-    }
-    ui->highlight = wlr_scene_rect_create(ui->tree, w, item_h, hi);
-    if (ui->highlight != NULL) {
-        wlr_scene_node_set_position(&ui->highlight->node, 0, (int)ui->selected * item_h);
-    }
-
-    ui->item_rect_count = ui->current->item_count;
-    if (ui->item_rect_count > 0) {
-        ui->item_rects = calloc(ui->item_rect_count, sizeof(*ui->item_rects));
-        if (ui->item_rects != NULL) {
-            float item[4] = {0.00f, 0.00f, 0.00f, 0.01f};
-            for (size_t i = 0; i < ui->item_rect_count; i++) {
-                ui->item_rects[i] = wlr_scene_rect_create(ui->tree, w, item_h, item);
-                if (ui->item_rects[i] != NULL) {
-                    wlr_scene_node_set_position(&ui->item_rects[i]->node, 0, (int)i * item_h);
-                }
-            }
-        }
-    }
-
-    const float fg[4] = {1.0f, 1.0f, 1.0f, 1.0f};
-    for (size_t i = 0; i < ui->current->item_count; i++) {
-        const struct fbwl_menu_item *it = &ui->current->items[i];
-        const char *label = it->label != NULL ? it->label : "(no-label)";
-        char render_label[512];
-        const char *render = label;
-        if (it->kind == FBWL_MENU_ITEM_SUBMENU) {
-            if (snprintf(render_label, sizeof(render_label), "%s  >", label) >= 0) {
-                render = render_label;
-            }
-        }
-
-        struct wlr_buffer *text_buf = fbwl_text_buffer_create(render, w, item_h, 8, fg);
-        if (text_buf != NULL) {
-            struct wlr_scene_buffer *sb = wlr_scene_buffer_create(ui->tree, text_buf);
-            if (sb != NULL) {
-                wlr_scene_node_set_position(&sb->node, 0, (int)i * item_h);
-            }
-            wlr_buffer_drop(text_buf);
-        }
-    }
-
-    wlr_scene_node_raise_to_top(&ui->tree->node);
+    fbwl_ui_menu_close(&server->menu_ui, why);
 }
 
 static void server_menu_ui_open_root(struct fbwl_server *server, int x, int y) {
@@ -2846,23 +2782,8 @@ static void server_menu_ui_open_root(struct fbwl_server *server, int x, int y) {
         return;
     }
 
-    server_menu_ui_close(server, "reopen");
-
-    struct fbwl_menu_ui *ui = &server->menu_ui;
-    ui->open = true;
-    ui->current = server->root_menu;
-    ui->depth = 0;
-    ui->stack[0] = server->root_menu;
-    ui->selected = 0;
-    ui->target_view = NULL;
-
-    ui->x = x;
-    ui->y = y;
-    ui->width = 200;
-    ui->item_h = server->decor_theme.title_height;
-
-    server_menu_ui_rebuild(server);
-    wlr_log(WLR_INFO, "Menu: open at x=%d y=%d items=%zu", x, y, ui->current->item_count);
+    const struct fbwl_ui_menu_env env = menu_ui_env(server);
+    fbwl_ui_menu_open_root(&server->menu_ui, &env, server->root_menu, x, y);
 }
 
 static void server_menu_ui_open_window(struct fbwl_server *server, struct fbwl_view *view, int x, int y) {
@@ -2876,211 +2797,37 @@ static void server_menu_ui_open_window(struct fbwl_server *server, struct fbwl_v
         return;
     }
 
-    server_menu_ui_close(server, "reopen-window");
-
-    struct fbwl_menu_ui *ui = &server->menu_ui;
-    ui->open = true;
-    ui->current = server->window_menu;
-    ui->depth = 0;
-    ui->stack[0] = server->window_menu;
-    ui->selected = 0;
-    ui->target_view = view;
-
-    ui->x = x;
-    ui->y = y;
-    ui->width = 200;
-    ui->item_h = server->decor_theme.title_height;
-
-    server_menu_ui_rebuild(server);
-    wlr_log(WLR_INFO, "Menu: open-window title=%s x=%d y=%d items=%zu",
-        fbwl_view_display_title(view), x, y, ui->current->item_count);
+    const struct fbwl_ui_menu_env env = menu_ui_env(server);
+    fbwl_ui_menu_open_window(&server->menu_ui, &env, server->window_menu, view, x, y);
 }
 
 static ssize_t server_menu_ui_index_at(const struct fbwl_menu_ui *ui, int lx, int ly) {
-    if (ui == NULL || !ui->open || ui->current == NULL) {
-        return -1;
-    }
-    const int x = lx - ui->x;
-    const int y = ly - ui->y;
-    const int item_h = ui->item_h > 0 ? ui->item_h : 1;
-    const int w = ui->width > 0 ? ui->width : 1;
-    const int h = (int)ui->current->item_count * item_h;
-    if (x < 0 || x >= w || y < 0 || y >= h) {
-        return -1;
-    }
-    const ssize_t idx = y / item_h;
-    if (idx < 0 || (size_t)idx >= ui->current->item_count) {
-        return -1;
-    }
-    return idx;
+    return fbwl_ui_menu_index_at(ui, lx, ly);
 }
 
 static void server_menu_ui_set_selected(struct fbwl_server *server, size_t idx) {
     if (server == NULL) {
         return;
     }
-    struct fbwl_menu_ui *ui = &server->menu_ui;
-    if (!ui->open || ui->current == NULL) {
-        return;
-    }
-    if (ui->current->item_count == 0) {
-        ui->selected = 0;
-        return;
-    }
-    if (idx >= ui->current->item_count) {
-        idx = ui->current->item_count - 1;
-    }
-    ui->selected = idx;
-    if (ui->highlight != NULL) {
-        const int item_h = ui->item_h > 0 ? ui->item_h : 1;
-        wlr_scene_node_set_position(&ui->highlight->node, 0, (int)ui->selected * item_h);
-    }
-}
-
-static void server_menu_ui_activate_selected(struct fbwl_server *server) {
-    if (server == NULL) {
-        return;
-    }
-    struct fbwl_menu_ui *ui = &server->menu_ui;
-    if (!ui->open || ui->current == NULL || ui->current->item_count == 0) {
-        return;
-    }
-    if (ui->selected >= ui->current->item_count) {
-        ui->selected = ui->current->item_count - 1;
-    }
-
-    struct fbwl_menu_item *it = &ui->current->items[ui->selected];
-    const char *label = it->label != NULL ? it->label : "(no-label)";
-
-    if (it->kind == FBWL_MENU_ITEM_EXEC) {
-        wlr_log(WLR_INFO, "Menu: exec label=%s cmd=%s", label, it->cmd != NULL ? it->cmd : "(null)");
-        fbwl_spawn(it->cmd);
-        server_menu_ui_close(server, "exec");
-        return;
-    }
-    if (it->kind == FBWL_MENU_ITEM_EXIT) {
-        wlr_log(WLR_INFO, "Menu: exit label=%s", label);
-        server_menu_ui_close(server, "exit");
-        wl_display_terminate(server->wl_display);
-        return;
-    }
-    if (it->kind == FBWL_MENU_ITEM_VIEW_ACTION) {
-        struct fbwl_view *view = ui->target_view;
-        if (view == NULL) {
-            server_menu_ui_close(server, "window-action-no-view");
-            return;
-        }
-
-        switch (it->view_action) {
-        case FBWL_MENU_VIEW_CLOSE:
-            wlr_log(WLR_INFO, "Menu: window-close title=%s", fbwl_view_display_title(view));
-            if (view->type == FBWL_VIEW_XDG) {
-                wlr_xdg_toplevel_send_close(view->xdg_toplevel);
-            } else if (view->type == FBWL_VIEW_XWAYLAND) {
-                wlr_xwayland_surface_close(view->xwayland_surface);
-            }
-            server_menu_ui_close(server, "window-close");
-            return;
-        case FBWL_MENU_VIEW_TOGGLE_MINIMIZE:
-            wlr_log(WLR_INFO, "Menu: window-minimize title=%s", fbwl_view_display_title(view));
-            view_set_minimized(view, !view->minimized, "window-menu");
-            server_menu_ui_close(server, "window-minimize");
-            return;
-        case FBWL_MENU_VIEW_TOGGLE_MAXIMIZE:
-            wlr_log(WLR_INFO, "Menu: window-maximize title=%s", fbwl_view_display_title(view));
-            fbwl_view_set_maximized(view, !view->maximized, server->output_layout, &server->outputs);
-            server_menu_ui_close(server, "window-maximize");
-            return;
-        case FBWL_MENU_VIEW_TOGGLE_FULLSCREEN:
-            wlr_log(WLR_INFO, "Menu: window-fullscreen title=%s", fbwl_view_display_title(view));
-            fbwl_view_set_fullscreen(view, !view->fullscreen, server->output_layout, &server->outputs,
-                server->layer_normal, server->layer_fullscreen, NULL);
-            server_menu_ui_close(server, "window-fullscreen");
-            return;
-        default:
-            server_menu_ui_close(server, "window-action-unknown");
-            return;
-        }
-    }
-    if (it->kind == FBWL_MENU_ITEM_SUBMENU && it->submenu != NULL) {
-        if (ui->depth + 1 < (sizeof(ui->stack) / sizeof(ui->stack[0]))) {
-            ui->depth++;
-            ui->stack[ui->depth] = it->submenu;
-            ui->current = it->submenu;
-            ui->selected = 0;
-            server_menu_ui_rebuild(server);
-            wlr_log(WLR_INFO, "Menu: enter-submenu label=%s items=%zu", label, ui->current->item_count);
-        }
-        return;
-    }
+    fbwl_ui_menu_set_selected(&server->menu_ui, idx);
 }
 
 static bool server_menu_ui_handle_keypress(struct fbwl_server *server, xkb_keysym_t sym) {
     if (server == NULL) {
         return false;
     }
-    if (!server->menu_ui.open) {
-        return false;
-    }
-
-    if (sym == XKB_KEY_Escape) {
-        server_menu_ui_close(server, "escape");
-        return true;
-    }
-    if (sym == XKB_KEY_Return || sym == XKB_KEY_KP_Enter) {
-        server_menu_ui_activate_selected(server);
-        return true;
-    }
-    if (sym == XKB_KEY_Down) {
-        server_menu_ui_set_selected(server, server->menu_ui.selected + 1);
-        return true;
-    }
-    if (sym == XKB_KEY_Up) {
-        size_t idx = server->menu_ui.selected;
-        if (idx > 0) {
-            idx--;
-        }
-        server_menu_ui_set_selected(server, idx);
-        return true;
-    }
-    if (sym == XKB_KEY_Left || sym == XKB_KEY_BackSpace) {
-        if (server->menu_ui.depth > 0) {
-            server->menu_ui.depth--;
-            server->menu_ui.current = server->menu_ui.stack[server->menu_ui.depth];
-            server->menu_ui.selected = 0;
-            server_menu_ui_rebuild(server);
-            wlr_log(WLR_INFO, "Menu: back items=%zu", server->menu_ui.current != NULL ? server->menu_ui.current->item_count : 0);
-        } else {
-            server_menu_ui_close(server, "back");
-        }
-        return true;
-    }
-
-    return false;
+    const struct fbwl_ui_menu_env env = menu_ui_env(server);
+    const struct fbwl_ui_menu_hooks hooks = menu_ui_hooks(server);
+    return fbwl_ui_menu_handle_keypress(&server->menu_ui, &env, &hooks, sym);
 }
 
 static bool server_menu_ui_handle_click(struct fbwl_server *server, int lx, int ly, uint32_t button) {
     if (server == NULL) {
         return false;
     }
-    struct fbwl_menu_ui *ui = &server->menu_ui;
-    if (!ui->open || ui->current == NULL) {
-        return false;
-    }
-
-    const ssize_t idx = server_menu_ui_index_at(ui, lx, ly);
-    if (idx < 0) {
-        server_menu_ui_close(server, "click-outside");
-        return true;
-    }
-
-    server_menu_ui_set_selected(server, (size_t)idx);
-    if (button == BTN_LEFT) {
-        server_menu_ui_activate_selected(server);
-    } else if (button == BTN_RIGHT) {
-        server_menu_ui_close(server, "right-click");
-    }
-    return true;
+    const struct fbwl_ui_menu_env env = menu_ui_env(server);
+    const struct fbwl_ui_menu_hooks hooks = menu_ui_hooks(server);
+    return fbwl_ui_menu_handle_click(&server->menu_ui, &env, &hooks, lx, ly, button);
 }
 
 static void server_menu_free(struct fbwl_server *server) {
