@@ -56,7 +56,6 @@
 #include <wlr/types/wlr_relative_pointer_v1.h>
 #include <wlr/types/wlr_single_pixel_buffer_v1.h>
 #include <wlr/types/wlr_scene.h>
-#include <wlr/types/wlr_export_dmabuf_v1.h>
 #include <wlr/types/wlr_session_lock_v1.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_subcompositor.h>
@@ -101,6 +100,7 @@
 #include "wayland/fbwl_session_lock.h"
 #include "wayland/fbwl_sni_tray.h"
 #include "wayland/fbwl_style_parse.h"
+#include "wayland/fbwl_export_dmabuf.h"
 #include "wayland/fbwl_screencopy.h"
 #include "wayland/fbwl_text_input.h"
 #include "wayland/fbwl_ui_cmd_dialog.h"
@@ -225,7 +225,7 @@ struct fbwl_server {
 
     struct fbwl_pointer_constraints_state pointer_constraints;
     struct fbwl_screencopy_state screencopy;
-    struct wlr_export_dmabuf_manager_v1 *export_dmabuf_mgr;
+    struct fbwl_export_dmabuf_state export_dmabuf;
 
 #if WLR_VERSION_NUM >= ((0 << 16) | (19 << 8) | 0)
     struct wlr_ext_image_copy_capture_manager_v1 *ext_image_copy_capture_mgr;
@@ -2571,9 +2571,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    server.export_dmabuf_mgr = wlr_export_dmabuf_manager_v1_create(server.wl_display);
-    if (server.export_dmabuf_mgr == NULL) {
-        wlr_log(WLR_ERROR, "failed to create export dmabuf manager");
+    if (!fbwl_export_dmabuf_init(&server.export_dmabuf, server.wl_display)) {
         return 1;
     }
 
