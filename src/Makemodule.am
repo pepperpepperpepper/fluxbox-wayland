@@ -355,21 +355,23 @@ fluxbox_wayland_SOURCES = \
 	src/wayland/fbwl_text_input.h \
 	src/wayland/fbwl_xdg_activation.c \
 	src/wayland/fbwl_xdg_activation.h \
-		src/wayland/fbwl_scene_layers.c \
-		src/wayland/fbwl_scene_layers.h \
-		src/wayland/fbwl_style_parse.c \
-		src/wayland/fbwl_style_parse.h \
+	src/wayland/fbwl_xdg_decoration.c \
+	src/wayland/fbwl_xdg_decoration.h \
+			src/wayland/fbwl_scene_layers.c \
+			src/wayland/fbwl_scene_layers.h \
+			src/wayland/fbwl_style_parse.c \
+			src/wayland/fbwl_style_parse.h \
 		src/wayland/fbwl_ui_decor_theme.h \
 		src/wayland/fbwl_view.c \
 		src/wayland/fbwl_view.h \
 		src/wayland/fbwl_view_foreign_toplevel.c \
-		src/wayland/fbwl_view_foreign_toplevel.h \
-		src/wayland/fbwl_xdg_shell.c \
-		src/wayland/fbwl_xdg_shell.h \
-		src/wayland/fbwl_xwayland.c \
-		src/wayland/fbwl_xwayland.h \
-		src/wayland/fluxbox_wayland.c \
-		src/wayland/protocol/xdg-shell-protocol.h
+			src/wayland/fbwl_view_foreign_toplevel.h \
+			src/wayland/fbwl_xdg_shell.c \
+			src/wayland/fbwl_xdg_shell.h \
+			src/wayland/fbwl_xwayland.c \
+			src/wayland/fbwl_xwayland.h \
+			src/wayland/fluxbox_wayland.c \
+			src/wayland/protocol/xdg-shell-protocol.h
 
 if HAVE_SYSTEMD
 fluxbox_wayland_CPPFLAGS += \

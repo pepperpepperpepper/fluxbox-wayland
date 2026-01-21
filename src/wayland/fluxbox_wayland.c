@@ -68,7 +68,6 @@
 #include <wlr/types/wlr_viewporter.h>
 #include <wlr/types/wlr_xcursor_manager.h>
 #include <wlr/types/wlr_xdg_activation_v1.h>
-#include <wlr/types/wlr_xdg_decoration_v1.h>
 #include <wlr/types/wlr_xdg_output_v1.h>
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/util/log.h>
@@ -114,6 +113,7 @@
 #include "wayland/fbwl_view.h"
 #include "wayland/fbwl_view_foreign_toplevel.h"
 #include "wayland/fbwl_xdg_activation.h"
+#include "wayland/fbwl_xdg_decoration.h"
 #include "wayland/fbwl_xdg_shell.h"
 #include "wayland/fbwl_xwayland.h"
 
@@ -132,15 +132,6 @@ struct fbwl_shortcuts_inhibitor {
     struct wl_list link;
     struct fbwl_server *server;
     struct wlr_keyboard_shortcuts_inhibitor_v1 *inhibitor;
-    struct wl_listener destroy;
-};
-
-struct fbwl_xdg_decoration {
-    struct fbwl_server *server;
-    struct wlr_xdg_toplevel_decoration_v1 *decoration;
-    enum wlr_xdg_toplevel_decoration_v1_mode desired_mode;
-    struct wl_listener surface_map;
-    struct wl_listener request_mode;
     struct wl_listener destroy;
 };
 
@@ -203,8 +194,7 @@ struct fbwl_server {
 
     struct fbwl_xdg_activation_state xdg_activation;
 
-    struct wlr_xdg_decoration_manager_v1 *xdg_decoration_mgr;
-    struct wl_listener new_xdg_decoration;
+    struct fbwl_xdg_decoration_state xdg_decoration;
 
     struct wlr_cursor *cursor;
     struct wlr_xcursor_manager *cursor_mgr;
@@ -1777,76 +1767,6 @@ static void server_new_pointer_constraint(struct wl_listener *listener, void *da
         server->pointer_constraints, &server->active_pointer_constraint, &hooks, constraint);
 }
 
-static void xdg_decoration_apply(struct fbwl_xdg_decoration *xd) {
-    if (xd == NULL || xd->decoration == NULL || xd->decoration->toplevel == NULL ||
-            xd->decoration->toplevel->base == NULL) {
-        return;
-    }
-    if (!xd->decoration->toplevel->base->initialized) {
-        return;
-    }
-
-    (void)wlr_xdg_toplevel_decoration_v1_set_mode(xd->decoration, xd->desired_mode);
-
-    struct fbwl_view *view = NULL;
-    if (xd->decoration->toplevel->base->data != NULL) {
-        struct wlr_scene_tree *tree = xd->decoration->toplevel->base->data;
-        view = tree->node.data;
-    }
-    if (view != NULL) {
-        fbwl_view_decor_create(view, view->server != NULL ? &view->server->decor_theme : NULL);
-        fbwl_view_decor_set_enabled(view, xd->desired_mode == WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
-        fbwl_view_decor_update(view, view->server != NULL ? &view->server->decor_theme : NULL);
-    }
-}
-
-static void xdg_decoration_surface_map(struct wl_listener *listener, void *data) {
-    (void)data;
-    struct fbwl_xdg_decoration *xd = wl_container_of(listener, xd, surface_map);
-    xdg_decoration_apply(xd);
-    fbwl_cleanup_listener(&xd->surface_map);
-}
-
-static void xdg_decoration_destroy(struct wl_listener *listener, void *data) {
-    (void)data;
-    struct fbwl_xdg_decoration *xd = wl_container_of(listener, xd, destroy);
-    fbwl_cleanup_listener(&xd->surface_map);
-    fbwl_cleanup_listener(&xd->request_mode);
-    fbwl_cleanup_listener(&xd->destroy);
-    free(xd);
-}
-
-static void xdg_decoration_request_mode(struct wl_listener *listener, void *data) {
-    (void)data;
-    struct fbwl_xdg_decoration *xd = wl_container_of(listener, xd, request_mode);
-    xd->desired_mode = WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE;
-    xdg_decoration_apply(xd);
-}
-
-static void server_new_xdg_decoration(struct wl_listener *listener, void *data) {
-    struct fbwl_server *server = wl_container_of(listener, server, new_xdg_decoration);
-    struct wlr_xdg_toplevel_decoration_v1 *decoration = data;
-
-    struct fbwl_xdg_decoration *xd = calloc(1, sizeof(*xd));
-    xd->server = server;
-    xd->decoration = decoration;
-    xd->desired_mode = WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE;
-
-    xd->request_mode.notify = xdg_decoration_request_mode;
-    wl_signal_add(&decoration->events.request_mode, &xd->request_mode);
-    xd->destroy.notify = xdg_decoration_destroy;
-    wl_signal_add(&decoration->events.destroy, &xd->destroy);
-
-    if (decoration->toplevel != NULL && decoration->toplevel->base != NULL &&
-            decoration->toplevel->base->initialized) {
-        xdg_decoration_apply(xd);
-    } else if (decoration->toplevel != NULL && decoration->toplevel->base != NULL &&
-            decoration->toplevel->base->surface != NULL) {
-        xd->surface_map.notify = xdg_decoration_surface_map;
-        wl_signal_add(&decoration->toplevel->base->surface->events.map, &xd->surface_map);
-    }
-}
-
 static void server_new_input(struct wl_listener *listener, void *data) {
     struct fbwl_server *server = wl_container_of(listener, server, new_input);
     struct wlr_input_device *device = data;
@@ -2640,13 +2560,9 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    server.xdg_decoration_mgr = wlr_xdg_decoration_manager_v1_create(server.wl_display);
-    if (server.xdg_decoration_mgr == NULL) {
-        wlr_log(WLR_ERROR, "failed to create xdg decoration manager");
+    if (!fbwl_xdg_decoration_init(&server.xdg_decoration, server.wl_display, &server.decor_theme)) {
         return 1;
     }
-    server.new_xdg_decoration.notify = server_new_xdg_decoration;
-    wl_signal_add(&server.xdg_decoration_mgr->events.new_toplevel_decoration, &server.new_xdg_decoration);
 
     if (!fbwl_idle_init(&server.idle, server.wl_display, &server.seat)) {
         return 1;
@@ -2971,7 +2887,7 @@ int main(int argc, char **argv) {
     fbwl_cleanup_listener(&server.new_xdg_toplevel);
     fbwl_cleanup_listener(&server.new_xdg_popup);
     fbwl_xdg_activation_finish(&server.xdg_activation);
-    fbwl_cleanup_listener(&server.new_xdg_decoration);
+    fbwl_xdg_decoration_finish(&server.xdg_decoration);
     fbwl_cleanup_listener(&server.xwayland_ready);
     fbwl_cleanup_listener(&server.xwayland_new_surface);
     fbwl_cleanup_listener(&server.new_layer_surface);
