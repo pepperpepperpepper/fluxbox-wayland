@@ -5,6 +5,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 scripts=(
+  scripts/fbwl-check-wayland-loc.sh
   scripts/fbwl-smoke-headless.sh
   scripts/fbwl-smoke-log-protocol.sh
   scripts/fbwl-smoke-background.sh
