@@ -353,6 +353,8 @@ fluxbox_wayland_SOURCES = \
 	src/wayland/fbwl_session_lock.h \
 	src/wayland/fbwl_text_input.c \
 	src/wayland/fbwl_text_input.h \
+	src/wayland/fbwl_xdg_activation.c \
+	src/wayland/fbwl_xdg_activation.h \
 		src/wayland/fbwl_scene_layers.c \
 		src/wayland/fbwl_scene_layers.h \
 		src/wayland/fbwl_style_parse.c \

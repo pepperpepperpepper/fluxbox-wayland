@@ -113,6 +113,7 @@
 #include "wayland/fbwl_ui_text.h"
 #include "wayland/fbwl_view.h"
 #include "wayland/fbwl_view_foreign_toplevel.h"
+#include "wayland/fbwl_xdg_activation.h"
 #include "wayland/fbwl_xdg_shell.h"
 #include "wayland/fbwl_xwayland.h"
 
@@ -200,8 +201,7 @@ struct fbwl_server {
 
     struct wlr_foreign_toplevel_manager_v1 *foreign_toplevel_mgr;
 
-    struct wlr_xdg_activation_v1 *xdg_activation;
-    struct wl_listener xdg_activation_request_activate;
+    struct fbwl_xdg_activation_state xdg_activation;
 
     struct wlr_xdg_decoration_manager_v1 *xdg_decoration_mgr;
     struct wl_listener new_xdg_decoration;
@@ -1847,25 +1847,6 @@ static void server_new_xdg_decoration(struct wl_listener *listener, void *data) 
     }
 }
 
-static void server_xdg_activation_request_activate(struct wl_listener *listener, void *data) {
-    struct fbwl_server *server = wl_container_of(listener, server, xdg_activation_request_activate);
-    struct wlr_xdg_activation_v1_request_activate_event *event = data;
-    if (event == NULL || event->surface == NULL) {
-        return;
-    }
-
-    struct fbwl_view *view = fbwl_view_from_surface(event->surface);
-    if (view == NULL) {
-        wlr_log(WLR_INFO, "XDG activation: request for unknown surface");
-        return;
-    }
-
-    if (view->minimized) {
-        view_set_minimized(view, false, "xdg-activation");
-    }
-    fbwm_core_focus_view(&server->wm, &view->wm_view);
-}
-
 static void server_new_input(struct wl_listener *listener, void *data) {
     struct fbwl_server *server = wl_container_of(listener, server, new_input);
     struct wlr_input_device *device = data;
@@ -2655,13 +2636,9 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    server.xdg_activation = wlr_xdg_activation_v1_create(server.wl_display);
-    if (server.xdg_activation == NULL) {
-        wlr_log(WLR_ERROR, "failed to create xdg activation manager");
+    if (!fbwl_xdg_activation_init(&server.xdg_activation, server.wl_display, &server.wm, view_set_minimized)) {
         return 1;
     }
-    server.xdg_activation_request_activate.notify = server_xdg_activation_request_activate;
-    wl_signal_add(&server.xdg_activation->events.request_activate, &server.xdg_activation_request_activate);
 
     server.xdg_decoration_mgr = wlr_xdg_decoration_manager_v1_create(server.wl_display);
     if (server.xdg_decoration_mgr == NULL) {
@@ -2993,7 +2970,7 @@ int main(int argc, char **argv) {
 
     fbwl_cleanup_listener(&server.new_xdg_toplevel);
     fbwl_cleanup_listener(&server.new_xdg_popup);
-    fbwl_cleanup_listener(&server.xdg_activation_request_activate);
+    fbwl_xdg_activation_finish(&server.xdg_activation);
     fbwl_cleanup_listener(&server.new_xdg_decoration);
     fbwl_cleanup_listener(&server.xwayland_ready);
     fbwl_cleanup_listener(&server.xwayland_new_surface);
