@@ -104,6 +104,7 @@
 #include "wayland/fbwl_style_parse.h"
 #include "wayland/fbwl_ui_cmd_dialog.h"
 #include "wayland/fbwl_ui_decor_theme.h"
+#include "wayland/fbwl_ui_osd.h"
 #include "wayland/fbwl_util.h"
 #include "wayland/fbwl_ui_text.h"
 #include "wayland/fbwl_view.h"
@@ -176,24 +177,6 @@ struct fbwl_toolbar_ui {
     struct wlr_scene_rect **cells;
     struct wlr_scene_buffer **labels;
     size_t cell_count;
-};
-
-struct fbwl_osd_ui {
-    bool enabled;
-    bool visible;
-
-    int x;
-    int y;
-    int width;
-    int height;
-
-    int last_workspace;
-
-    struct wl_event_source *hide_timer;
-
-    struct wlr_scene_tree *tree;
-    struct wlr_scene_rect *bg;
-    struct wlr_scene_buffer *label;
 };
 
 struct fbwl_init_settings {
@@ -2698,31 +2681,11 @@ static bool server_cmd_dialog_ui_handle_key(struct fbwl_server *server, xkb_keys
     return fbwl_ui_cmd_dialog_handle_key(&server->cmd_dialog_ui, sym, modifiers);
 }
 
-static void server_osd_ui_destroy_scene(struct fbwl_osd_ui *ui) {
-    if (ui == NULL) {
-        return;
-    }
-    if (ui->tree != NULL) {
-        wlr_scene_node_destroy(&ui->tree->node);
-        ui->tree = NULL;
-    }
-    ui->bg = NULL;
-    ui->label = NULL;
-}
-
 static void server_osd_ui_hide(struct fbwl_server *server, const char *why) {
     if (server == NULL) {
         return;
     }
-    struct fbwl_osd_ui *ui = &server->osd_ui;
-    if (!ui->enabled || !ui->visible) {
-        return;
-    }
-    ui->visible = false;
-    if (ui->tree != NULL) {
-        wlr_scene_node_set_enabled(&ui->tree->node, false);
-    }
-    wlr_log(WLR_INFO, "OSD: hide reason=%s", why != NULL ? why : "(null)");
+    fbwl_ui_osd_hide(&server->osd_ui, why);
 }
 
 static int server_osd_hide_timer(void *data) {
@@ -2735,117 +2698,22 @@ static void server_osd_ui_update_position(struct fbwl_server *server) {
     if (server == NULL || server->output_layout == NULL) {
         return;
     }
-    struct fbwl_osd_ui *ui = &server->osd_ui;
-    if (!ui->enabled || !ui->visible || ui->tree == NULL) {
-        return;
-    }
-
-    struct wlr_output *out = wlr_output_layout_get_center_output(server->output_layout);
-    if (out == NULL) {
-        return;
-    }
-
-    struct wlr_box box = {0};
-    wlr_output_layout_get_box(server->output_layout, out, &box);
-    if (box.width < 1 || box.height < 1) {
-        return;
-    }
-
-    int x = box.x + (box.width - ui->width) / 2;
-    int y = box.y + 12;
-    if (x < box.x) {
-        x = box.x;
-    }
-    if (y < box.y) {
-        y = box.y;
-    }
-
-    if (x == ui->x && y == ui->y) {
-        return;
-    }
-
-    ui->x = x;
-    ui->y = y;
-    wlr_scene_node_set_position(&ui->tree->node, ui->x, ui->y);
+    fbwl_ui_osd_update_position(&server->osd_ui, server->output_layout);
 }
 
 static void server_osd_ui_show_workspace(struct fbwl_server *server, int workspace) {
     if (server == NULL || server->scene == NULL) {
         return;
     }
-    struct fbwl_osd_ui *ui = &server->osd_ui;
-    if (!ui->enabled) {
-        return;
-    }
-
-    if (ui->height < 1) {
-        ui->height = server->decor_theme.title_height > 0 ? server->decor_theme.title_height : 24;
-    }
-    if (ui->width < 1) {
-        ui->width = 200;
-    }
-
-    if (ui->tree == NULL) {
-        struct wlr_scene_tree *parent =
-            server->layer_top != NULL ? server->layer_top : &server->scene->tree;
-        ui->tree = wlr_scene_tree_create(parent);
-        if (ui->tree == NULL) {
-            return;
-        }
-
-        float bg[4] = {server->decor_theme.titlebar_active[0], server->decor_theme.titlebar_active[1],
-            server->decor_theme.titlebar_active[2], 0.85f};
-        ui->bg = wlr_scene_rect_create(ui->tree, ui->width, ui->height, bg);
-        if (ui->bg != NULL) {
-            wlr_scene_node_set_position(&ui->bg->node, 0, 0);
-        }
-
-        ui->label = wlr_scene_buffer_create(ui->tree, NULL);
-        if (ui->label != NULL) {
-            wlr_scene_node_set_position(&ui->label->node, 0, 0);
-        }
-    }
-
-    if (ui->tree != NULL) {
-        wlr_scene_node_set_enabled(&ui->tree->node, true);
-    }
-    ui->visible = true;
-
-    char msg[64];
-    if (snprintf(msg, sizeof(msg), "Workspace %d", workspace + 1) < 0) {
-        msg[0] = '\0';
-    }
-
-    const float fg[4] = {1.0f, 1.0f, 1.0f, 1.0f};
-    struct wlr_buffer *buf = fbwl_text_buffer_create(msg, ui->width, ui->height, 8, fg);
-    if (buf != NULL) {
-        if (ui->label != NULL) {
-            wlr_scene_buffer_set_buffer(ui->label, buf);
-        }
-        wlr_buffer_drop(buf);
-    }
-
-    if (ui->hide_timer != NULL) {
-        wl_event_source_timer_update(ui->hide_timer, 600);
-    }
-
-    server_osd_ui_update_position(server);
-    wlr_scene_node_raise_to_top(&ui->tree->node);
-    wlr_log(WLR_INFO, "OSD: show workspace=%d", workspace + 1);
+    fbwl_ui_osd_show_workspace(&server->osd_ui, server->scene, server->layer_top,
+        &server->decor_theme, server->output_layout, workspace);
 }
 
 static void server_osd_ui_destroy(struct fbwl_server *server) {
     if (server == NULL) {
         return;
     }
-    struct fbwl_osd_ui *ui = &server->osd_ui;
-    if (ui->hide_timer != NULL) {
-        wl_event_source_remove(ui->hide_timer);
-        ui->hide_timer = NULL;
-    }
-    server_osd_ui_destroy_scene(ui);
-    ui->enabled = false;
-    ui->visible = false;
+    fbwl_ui_osd_destroy(&server->osd_ui);
 }
 
 static void server_menu_ui_destroy_scene(struct fbwl_menu_ui *ui) {
