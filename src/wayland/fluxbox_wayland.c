@@ -101,6 +101,7 @@
 #include "wayland/fbwl_output_power.h"
 #include "wayland/fbwl_scene_layers.h"
 #include "wayland/fbwl_seat.h"
+#include "wayland/fbwl_session_lock.h"
 #include "wayland/fbwl_sni_tray.h"
 #include "wayland/fbwl_style_parse.h"
 #include "wayland/fbwl_text_input.h"
@@ -124,16 +125,6 @@ struct fbwl_init_settings {
     char *apps_file;
     char *style_file;
     char *menu_file;
-};
-
-struct fbwl_session_lock_surface {
-    struct wl_list link;
-    struct fbwl_server *server;
-    struct wlr_session_lock_surface_v1 *lock_surface;
-    struct wlr_scene_tree *scene_tree;
-    bool has_buffer;
-    struct wl_listener surface_commit;
-    struct wl_listener destroy;
 };
 
 struct fbwl_shortcuts_inhibitor {
@@ -276,16 +267,7 @@ struct fbwl_server {
     struct wlr_idle_notifier_v1 *idle_notifier;
     bool idle_inhibited;
 
-    struct wlr_session_lock_manager_v1 *session_lock_mgr;
-    struct wl_listener new_session_lock;
-    struct wlr_session_lock_v1 *session_lock;
-    struct wl_listener session_lock_new_surface;
-    struct wl_listener session_lock_unlock;
-    struct wl_listener session_lock_destroy;
-    struct wl_list session_lock_surfaces;
-    bool session_locked;
-    bool session_lock_sent_locked;
-    size_t session_lock_expected_surfaces;
+    struct fbwl_session_lock_state session_lock;
 
     struct fbwl_ipc ipc;
 
@@ -338,6 +320,27 @@ static void server_menu_free(struct fbwl_server *server);
 static void server_background_update_output(struct fbwl_server *server, struct fbwl_output *output);
 static void server_background_update_all(struct fbwl_server *server);
 
+static void session_lock_clear_keyboard_focus(void *userdata) {
+    clear_keyboard_focus(userdata);
+}
+
+static void session_lock_text_input_update_focus(void *userdata, struct wlr_surface *surface) {
+    server_text_input_update_focus(userdata, surface);
+}
+
+static void session_lock_update_shortcuts_inhibitor(void *userdata) {
+    server_update_shortcuts_inhibitor(userdata);
+}
+
+static struct fbwl_session_lock_hooks session_lock_hooks(struct fbwl_server *server) {
+    return (struct fbwl_session_lock_hooks){
+        .clear_keyboard_focus = session_lock_clear_keyboard_focus,
+        .text_input_update_focus = session_lock_text_input_update_focus,
+        .update_shortcuts_inhibitor = session_lock_update_shortcuts_inhibitor,
+        .userdata = server,
+    };
+}
+
 static void server_output_management_arrange_layers_on_output(void *userdata, struct wlr_output *wlr_output) {
     struct fbwl_server *server = userdata;
     if (server == NULL) {
@@ -353,209 +356,6 @@ static void server_output_power_set_mode(struct wl_listener *listener, void *dat
         return;
     }
     fbwl_output_power_handle_set_mode(data, server->output_manager, &server->outputs, server->output_layout);
-}
-
-static void server_session_lock_maybe_send_locked(struct fbwl_server *server) {
-    if (server == NULL || server->session_lock == NULL || server->session_lock_sent_locked) {
-        return;
-    }
-
-    if (server->session_lock_expected_surfaces < 1) {
-        server->session_lock_expected_surfaces = 1;
-    }
-
-    size_t surface_count = 0;
-    size_t committed_count = 0;
-    struct fbwl_session_lock_surface *ls;
-    wl_list_for_each(ls, &server->session_lock_surfaces, link) {
-        surface_count++;
-        if (ls->has_buffer) {
-            committed_count++;
-        }
-    }
-
-    if (surface_count < server->session_lock_expected_surfaces ||
-            committed_count < server->session_lock_expected_surfaces) {
-        return;
-    }
-
-    wlr_session_lock_v1_send_locked(server->session_lock);
-    server->session_lock_sent_locked = true;
-    wlr_log(WLR_INFO, "SessionLock: locked");
-}
-
-static void session_lock_surface_commit(struct wl_listener *listener, void *data) {
-    (void)data;
-    struct fbwl_session_lock_surface *ls = wl_container_of(listener, ls, surface_commit);
-    struct fbwl_server *server = ls != NULL ? ls->server : NULL;
-    if (server == NULL || ls->lock_surface == NULL || ls->lock_surface->surface == NULL) {
-        return;
-    }
-
-    if (ls->has_buffer) {
-        return;
-    }
-
-    if (!wlr_surface_has_buffer(ls->lock_surface->surface)) {
-        return;
-    }
-
-    ls->has_buffer = true;
-    server_session_lock_maybe_send_locked(server);
-}
-
-static void session_lock_surface_destroy(struct wl_listener *listener, void *data) {
-    (void)data;
-    struct fbwl_session_lock_surface *ls = wl_container_of(listener, ls, destroy);
-    fbwl_cleanup_listener(&ls->surface_commit);
-    fbwl_cleanup_listener(&ls->destroy);
-    if (ls->scene_tree != NULL) {
-        wlr_scene_node_destroy(&ls->scene_tree->node);
-        ls->scene_tree = NULL;
-    }
-    wl_list_remove(&ls->link);
-    free(ls);
-}
-
-static void server_session_lock_new_surface(struct wl_listener *listener, void *data) {
-    struct fbwl_server *server = wl_container_of(listener, server, session_lock_new_surface);
-    struct wlr_session_lock_surface_v1 *lock_surface = data;
-    if (server == NULL || lock_surface == NULL || lock_surface->surface == NULL) {
-        return;
-    }
-
-    struct fbwl_session_lock_surface *ls = calloc(1, sizeof(*ls));
-    if (ls == NULL) {
-        return;
-    }
-    ls->server = server;
-    ls->lock_surface = lock_surface;
-    wl_list_insert(&server->session_lock_surfaces, &ls->link);
-
-    struct wlr_scene_tree *parent =
-        server->layer_overlay != NULL ? server->layer_overlay : &server->scene->tree;
-    ls->scene_tree = wlr_scene_tree_create(parent);
-    if (ls->scene_tree != NULL) {
-        (void)wlr_scene_surface_create(ls->scene_tree, lock_surface->surface);
-
-        struct wlr_box box = {0};
-        if (server->output_layout != NULL && lock_surface->output != NULL) {
-            wlr_output_layout_get_box(server->output_layout, lock_surface->output, &box);
-        }
-        wlr_scene_node_set_position(&ls->scene_tree->node, box.x, box.y);
-        wlr_scene_node_raise_to_top(&ls->scene_tree->node);
-    }
-
-    ls->destroy.notify = session_lock_surface_destroy;
-    wl_signal_add(&lock_surface->events.destroy, &ls->destroy);
-
-    ls->has_buffer = wlr_surface_has_buffer(lock_surface->surface);
-    ls->surface_commit.notify = session_lock_surface_commit;
-    wl_signal_add(&lock_surface->surface->events.commit, &ls->surface_commit);
-
-    uint32_t width = 0;
-    uint32_t height = 0;
-    if (lock_surface->output != NULL) {
-        width = (uint32_t)lock_surface->output->width;
-        height = (uint32_t)lock_surface->output->height;
-    }
-    if (width == 0) {
-        width = 1280;
-    }
-    if (height == 0) {
-        height = 720;
-    }
-    (void)wlr_session_lock_surface_v1_configure(lock_surface, width, height);
-
-    clear_keyboard_focus(server);
-    if (server->seat != NULL) {
-        struct wlr_keyboard *keyboard = wlr_seat_get_keyboard(server->seat);
-        if (keyboard != NULL) {
-            wlr_seat_keyboard_notify_enter(server->seat, lock_surface->surface,
-                keyboard->keycodes, keyboard->num_keycodes, &keyboard->modifiers);
-        }
-    }
-
-    server_update_shortcuts_inhibitor(server);
-    server_session_lock_maybe_send_locked(server);
-}
-
-static void server_session_lock_unlock(struct wl_listener *listener, void *data) {
-    struct fbwl_server *server = wl_container_of(listener, server, session_lock_unlock);
-    struct wlr_session_lock_v1 *lock = data;
-    if (server == NULL || lock == NULL) {
-        return;
-    }
-    wlr_log(WLR_INFO, "SessionLock: unlock");
-    wlr_session_lock_v1_destroy(lock);
-}
-
-static void server_session_lock_destroy(struct wl_listener *listener, void *data) {
-    (void)data;
-    struct fbwl_server *server = wl_container_of(listener, server, session_lock_destroy);
-    if (server == NULL) {
-        return;
-    }
-
-    wlr_log(WLR_INFO, "SessionLock: destroy");
-
-    server->session_lock = NULL;
-    server->session_locked = false;
-    server->session_lock_sent_locked = false;
-    server->session_lock_expected_surfaces = 0;
-
-    fbwl_cleanup_listener(&server->session_lock_new_surface);
-    fbwl_cleanup_listener(&server->session_lock_unlock);
-    fbwl_cleanup_listener(&server->session_lock_destroy);
-
-    struct fbwl_session_lock_surface *ls, *tmp;
-    wl_list_for_each_safe(ls, tmp, &server->session_lock_surfaces, link) {
-        fbwl_cleanup_listener(&ls->surface_commit);
-        fbwl_cleanup_listener(&ls->destroy);
-        if (ls->scene_tree != NULL) {
-            wlr_scene_node_destroy(&ls->scene_tree->node);
-            ls->scene_tree = NULL;
-        }
-        wl_list_remove(&ls->link);
-        free(ls);
-    }
-}
-
-static void server_new_session_lock(struct wl_listener *listener, void *data) {
-    struct fbwl_server *server = wl_container_of(listener, server, new_session_lock);
-    struct wlr_session_lock_v1 *lock = data;
-    if (server == NULL || lock == NULL) {
-        return;
-    }
-
-    if (server->session_lock != NULL) {
-        wlr_log(WLR_INFO, "SessionLock: rejecting (already locked)");
-        wlr_session_lock_v1_destroy(lock);
-        return;
-    }
-
-    server->session_lock = lock;
-    server->session_locked = true;
-    server->session_lock_sent_locked = false;
-    server->session_lock_expected_surfaces = fbwl_output_count(&server->outputs);
-    if (server->session_lock_expected_surfaces < 1) {
-        server->session_lock_expected_surfaces = 1;
-    }
-
-    wlr_log(WLR_INFO, "SessionLock: new lock");
-
-    clear_keyboard_focus(server);
-    if (server->seat != NULL) {
-        wlr_seat_pointer_clear_focus(server->seat);
-    }
-    server_text_input_update_focus(server, NULL);
-
-    server->session_lock_new_surface.notify = server_session_lock_new_surface;
-    wl_signal_add(&lock->events.new_surface, &server->session_lock_new_surface);
-    server->session_lock_unlock.notify = server_session_lock_unlock;
-    wl_signal_add(&lock->events.unlock, &server->session_lock_unlock);
-    server->session_lock_destroy.notify = server_session_lock_destroy;
-    wl_signal_add(&lock->events.destroy, &server->session_lock_destroy);
 }
 
 static void server_output_manager_test(struct wl_listener *listener, void *data) {
@@ -674,12 +474,7 @@ static void server_output_destroyed(void *userdata, struct wlr_output *wlr_outpu
     if (server == NULL || wlr_output == NULL) {
         return;
     }
-
-    if (server->session_lock != NULL && !server->session_lock_sent_locked &&
-            server->session_lock_expected_surfaces > 1) {
-        server->session_lock_expected_surfaces--;
-        server_session_lock_maybe_send_locked(server);
-    }
+    fbwl_session_lock_on_output_destroyed(&server->session_lock);
 
     for (struct fbwm_view *wm_view = server->wm.views.next;
             wm_view != &server->wm.views;
@@ -832,7 +627,7 @@ static void focus_view(struct fbwl_view *view) {
     }
 
     struct fbwl_server *server = view->server;
-    if (server != NULL && server->session_locked) {
+    if (server != NULL && fbwl_session_lock_is_locked(&server->session_lock)) {
         return;
     }
     struct wlr_seat *seat = server->seat;
@@ -3041,18 +2836,11 @@ int main(int argc, char **argv) {
     server.new_idle_inhibitor.notify = server_new_idle_inhibitor;
     wl_signal_add(&server.idle_inhibit_mgr->events.new_inhibitor, &server.new_idle_inhibitor);
 
-    server.session_lock_mgr = wlr_session_lock_manager_v1_create(server.wl_display);
-    if (server.session_lock_mgr == NULL) {
-        wlr_log(WLR_ERROR, "failed to create session lock manager");
+    const struct fbwl_session_lock_hooks sl_hooks = session_lock_hooks(&server);
+    if (!fbwl_session_lock_init(&server.session_lock, server.wl_display,
+                &server.scene, &server.layer_overlay, &server.output_layout, &server.seat, &server.outputs, &sl_hooks)) {
         return 1;
     }
-    server.new_session_lock.notify = server_new_session_lock;
-    wl_signal_add(&server.session_lock_mgr->events.new_lock, &server.new_session_lock);
-    server.session_lock = NULL;
-    wl_list_init(&server.session_lock_surfaces);
-    server.session_locked = false;
-    server.session_lock_sent_locked = false;
-    server.session_lock_expected_surfaces = 0;
 
     server.foreign_toplevel_mgr = wlr_foreign_toplevel_manager_v1_create(server.wl_display);
     server.relative_pointer_mgr = wlr_relative_pointer_manager_v1_create(server.wl_display);
@@ -3394,10 +3182,7 @@ int main(int argc, char **argv) {
     fbwl_cleanup_listener(&server.new_virtual_pointer);
     fbwl_cleanup_listener(&server.new_pointer_constraint);
     fbwl_cleanup_listener(&server.new_idle_inhibitor);
-    fbwl_cleanup_listener(&server.new_session_lock);
-    fbwl_cleanup_listener(&server.session_lock_new_surface);
-    fbwl_cleanup_listener(&server.session_lock_unlock);
-    fbwl_cleanup_listener(&server.session_lock_destroy);
+    fbwl_session_lock_finish(&server.session_lock);
     fbwl_cleanup_listener(&server.output_manager_apply);
     fbwl_cleanup_listener(&server.output_manager_test);
     fbwl_cleanup_listener(&server.output_power_set_mode);
