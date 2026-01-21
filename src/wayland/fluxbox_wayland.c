@@ -54,7 +54,6 @@
 #include <wlr/types/wlr_primary_selection_v1.h>
 #include <wlr/types/wlr_presentation_time.h>
 #include <wlr/types/wlr_relative_pointer_v1.h>
-#include <wlr/types/wlr_fractional_scale_v1.h>
 #include <wlr/types/wlr_single_pixel_buffer_v1.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_screencopy_v1.h>
@@ -85,6 +84,7 @@
 #include "wmcore/fbwm_output.h"
 #include "wayland/fbwl_apps_rules.h"
 #include "wayland/fbwl_cursor.h"
+#include "wayland/fbwl_fractional_scale.h"
 #include "wayland/fbwl_grabs.h"
 #include "wayland/fbwl_idle.h"
 #include "wayland/fbwl_ipc.h"
@@ -233,7 +233,7 @@ struct fbwl_server {
 #endif
 
     struct fbwl_viewporter_state viewporter;
-    struct wlr_fractional_scale_manager_v1 *fractional_scale_mgr;
+    struct fbwl_fractional_scale_state fractional_scale;
     struct wlr_xdg_output_manager_v1 *xdg_output_mgr;
 
     struct fbwl_idle_state idle;
@@ -2539,9 +2539,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    server.fractional_scale_mgr = wlr_fractional_scale_manager_v1_create(server.wl_display, 1);
-    if (server.fractional_scale_mgr == NULL) {
-        wlr_log(WLR_ERROR, "failed to create fractional scale manager");
+    if (!fbwl_fractional_scale_init(&server.fractional_scale, server.wl_display)) {
         return 1;
     }
 
