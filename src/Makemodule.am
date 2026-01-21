@@ -345,6 +345,8 @@ fluxbox_wayland_SOURCES = \
 	src/wayland/fbwl_grabs.h \
 	src/wayland/fbwl_seat.c \
 	src/wayland/fbwl_seat.h \
+	src/wayland/fbwl_idle.c \
+	src/wayland/fbwl_idle.h \
 	src/wayland/fbwl_shortcuts_inhibit.c \
 	src/wayland/fbwl_shortcuts_inhibit.h \
 	src/wayland/fbwl_session_lock.c \

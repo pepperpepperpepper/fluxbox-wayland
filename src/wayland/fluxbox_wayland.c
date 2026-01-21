@@ -39,8 +39,6 @@
 #include <wlr/types/wlr_data_device.h>
 #include <wlr/types/wlr_ext_data_control_v1.h>
 #include <wlr/types/wlr_foreign_toplevel_management_v1.h>
-#include <wlr/types/wlr_idle_inhibit_v1.h>
-#include <wlr/types/wlr_idle_notify_v1.h>
 #include <wlr/types/wlr_input_device.h>
 #include <wlr/types/wlr_keyboard.h>
 #include <wlr/types/wlr_keyboard_shortcuts_inhibit_v1.h>
@@ -90,6 +88,7 @@
 #include "wayland/fbwl_apps_rules.h"
 #include "wayland/fbwl_cursor.h"
 #include "wayland/fbwl_grabs.h"
+#include "wayland/fbwl_idle.h"
 #include "wayland/fbwl_ipc.h"
 #include "wayland/fbwl_keybindings.h"
 #include "wayland/fbwl_keys_parse.h"
@@ -141,12 +140,6 @@ struct fbwl_xdg_decoration {
     enum wlr_xdg_toplevel_decoration_v1_mode desired_mode;
     struct wl_listener surface_map;
     struct wl_listener request_mode;
-    struct wl_listener destroy;
-};
-
-struct fbwl_idle_inhibitor {
-    struct fbwl_server *server;
-    struct wlr_idle_inhibitor_v1 *inhibitor;
     struct wl_listener destroy;
 };
 
@@ -258,12 +251,7 @@ struct fbwl_server {
     struct wlr_fractional_scale_manager_v1 *fractional_scale_mgr;
     struct wlr_xdg_output_manager_v1 *xdg_output_mgr;
 
-    struct wlr_idle_inhibit_manager_v1 *idle_inhibit_mgr;
-    struct wl_listener new_idle_inhibitor;
-    int idle_inhibitor_count;
-
-    struct wlr_idle_notifier_v1 *idle_notifier;
-    bool idle_inhibited;
+    struct fbwl_idle_state idle;
 
     struct fbwl_session_lock_state session_lock;
 
@@ -715,27 +703,6 @@ static void view_set_minimized(struct fbwl_view *view, bool minimized, const cha
     }
 }
 
-static void server_set_idle_inhibited(struct fbwl_server *server, bool inhibited, const char *why) {
-    if (server == NULL) {
-        return;
-    }
-    if (server->idle_inhibited == inhibited) {
-        return;
-    }
-    server->idle_inhibited = inhibited;
-    if (server->idle_notifier != NULL) {
-        wlr_idle_notifier_v1_set_inhibited(server->idle_notifier, inhibited);
-    }
-    wlr_log(WLR_INFO, "Idle: inhibited=%d reason=%s", inhibited ? 1 : 0, why != NULL ? why : "(null)");
-}
-
-static void server_notify_activity(struct fbwl_server *server) {
-    if (server == NULL || server->idle_notifier == NULL || server->seat == NULL) {
-        return;
-    }
-    wlr_idle_notifier_v1_notify_activity(server->idle_notifier, server->seat);
-}
-
 static uint32_t server_keyboard_modifiers(struct fbwl_server *server) {
     struct wlr_keyboard *keyboard = wlr_seat_get_keyboard(server->seat);
     return keyboard != NULL ? wlr_keyboard_get_modifiers(keyboard) : 0;
@@ -782,7 +749,7 @@ static struct fbwl_cursor_menu_hooks cursor_menu_hooks(struct fbwl_server *serve
 static void server_cursor_motion(struct wl_listener *listener, void *data) {
     struct fbwl_server *server = wl_container_of(listener, server, cursor_motion);
     struct wlr_pointer_motion_event *event = data;
-    server_notify_activity(server);
+    fbwl_idle_notify_activity(&server->idle);
     const struct fbwl_cursor_menu_hooks hooks = cursor_menu_hooks(server);
     fbwl_cursor_handle_motion(server->cursor, server->cursor_mgr, server->scene, server->seat,
         server->relative_pointer_mgr, server->pointer_constraints, &server->active_pointer_constraint,
@@ -794,7 +761,7 @@ static void server_cursor_motion(struct wl_listener *listener, void *data) {
 static void server_cursor_motion_absolute(struct wl_listener *listener, void *data) {
     struct fbwl_server *server = wl_container_of(listener, server, cursor_motion_absolute);
     struct wlr_pointer_motion_absolute_event *event = data;
-    server_notify_activity(server);
+    fbwl_idle_notify_activity(&server->idle);
     const struct fbwl_cursor_menu_hooks hooks = cursor_menu_hooks(server);
     fbwl_cursor_handle_motion_absolute(server->cursor, server->cursor_mgr, server->scene, server->seat,
         server->relative_pointer_mgr, server->pointer_constraints, &server->active_pointer_constraint,
@@ -806,7 +773,7 @@ static void server_cursor_motion_absolute(struct wl_listener *listener, void *da
 static void server_cursor_button(struct wl_listener *listener, void *data) {
     struct fbwl_server *server = wl_container_of(listener, server, cursor_button);
     struct wlr_pointer_button_event *event = data;
-    server_notify_activity(server);
+    fbwl_idle_notify_activity(&server->idle);
 
     if (server->grab.mode != FBWL_CURSOR_PASSTHROUGH) {
         if (event->state == WL_POINTER_BUTTON_STATE_RELEASED &&
@@ -973,7 +940,7 @@ static void server_cursor_button(struct wl_listener *listener, void *data) {
 static void server_cursor_axis(struct wl_listener *listener, void *data) {
     struct fbwl_server *server = wl_container_of(listener, server, cursor_axis);
     struct wlr_pointer_axis_event *event = data;
-    server_notify_activity(server);
+    fbwl_idle_notify_activity(&server->idle);
     wlr_seat_pointer_notify_axis(server->seat, event->time_msec,
         event->orientation, event->delta, event->delta_discrete, event->source,
         event->relative_direction);
@@ -1727,7 +1694,7 @@ static void server_apps_rules_apply_post_map(struct fbwl_view *view,
 
 static void seat_notify_activity(void *userdata) {
     struct fbwl_server *server = userdata;
-    server_notify_activity(server);
+    fbwl_idle_notify_activity(&server->idle);
 }
 
 static bool seat_menu_is_open(void *userdata) {
@@ -1897,32 +1864,6 @@ static void server_xdg_activation_request_activate(struct wl_listener *listener,
         view_set_minimized(view, false, "xdg-activation");
     }
     fbwm_core_focus_view(&server->wm, &view->wm_view);
-}
-
-static void idle_inhibitor_destroy(struct wl_listener *listener, void *data) {
-    (void)data;
-    struct fbwl_idle_inhibitor *ii = wl_container_of(listener, ii, destroy);
-    struct fbwl_server *server = ii->server;
-    fbwl_cleanup_listener(&ii->destroy);
-    if (server != NULL && server->idle_inhibitor_count > 0) {
-        server->idle_inhibitor_count--;
-        server_set_idle_inhibited(server, server->idle_inhibitor_count > 0, "destroy-inhibitor");
-    }
-    free(ii);
-}
-
-static void server_new_idle_inhibitor(struct wl_listener *listener, void *data) {
-    struct fbwl_server *server = wl_container_of(listener, server, new_idle_inhibitor);
-    struct wlr_idle_inhibitor_v1 *inhibitor = data;
-
-    struct fbwl_idle_inhibitor *ii = calloc(1, sizeof(*ii));
-    ii->server = server;
-    ii->inhibitor = inhibitor;
-    ii->destroy.notify = idle_inhibitor_destroy;
-    wl_signal_add(&inhibitor->events.destroy, &ii->destroy);
-
-    server->idle_inhibitor_count++;
-    server_set_idle_inhibited(server, true, "new-inhibitor");
 }
 
 static void server_new_input(struct wl_listener *listener, void *data) {
@@ -2730,22 +2671,9 @@ int main(int argc, char **argv) {
     server.new_xdg_decoration.notify = server_new_xdg_decoration;
     wl_signal_add(&server.xdg_decoration_mgr->events.new_toplevel_decoration, &server.new_xdg_decoration);
 
-    server.idle_notifier = wlr_idle_notifier_v1_create(server.wl_display);
-    if (server.idle_notifier == NULL) {
-        wlr_log(WLR_ERROR, "failed to create idle notifier");
+    if (!fbwl_idle_init(&server.idle, server.wl_display, &server.seat)) {
         return 1;
     }
-    server.idle_inhibited = false;
-    wlr_idle_notifier_v1_set_inhibited(server.idle_notifier, false);
-
-    server.idle_inhibit_mgr = wlr_idle_inhibit_v1_create(server.wl_display);
-    if (server.idle_inhibit_mgr == NULL) {
-        wlr_log(WLR_ERROR, "failed to create idle inhibit manager");
-        return 1;
-    }
-    server.idle_inhibitor_count = 0;
-    server.new_idle_inhibitor.notify = server_new_idle_inhibitor;
-    wl_signal_add(&server.idle_inhibit_mgr->events.new_inhibitor, &server.new_idle_inhibitor);
 
     const struct fbwl_session_lock_hooks sl_hooks = session_lock_hooks(&server);
     if (!fbwl_session_lock_init(&server.session_lock, server.wl_display,
@@ -3087,7 +3015,7 @@ int main(int argc, char **argv) {
     fbwl_cleanup_listener(&server.new_virtual_keyboard);
     fbwl_cleanup_listener(&server.new_virtual_pointer);
     fbwl_cleanup_listener(&server.new_pointer_constraint);
-    fbwl_cleanup_listener(&server.new_idle_inhibitor);
+    fbwl_idle_finish(&server.idle);
     fbwl_session_lock_finish(&server.session_lock);
     fbwl_cleanup_listener(&server.output_manager_apply);
     fbwl_cleanup_listener(&server.output_manager_test);
