@@ -215,6 +215,23 @@ struct fbwl_server {
     struct fbwl_grab grab;
 };
 
+struct fbwl_server_bootstrap_options {
+    const char *socket_name;
+    const char *ipc_socket_path;
+    const char *startup_cmd;
+    const char *terminal_cmd;
+    const char *keys_file;
+    const char *apps_file;
+    const char *style_file;
+    const char *menu_file;
+    const char *config_dir;
+    const float *background_color;
+    int workspaces;
+    bool workspaces_set;
+    bool enable_xwayland;
+    bool log_protocol;
+};
+
 void fbwl_init_settings_free(struct fbwl_init_settings *settings);
 bool fbwl_init_load_file(const char *config_dir, struct fbwl_init_settings *settings);
 char *fbwl_path_join(const char *dir, const char *rel);
@@ -260,6 +277,7 @@ void server_menu_create_window(struct fbwl_server *server);
 bool server_menu_load_file(struct fbwl_server *server, const char *path);
 
 bool fbwl_server_outputs_init(struct fbwl_server *server);
+bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_bootstrap_options *opts);
 void fbwl_server_finish(struct fbwl_server *server);
 void server_toolbar_ui_rebuild(struct fbwl_server *server);
 void server_toolbar_ui_update_position(struct fbwl_server *server);
