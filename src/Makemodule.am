@@ -366,6 +366,7 @@ fluxbox_wayland_SOURCES = \
 		src/wayland/fbwl_server_policy.c \
 		src/wayland/fbwl_server_menu.c \
 		src/wayland/fbwl_server_ipc_command.c \
+		src/wayland/fbwl_server_cleanup.c \
 		src/wayland/fbwl_server_outputs.c \
 		src/wayland/fbwl_server_xdg_xwayland.c \
 		src/wayland/fbwl_server_seat_glue.c \

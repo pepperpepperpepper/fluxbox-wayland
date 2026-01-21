@@ -260,6 +260,7 @@ void server_menu_create_window(struct fbwl_server *server);
 bool server_menu_load_file(struct fbwl_server *server, const char *path);
 
 bool fbwl_server_outputs_init(struct fbwl_server *server);
+void fbwl_server_finish(struct fbwl_server *server);
 void server_toolbar_ui_rebuild(struct fbwl_server *server);
 void server_toolbar_ui_update_position(struct fbwl_server *server);
 void server_toolbar_ui_update_iconbar_focus(struct fbwl_server *server);
