@@ -355,6 +355,8 @@ fluxbox_wayland_SOURCES = \
 	src/wayland/fbwl_text_input.h \
 	src/wayland/fbwl_pointer_constraints.c \
 	src/wayland/fbwl_pointer_constraints.h \
+	src/wayland/fbwl_viewporter.c \
+	src/wayland/fbwl_viewporter.h \
 	src/wayland/fbwl_xdg_activation.c \
 	src/wayland/fbwl_xdg_activation.h \
 	src/wayland/fbwl_xdg_decoration.c \

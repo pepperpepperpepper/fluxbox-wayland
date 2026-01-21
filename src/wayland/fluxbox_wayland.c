@@ -65,7 +65,6 @@
 #include <wlr/types/wlr_text_input_v3.h>
 #include <wlr/types/wlr_virtual_keyboard_v1.h>
 #include <wlr/types/wlr_virtual_pointer_v1.h>
-#include <wlr/types/wlr_viewporter.h>
 #include <wlr/types/wlr_xcursor_manager.h>
 #include <wlr/types/wlr_xdg_activation_v1.h>
 #include <wlr/types/wlr_xdg_output_v1.h>
@@ -113,6 +112,7 @@
 #include "wayland/fbwl_ui_text.h"
 #include "wayland/fbwl_view.h"
 #include "wayland/fbwl_view_foreign_toplevel.h"
+#include "wayland/fbwl_viewporter.h"
 #include "wayland/fbwl_xdg_activation.h"
 #include "wayland/fbwl_xdg_decoration.h"
 #include "wayland/fbwl_xdg_shell.h"
@@ -232,7 +232,7 @@ struct fbwl_server {
     struct wlr_ext_output_image_capture_source_manager_v1 *ext_output_image_capture_source_mgr;
 #endif
 
-    struct wlr_viewporter *viewporter;
+    struct fbwl_viewporter_state viewporter;
     struct wlr_fractional_scale_manager_v1 *fractional_scale_mgr;
     struct wlr_xdg_output_manager_v1 *xdg_output_mgr;
 
@@ -2535,9 +2535,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    server.viewporter = wlr_viewporter_create(server.wl_display);
-    if (server.viewporter == NULL) {
-        wlr_log(WLR_ERROR, "failed to create viewporter");
+    if (!fbwl_viewporter_init(&server.viewporter, server.wl_display)) {
         return 1;
     }
 
