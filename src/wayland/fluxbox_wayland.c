@@ -66,7 +66,6 @@
 #include <wlr/types/wlr_virtual_pointer_v1.h>
 #include <wlr/types/wlr_xcursor_manager.h>
 #include <wlr/types/wlr_xdg_activation_v1.h>
-#include <wlr/types/wlr_xdg_output_v1.h>
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/util/log.h>
 #include <wlr/util/edges.h>
@@ -115,6 +114,7 @@
 #include "wayland/fbwl_viewporter.h"
 #include "wayland/fbwl_xdg_activation.h"
 #include "wayland/fbwl_xdg_decoration.h"
+#include "wayland/fbwl_xdg_output.h"
 #include "wayland/fbwl_xdg_shell.h"
 #include "wayland/fbwl_xwayland.h"
 
@@ -234,7 +234,7 @@ struct fbwl_server {
 
     struct fbwl_viewporter_state viewporter;
     struct fbwl_fractional_scale_state fractional_scale;
-    struct wlr_xdg_output_manager_v1 *xdg_output_mgr;
+    struct fbwl_xdg_output_state xdg_output;
 
     struct fbwl_idle_state idle;
 
@@ -2617,9 +2617,7 @@ int main(int argc, char **argv) {
     server.output_power_set_mode.notify = server_output_power_set_mode;
     wl_signal_add(&server.output_power_mgr->events.set_mode, &server.output_power_set_mode);
 
-    server.xdg_output_mgr = wlr_xdg_output_manager_v1_create(server.wl_display, server.output_layout);
-    if (server.xdg_output_mgr == NULL) {
-        wlr_log(WLR_ERROR, "failed to create xdg output manager");
+    if (!fbwl_xdg_output_init(&server.xdg_output, server.wl_display, server.output_layout)) {
         return 1;
     }
     wl_list_init(&server.outputs);
