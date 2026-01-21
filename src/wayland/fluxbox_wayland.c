@@ -56,7 +56,6 @@
 #include <wlr/types/wlr_relative_pointer_v1.h>
 #include <wlr/types/wlr_single_pixel_buffer_v1.h>
 #include <wlr/types/wlr_scene.h>
-#include <wlr/types/wlr_screencopy_v1.h>
 #include <wlr/types/wlr_export_dmabuf_v1.h>
 #include <wlr/types/wlr_session_lock_v1.h>
 #include <wlr/types/wlr_seat.h>
@@ -102,6 +101,7 @@
 #include "wayland/fbwl_session_lock.h"
 #include "wayland/fbwl_sni_tray.h"
 #include "wayland/fbwl_style_parse.h"
+#include "wayland/fbwl_screencopy.h"
 #include "wayland/fbwl_text_input.h"
 #include "wayland/fbwl_ui_cmd_dialog.h"
 #include "wayland/fbwl_ui_decor_theme.h"
@@ -224,7 +224,7 @@ struct fbwl_server {
     struct wl_listener new_virtual_pointer;
 
     struct fbwl_pointer_constraints_state pointer_constraints;
-    struct wlr_screencopy_manager_v1 *screencopy_mgr;
+    struct fbwl_screencopy_state screencopy;
     struct wlr_export_dmabuf_manager_v1 *export_dmabuf_mgr;
 
 #if WLR_VERSION_NUM >= ((0 << 16) | (19 << 8) | 0)
@@ -2567,9 +2567,7 @@ int main(int argc, char **argv) {
                 &server.cursor, &server.cursor_mgr, &server.scene, &server.seat, &pointer_constraints_hooks)) {
         return 1;
     }
-    server.screencopy_mgr = wlr_screencopy_manager_v1_create(server.wl_display);
-    if (server.screencopy_mgr == NULL) {
-        wlr_log(WLR_ERROR, "failed to create screencopy manager");
+    if (!fbwl_screencopy_init(&server.screencopy, server.wl_display)) {
         return 1;
     }
 
