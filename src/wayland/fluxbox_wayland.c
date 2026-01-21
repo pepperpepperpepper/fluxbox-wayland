@@ -101,6 +101,7 @@
 #include "wayland/fbwl_output_power.h"
 #include "wayland/fbwl_scene_layers.h"
 #include "wayland/fbwl_seat.h"
+#include "wayland/fbwl_shortcuts_inhibit.h"
 #include "wayland/fbwl_session_lock.h"
 #include "wayland/fbwl_sni_tray.h"
 #include "wayland/fbwl_style_parse.h"
@@ -223,10 +224,7 @@ struct fbwl_server {
     struct wl_listener cursor_shape_request_set_shape;
 
     struct wlr_seat *seat;
-    struct wlr_keyboard_shortcuts_inhibit_manager_v1 *shortcuts_inhibit_mgr;
-    struct wl_listener new_shortcuts_inhibitor;
-    struct wlr_keyboard_shortcuts_inhibitor_v1 *active_shortcuts_inhibitor;
-    struct wl_list shortcuts_inhibitors;
+    struct fbwl_shortcuts_inhibit_state shortcuts_inhibit;
     struct wl_list keyboards;
     struct wl_listener new_input;
     struct wl_listener request_cursor;
@@ -522,103 +520,17 @@ static void server_text_input_update_focus(struct fbwl_server *server, struct wl
 }
 
 static bool server_keyboard_shortcuts_inhibited(struct fbwl_server *server) {
-    if (server == NULL || server->seat == NULL) {
+    if (server == NULL) {
         return false;
     }
-    struct wlr_keyboard_shortcuts_inhibitor_v1 *inhib = server->active_shortcuts_inhibitor;
-    if (inhib == NULL || !inhib->active) {
-        return false;
-    }
-    return server->seat->keyboard_state.focused_surface == inhib->surface;
-}
-
-static struct wlr_keyboard_shortcuts_inhibitor_v1 *server_find_shortcuts_inhibitor(
-        struct fbwl_server *server, struct wlr_surface *surface) {
-    if (server == NULL || surface == NULL || server->seat == NULL) {
-        return NULL;
-    }
-
-    struct fbwl_shortcuts_inhibitor *si;
-    wl_list_for_each(si, &server->shortcuts_inhibitors, link) {
-        struct wlr_keyboard_shortcuts_inhibitor_v1 *inhib = si->inhibitor;
-        if (inhib != NULL && inhib->seat == server->seat && inhib->surface == surface) {
-            return inhib;
-        }
-    }
-    return NULL;
+    return fbwl_shortcuts_inhibit_is_inhibited(&server->shortcuts_inhibit);
 }
 
 static void server_update_shortcuts_inhibitor(struct fbwl_server *server) {
-    if (server == NULL || server->shortcuts_inhibit_mgr == NULL || server->seat == NULL) {
+    if (server == NULL) {
         return;
     }
-
-    struct wlr_surface *focused_surface = server->seat->keyboard_state.focused_surface;
-    struct wlr_keyboard_shortcuts_inhibitor_v1 *want =
-        server_find_shortcuts_inhibitor(server, focused_surface);
-
-    if (want == server->active_shortcuts_inhibitor) {
-        if (want != NULL && !want->active) {
-            wlr_keyboard_shortcuts_inhibitor_v1_activate(want);
-            wlr_log(WLR_INFO, "ShortcutsInhibit: activated");
-        }
-        return;
-    }
-
-    if (server->active_shortcuts_inhibitor != NULL) {
-        struct wlr_keyboard_shortcuts_inhibitor_v1 *old = server->active_shortcuts_inhibitor;
-        server->active_shortcuts_inhibitor = NULL;
-        if (old->active) {
-            wlr_keyboard_shortcuts_inhibitor_v1_deactivate(old);
-            wlr_log(WLR_INFO, "ShortcutsInhibit: deactivated");
-        }
-    }
-
-    if (want != NULL) {
-        wlr_keyboard_shortcuts_inhibitor_v1_activate(want);
-        server->active_shortcuts_inhibitor = want;
-        wlr_log(WLR_INFO, "ShortcutsInhibit: activated");
-    }
-}
-
-static void shortcuts_inhibitor_destroy(struct wl_listener *listener, void *data) {
-    (void)data;
-    struct fbwl_shortcuts_inhibitor *si = wl_container_of(listener, si, destroy);
-    if (si == NULL) {
-        return;
-    }
-
-    struct fbwl_server *server = si->server;
-    if (server != NULL && server->active_shortcuts_inhibitor == si->inhibitor) {
-        server->active_shortcuts_inhibitor = NULL;
-    }
-
-    fbwl_cleanup_listener(&si->destroy);
-    wl_list_remove(&si->link);
-    free(si);
-}
-
-static void server_new_shortcuts_inhibitor(struct wl_listener *listener, void *data) {
-    struct fbwl_server *server = wl_container_of(listener, server, new_shortcuts_inhibitor);
-    struct wlr_keyboard_shortcuts_inhibitor_v1 *inhibitor = data;
-    if (server == NULL || inhibitor == NULL) {
-        return;
-    }
-
-    wlr_log(WLR_INFO, "ShortcutsInhibit: new inhibitor");
-
-    struct fbwl_shortcuts_inhibitor *si = calloc(1, sizeof(*si));
-    if (si == NULL) {
-        return;
-    }
-    si->server = server;
-    si->inhibitor = inhibitor;
-    wl_list_insert(&server->shortcuts_inhibitors, &si->link);
-
-    si->destroy.notify = shortcuts_inhibitor_destroy;
-    wl_signal_add(&inhibitor->events.destroy, &si->destroy);
-
-    server_update_shortcuts_inhibitor(server);
+    fbwl_shortcuts_inhibit_update(&server->shortcuts_inhibit);
 }
 
 static void focus_view(struct fbwl_view *view) {
@@ -2707,7 +2619,6 @@ int main(int argc, char **argv) {
     server.terminal_cmd = terminal_cmd;
     server.has_pointer = false;
     fbwl_ipc_init(&server.ipc);
-    wl_list_init(&server.shortcuts_inhibitors);
 #ifdef HAVE_SYSTEMD
     wl_list_init(&server.sni.items);
 #endif
@@ -3069,14 +2980,9 @@ int main(int argc, char **argv) {
     wl_signal_add(&server.backend->events.new_input, &server.new_input);
     server.seat = wlr_seat_create(server.wl_display, "seat0");
 
-    server.shortcuts_inhibit_mgr = wlr_keyboard_shortcuts_inhibit_v1_create(server.wl_display);
-    if (server.shortcuts_inhibit_mgr == NULL) {
-        wlr_log(WLR_ERROR, "failed to create keyboard-shortcuts-inhibit manager");
+    if (!fbwl_shortcuts_inhibit_init(&server.shortcuts_inhibit, server.wl_display, &server.seat)) {
         return 1;
     }
-    server.active_shortcuts_inhibitor = NULL;
-    server.new_shortcuts_inhibitor.notify = server_new_shortcuts_inhibitor;
-    wl_signal_add(&server.shortcuts_inhibit_mgr->events.new_inhibitor, &server.new_shortcuts_inhibitor);
 
     server.request_cursor.notify = seat_request_cursor;
     wl_signal_add(&server.seat->events.request_set_cursor, &server.request_cursor);
@@ -3177,7 +3083,7 @@ int main(int argc, char **argv) {
     fbwl_cleanup_listener(&server.request_set_selection);
     fbwl_cleanup_listener(&server.request_set_primary_selection);
     fbwl_cleanup_listener(&server.request_start_drag);
-    fbwl_cleanup_listener(&server.new_shortcuts_inhibitor);
+    fbwl_shortcuts_inhibit_finish(&server.shortcuts_inhibit);
     fbwl_cleanup_listener(&server.new_virtual_keyboard);
     fbwl_cleanup_listener(&server.new_virtual_pointer);
     fbwl_cleanup_listener(&server.new_pointer_constraint);
