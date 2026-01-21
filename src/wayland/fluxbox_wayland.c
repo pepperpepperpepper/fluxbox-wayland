@@ -97,6 +97,7 @@
 #include "wayland/fbwl_output.h"
 #include "wayland/fbwl_output_management.h"
 #include "wayland/fbwl_output_power.h"
+#include "wayland/fbwl_pointer_constraints.h"
 #include "wayland/fbwl_scene_layers.h"
 #include "wayland/fbwl_seat.h"
 #include "wayland/fbwl_shortcuts_inhibit.h"
@@ -222,13 +223,7 @@ struct fbwl_server {
     struct wl_listener new_virtual_keyboard;
     struct wl_listener new_virtual_pointer;
 
-    struct wlr_relative_pointer_manager_v1 *relative_pointer_mgr;
-    struct wlr_pointer_constraints_v1 *pointer_constraints;
-    struct wl_listener new_pointer_constraint;
-    struct wlr_pointer_constraint_v1 *active_pointer_constraint;
-    bool pointer_phys_valid;
-    double pointer_phys_x;
-    double pointer_phys_y;
+    struct fbwl_pointer_constraints_state pointer_constraints;
     struct wlr_screencopy_manager_v1 *screencopy_mgr;
     struct wlr_export_dmabuf_manager_v1 *export_dmabuf_mgr;
 
@@ -742,8 +737,10 @@ static void server_cursor_motion(struct wl_listener *listener, void *data) {
     fbwl_idle_notify_activity(&server->idle);
     const struct fbwl_cursor_menu_hooks hooks = cursor_menu_hooks(server);
     fbwl_cursor_handle_motion(server->cursor, server->cursor_mgr, server->scene, server->seat,
-        server->relative_pointer_mgr, server->pointer_constraints, &server->active_pointer_constraint,
-        &server->pointer_phys_valid, &server->pointer_phys_x, &server->pointer_phys_y,
+        server->pointer_constraints.relative_pointer_mgr,
+        server->pointer_constraints.constraints,
+        &server->pointer_constraints.active,
+        &server->pointer_constraints.phys_valid, &server->pointer_constraints.phys_x, &server->pointer_constraints.phys_y,
         server->grab.mode, cursor_grab_update, server,
         &hooks, event);
 }
@@ -754,8 +751,10 @@ static void server_cursor_motion_absolute(struct wl_listener *listener, void *da
     fbwl_idle_notify_activity(&server->idle);
     const struct fbwl_cursor_menu_hooks hooks = cursor_menu_hooks(server);
     fbwl_cursor_handle_motion_absolute(server->cursor, server->cursor_mgr, server->scene, server->seat,
-        server->relative_pointer_mgr, server->pointer_constraints, &server->active_pointer_constraint,
-        &server->pointer_phys_valid, &server->pointer_phys_x, &server->pointer_phys_y,
+        server->pointer_constraints.relative_pointer_mgr,
+        server->pointer_constraints.constraints,
+        &server->pointer_constraints.active,
+        &server->pointer_constraints.phys_valid, &server->pointer_constraints.phys_x, &server->pointer_constraints.phys_y,
         server->grab.mode, cursor_grab_update, server,
         &hooks, event);
 }
@@ -1759,14 +1758,6 @@ static void seat_request_start_drag(struct wl_listener *listener, void *data) {
     fbwl_seat_handle_request_start_drag(server->seat, data);
 }
 
-static void server_new_pointer_constraint(struct wl_listener *listener, void *data) {
-    struct fbwl_server *server = wl_container_of(listener, server, new_pointer_constraint);
-    struct wlr_pointer_constraint_v1 *constraint = data;
-    const struct fbwl_cursor_menu_hooks hooks = cursor_menu_hooks(server);
-    fbwl_cursor_handle_new_pointer_constraint(server->cursor, server->cursor_mgr, server->scene, server->seat,
-        server->pointer_constraints, &server->active_pointer_constraint, &hooks, constraint);
-}
-
 static void server_new_input(struct wl_listener *listener, void *data) {
     struct fbwl_server *server = wl_container_of(listener, server, new_input);
     struct wlr_input_device *device = data;
@@ -2575,16 +2566,11 @@ int main(int argc, char **argv) {
     }
 
     server.foreign_toplevel_mgr = wlr_foreign_toplevel_manager_v1_create(server.wl_display);
-    server.relative_pointer_mgr = wlr_relative_pointer_manager_v1_create(server.wl_display);
-    server.pointer_constraints = wlr_pointer_constraints_v1_create(server.wl_display);
-    if (server.pointer_constraints == NULL) {
-        wlr_log(WLR_ERROR, "failed to create pointer constraints manager");
+    const struct fbwl_cursor_menu_hooks pointer_constraints_hooks = cursor_menu_hooks(&server);
+    if (!fbwl_pointer_constraints_init(&server.pointer_constraints, server.wl_display,
+                &server.cursor, &server.cursor_mgr, &server.scene, &server.seat, &pointer_constraints_hooks)) {
         return 1;
     }
-    server.new_pointer_constraint.notify = server_new_pointer_constraint;
-    wl_signal_add(&server.pointer_constraints->events.new_constraint, &server.new_pointer_constraint);
-    server.active_pointer_constraint = NULL;
-    server.pointer_phys_valid = false;
     server.screencopy_mgr = wlr_screencopy_manager_v1_create(server.wl_display);
     if (server.screencopy_mgr == NULL) {
         wlr_log(WLR_ERROR, "failed to create screencopy manager");
@@ -2907,7 +2893,7 @@ int main(int argc, char **argv) {
     fbwl_shortcuts_inhibit_finish(&server.shortcuts_inhibit);
     fbwl_cleanup_listener(&server.new_virtual_keyboard);
     fbwl_cleanup_listener(&server.new_virtual_pointer);
-    fbwl_cleanup_listener(&server.new_pointer_constraint);
+    fbwl_pointer_constraints_finish(&server.pointer_constraints);
     fbwl_idle_finish(&server.idle);
     fbwl_session_lock_finish(&server.session_lock);
     fbwl_cleanup_listener(&server.output_manager_apply);
