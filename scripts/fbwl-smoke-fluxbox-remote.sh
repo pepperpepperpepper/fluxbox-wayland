@@ -31,14 +31,14 @@ FBW_PID=$!
 timeout 5 bash -c "until rg -q 'Running fluxbox-wayland' '$LOG'; do sleep 0.05; done"
 timeout 5 bash -c "until rg -q 'IPC: listening' '$LOG'; do sleep 0.05; done"
 
-DISPLAY= ./fluxbox-remote --wayland --socket "$SOCKET" ping | rg -q '^ok pong$'
-DISPLAY= ./fluxbox-remote --wayland --socket "$SOCKET" get-workspace | rg -q '^ok workspace=1$'
+DISPLAY='' ./fluxbox-remote --wayland --socket "$SOCKET" ping | rg -q '^ok pong$'
+DISPLAY='' ./fluxbox-remote --wayland --socket "$SOCKET" get-workspace | rg -q '^ok workspace=1$'
 
-DISPLAY= ./fluxbox-remote --wayland --socket "$SOCKET" workspace 2 | rg -q '^ok workspace=2$'
+DISPLAY='' ./fluxbox-remote --wayland --socket "$SOCKET" workspace 2 | rg -q '^ok workspace=2$'
 timeout 5 bash -c "until rg -q 'Workspace: apply current=2 reason=ipc' '$LOG'; do sleep 0.05; done"
-DISPLAY= ./fluxbox-remote --wayland --socket "$SOCKET" get-workspace | rg -q '^ok workspace=2$'
+DISPLAY='' ./fluxbox-remote --wayland --socket "$SOCKET" get-workspace | rg -q '^ok workspace=2$'
 
-DISPLAY= ./fluxbox-remote --wayland --socket "$SOCKET" quit | rg -q '^ok quitting$'
+DISPLAY='' ./fluxbox-remote --wayland --socket "$SOCKET" quit | rg -q '^ok quitting$'
 timeout 5 bash -c "while kill -0 '$FBW_PID' 2>/dev/null; do sleep 0.05; done"
 wait "$FBW_PID"
 unset FBW_PID

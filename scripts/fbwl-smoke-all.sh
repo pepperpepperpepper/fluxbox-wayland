@@ -10,6 +10,8 @@ scripts=(
   scripts/fbwl-smoke-log-protocol.sh
   scripts/fbwl-smoke-background.sh
   scripts/fbwl-smoke-xvfb.sh
+  scripts/fbwl-smoke-xvfb-protocols.sh
+  scripts/fbwl-smoke-xvfb-xwayland.sh
   scripts/fbwl-smoke-xwayland.sh
   scripts/fbwl-smoke-ipc.sh
   scripts/fbwl-smoke-startfluxbox-wayland.sh

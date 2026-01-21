@@ -62,7 +62,7 @@ LS_PID=$!
 timeout 5 bash -c "until rg -q 'LayerShell: map ns=fbwl-panel' '$LOG'; do sleep 0.05; done"
 
 tail -c +$((OFFSET + 1)) "$LOG" | rg -q "LayerShell: surface ns=fbwl-panel layer=2 pos=0,0 size=${OUT_W}x${PANEL_H} excl=${PANEL_H}"
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q "LayerShell: output=HEADLESS-1 usable=0,${PANEL_H} ${OUT_W}x${USABLE_H}"
+tail -c +$((OFFSET + 1)) "$LOG" | rg -q "LayerShell: output=[^ ]+ usable=0,${PANEL_H} ${OUT_W}x${USABLE_H}"
 
 USABLE_PAIR=$(
   tail -c +$((OFFSET + 1)) "$LOG" \
@@ -82,6 +82,10 @@ timeout 5 bash -c "until rg -q 'Place: placed' '$LOG'; do sleep 0.05; done"
 PLACED_LINE=$(tail -c +$((OFFSET + 1)) "$LOG" | rg 'Place: placed' | tail -n 1)
 PLACED_X=$(echo "$PLACED_LINE" | rg -o 'x=-?[0-9]+' | head -n 1 | cut -d= -f2)
 PLACED_Y=$(echo "$PLACED_LINE" | rg -o 'y=-?[0-9]+' | head -n 1 | cut -d= -f2)
+if (( PLACED_X < USABLE_X )); then
+  echo "placed view is left of usable area: $PLACED_LINE (usable_x=$USABLE_X)" >&2
+  exit 1
+fi
 if (( PLACED_Y < USABLE_Y )); then
   echo "placed view is above usable area: $PLACED_LINE (usable_y=$USABLE_Y)" >&2
   exit 1

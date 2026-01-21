@@ -63,12 +63,12 @@ A_PID=$!
 
 timeout 5 bash -c "until rg -q 'Place: out-a' '$LOG'; do sleep 0.05; done"
 PLACED_A=$(rg 'Place: out-a' "$LOG" | tail -n 1)
-AX=$(echo "$PLACED_A" | rg -o 'x=-?[0-9]+' | head -n 1 | cut -d= -f2)
-AY=$(echo "$PLACED_A" | rg -o 'y=-?[0-9]+' | head -n 1 | cut -d= -f2)
-if ! (( AX >= X1 && AX < X1 + W1 && AY >= Y1 && AY < Y1 + H1 )); then
-  echo "out-a placed outside output1: $PLACED_A (box=$X1,$Y1 $W1x$H1)" >&2
-  exit 1
-fi
+	AX=$(echo "$PLACED_A" | rg -o 'x=-?[0-9]+' | head -n 1 | cut -d= -f2)
+	AY=$(echo "$PLACED_A" | rg -o 'y=-?[0-9]+' | head -n 1 | cut -d= -f2)
+	if ! (( AX >= X1 && AX < X1 + W1 && AY >= Y1 && AY < Y1 + H1 )); then
+	  echo "out-a placed outside output1: $PLACED_A (box=$X1,$Y1 ${W1}x${H1})" >&2
+	  exit 1
+	fi
 
 ./fbwl-input-injector --socket "$SOCKET" click "$CX2" "$CY2"
 ./fbwl-smoke-client --socket "$SOCKET" --title out-b --stay-ms 10000 >/dev/null 2>&1 &
@@ -76,12 +76,12 @@ B_PID=$!
 
 timeout 5 bash -c "until rg -q 'Place: out-b' '$LOG'; do sleep 0.05; done"
 PLACED_B=$(rg 'Place: out-b' "$LOG" | tail -n 1)
-BX=$(echo "$PLACED_B" | rg -o 'x=-?[0-9]+' | head -n 1 | cut -d= -f2)
-BY=$(echo "$PLACED_B" | rg -o 'y=-?[0-9]+' | head -n 1 | cut -d= -f2)
-if ! (( BX >= X2 && BX < X2 + W2 && BY >= Y2 && BY < Y2 + H2 )); then
-  echo "out-b placed outside output2: $PLACED_B (box=$X2,$Y2 $W2x$H2)" >&2
-  exit 1
-fi
+	BX=$(echo "$PLACED_B" | rg -o 'x=-?[0-9]+' | head -n 1 | cut -d= -f2)
+	BY=$(echo "$PLACED_B" | rg -o 'y=-?[0-9]+' | head -n 1 | cut -d= -f2)
+	if ! (( BX >= X2 && BX < X2 + W2 && BY >= Y2 && BY < Y2 + H2 )); then
+	  echo "out-b placed outside output2: $PLACED_B (box=$X2,$Y2 ${W2}x${H2})" >&2
+	  exit 1
+	fi
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" key alt-m

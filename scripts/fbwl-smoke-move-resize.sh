@@ -36,15 +36,38 @@ timeout 5 bash -c "until rg -q 'Running fluxbox-wayland' '$LOG'; do sleep 0.05; 
 CLIENT_PID=$!
 
 timeout 5 bash -c "until rg -q 'Surface size: client-mr 32x32' '$LOG'; do sleep 0.05; done"
+timeout 5 bash -c "until rg -q 'Place: client-mr ' '$LOG'; do sleep 0.05; done"
+
+place_line="$(rg -m1 'Place: client-mr ' "$LOG")"
+if [[ "$place_line" =~ x=([-0-9]+)\ y=([-0-9]+) ]]; then
+  X0="${BASH_REMATCH[1]}"
+  Y0="${BASH_REMATCH[2]}"
+else
+  echo "failed to parse Place line: $place_line" >&2
+  exit 1
+fi
+
+size_line="$(rg -m1 'Surface size: client-mr ' "$LOG")"
+if [[ "$size_line" =~ ([0-9]+)x([0-9]+) ]]; then
+  W0="${BASH_REMATCH[1]}"
+  H0="${BASH_REMATCH[2]}"
+else
+  echo "failed to parse Surface size line: $size_line" >&2
+  exit 1
+fi
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" drag-alt-left 70 70 170 170
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Move: client-mr x=164 y=164'
+X1=$((X0 + 100))
+Y1=$((Y0 + 100))
+tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Move: client-mr x=$X1 y=$Y1"
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" drag-alt-right 190 190 240 250
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Resize: client-mr w=82 h=92'
+W1=$((W0 + 50))
+H1=$((H0 + 60))
+tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Resize: client-mr w=$W1 h=$H1"
 
-timeout 5 bash -c "until rg -q 'Surface size: client-mr 82x92' '$LOG'; do sleep 0.05; done"
+timeout 5 bash -c "until rg -q 'Surface size: client-mr ${W1}x${H1}' '$LOG'; do sleep 0.05; done"
 
 echo "ok: move/resize smoke passed (socket=$SOCKET log=$LOG)"
