@@ -56,7 +56,7 @@ WP_LOG="${WP_LOG:-/tmp/wireplumber-xdg-desktop-portal-screenshot-$UID-$$.log}"
 : >"$PW_LOG"
 : >"$WP_LOG"
 
-OUTPUT_NAME="${OUTPUT_NAME:-HEADLESS-1}"
+OUTPUT_NAME="${OUTPUT_NAME:-}"
 CONF_DIR="$(mktemp -d "/tmp/fbwl-xdp-screenshot-conf-$UID-$$-XXXXXX")"
 
 cleanup_outer() {
@@ -65,11 +65,6 @@ cleanup_outer() {
 trap cleanup_outer EXIT
 
 mkdir -p "$CONF_DIR/xdg-desktop-portal-wlr"
-cat >"$CONF_DIR/xdg-desktop-portal-wlr/config" <<EOF
-[screenshot]
-chooser_type=none
-output_name=$OUTPUT_NAME
-EOF
 
 mkdir -p "$CONF_DIR/xdg-desktop-portal"
 cat >"$CONF_DIR/xdg-desktop-portal/wlroots-portals.conf" <<EOF
@@ -78,9 +73,15 @@ org.freedesktop.impl.portal.Screenshot=wlr
 org.freedesktop.impl.portal.ScreenCast=wlr
 EOF
 
-ROOT="$ROOT" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" WAYLAND_DISPLAY="$SOCKET" XDG_CONFIG_HOME="$CONF_DIR" \
-  XDG_SESSION_TYPE=wayland XDG_CURRENT_DESKTOP=wlroots OUTPUT_NAME="$OUTPUT_NAME" \
-  LOG="$LOG" XDPW_LOG="$XDPW_LOG" XDP_LOG="$XDP_LOG" PW_LOG="$PW_LOG" WP_LOG="$WP_LOG" \
+export ROOT
+export WAYLAND_DISPLAY="$SOCKET"
+export XDG_CONFIG_HOME="$CONF_DIR"
+export XDG_SESSION_TYPE=wayland
+export XDG_CURRENT_DESKTOP=wlroots
+export OUTPUT_NAME
+export LOG XDPW_LOG XDP_LOG PW_LOG WP_LOG
+
+# shellcheck disable=SC2016
 dbus-run-session -- bash -c '
   set -euo pipefail
 
@@ -98,7 +99,7 @@ dbus-run-session -- bash -c '
   wireplumber >"$WP_LOG" 2>&1 &
   WP_PID=$!
 
-  WLR_BACKENDS=headless WLR_RENDERER=pixman ./fluxbox-wayland \
+  WLR_BACKENDS="${WLR_BACKENDS:-headless}" WLR_RENDERER="${WLR_RENDERER:-pixman}" ./fluxbox-wayland \
     --no-xwayland \
     --socket "$WAYLAND_DISPLAY" \
     >"$LOG" 2>&1 &
@@ -132,6 +133,24 @@ dbus-run-session -- bash -c '
   timeout 10 bash -c "until rg -q \"Running fluxbox-wayland\" \"$LOG\"; do sleep 0.05; done"
 
   timeout 10 bash -c "until pw-cli info 0 >/dev/null 2>&1; do sleep 0.05; done"
+
+  timeout 10 bash -c "until rg -q \"Output: \" \"$LOG\"; do sleep 0.05; done"
+  if [[ -z "${OUTPUT_NAME:-}" ]]; then
+    OUT_LINE="$(rg -m1 "Output: " "$LOG" || true)"
+    OUTPUT_NAME="${OUT_LINE#*Output: }"
+    OUTPUT_NAME="${OUTPUT_NAME%% *}"
+    if [[ -z "$OUTPUT_NAME" ]]; then
+      echo "failed to detect output name from log line: $OUT_LINE" >&2
+      exit 1
+    fi
+  fi
+
+  mkdir -p "$XDG_CONFIG_HOME/xdg-desktop-portal-wlr"
+  cat >"$XDG_CONFIG_HOME/xdg-desktop-portal-wlr/config" <<EOF
+[screenshot]
+chooser_type=none
+output_name=$OUTPUT_NAME
+EOF
 
   /usr/lib/xdg-desktop-portal-wlr -r -l DEBUG >"$XDPW_LOG" 2>&1 &
   XDPW_PID=$!

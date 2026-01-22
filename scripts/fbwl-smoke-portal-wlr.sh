@@ -42,9 +42,13 @@ WP_LOG="${WP_LOG:-/tmp/wireplumber-$UID-$$.log}"
 : >"$PW_LOG"
 : >"$WP_LOG"
 
-ROOT="$ROOT" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" WAYLAND_DISPLAY="$SOCKET" \
-  XDG_SESSION_TYPE=wayland XDG_CURRENT_DESKTOP=wlroots \
-  LOG="$LOG" XDPW_LOG="$XDPW_LOG" PW_LOG="$PW_LOG" WP_LOG="$WP_LOG" \
+export ROOT
+export WAYLAND_DISPLAY="$SOCKET"
+export XDG_SESSION_TYPE=wayland
+export XDG_CURRENT_DESKTOP=wlroots
+export LOG XDPW_LOG PW_LOG WP_LOG
+
+# shellcheck disable=SC2016
 dbus-run-session -- bash -c '
   set -euo pipefail
 
@@ -72,7 +76,7 @@ dbus-run-session -- bash -c '
   wireplumber >"$WP_LOG" 2>&1 &
   WP_PID=$!
 
-  WLR_BACKENDS=headless WLR_RENDERER=pixman ./fluxbox-wayland \
+  WLR_BACKENDS="${WLR_BACKENDS:-headless}" WLR_RENDERER="${WLR_RENDERER:-pixman}" ./fluxbox-wayland \
     --no-xwayland \
     --socket "$WAYLAND_DISPLAY" \
     >"$LOG" 2>&1 &
