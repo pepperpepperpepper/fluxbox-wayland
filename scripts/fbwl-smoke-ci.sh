@@ -1,8 +1,42 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+have_cmd() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+have_exe() {
+  [[ -x "$1" ]]
+}
+
+need_cmd() {
+  local cmd="$1"
+  if ! have_cmd "$cmd"; then
+    echo "missing required command: $cmd" >&2
+    exit 1
+  fi
+}
+
+extract_need_cmds() {
+  local script="$1"
+  rg --no-filename -o -N 'need_cmd[[:space:]]+[A-Za-z0-9_.-]+' "$script" \
+    | awk '{print $2}' \
+    | sort -u
+}
+
+extract_need_exes() {
+  local script="$1"
+  rg --no-filename -o -N 'need_exe[[:space:]]+[^[:space:]]+' "$script" \
+    | awk '{print $2}' \
+    | sort -u
+}
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
+
+need_cmd awk
+need_cmd rg
+need_cmd sort
 
 scripts=(
   scripts/fbwl-check-wayland-loc.sh
@@ -68,9 +102,38 @@ scripts=(
   scripts/fbwl-smoke-fullscreen-stacking.sh
 )
 
+ran=0
+skipped=0
+
 for s in "${scripts[@]}"; do
+  if [[ ! -f "$s" ]]; then
+    echo "error: missing script: $s" >&2
+    exit 1
+  fi
+
+  missing=()
+
+  while IFS= read -r cmd; do
+    if ! have_cmd "$cmd"; then
+      missing+=("$cmd")
+    fi
+  done < <(extract_need_cmds "$s")
+
+  while IFS= read -r exe; do
+    if ! have_exe "$exe"; then
+      missing+=("$exe")
+    fi
+  done < <(extract_need_exes "$s")
+
+  if ((${#missing[@]} > 0)); then
+    echo "==> $s (skip: missing: ${missing[*]})"
+    skipped=$((skipped + 1))
+    continue
+  fi
+
   echo "==> $s"
   "$s"
+  ran=$((ran + 1))
 done
 
-echo "ok: all Wayland smoke tests passed"
+echo "ok: smoke-ci finished (ran=$ran skipped=$skipped)"
