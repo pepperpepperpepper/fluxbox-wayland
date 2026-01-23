@@ -25,10 +25,22 @@ trap cleanup EXIT
 : >"$LOG"
 : >"$OM_LOG"
 
-WLR_BACKENDS=headless \
-WLR_RENDERER=pixman \
-WLR_HEADLESS_OUTPUTS=2 \
-./fluxbox-wayland --no-xwayland --socket "$SOCKET" >"$LOG" 2>&1 &
+BACKENDS="${WLR_BACKENDS:-headless}"
+RENDERER="${WLR_RENDERER:-pixman}"
+OUTPUTS=2
+
+if [[ "$BACKENDS" == *x11* ]]; then
+  : "${DISPLAY:?DISPLAY must be set for x11 backend (run under scripts/fbwl-smoke-xvfb-outputs.sh)}"
+fi
+
+if [[ "$BACKENDS" == *x11* ]]; then
+  OUTPUTS_ENV="WLR_X11_OUTPUTS=${WLR_X11_OUTPUTS:-$OUTPUTS}"
+else
+  OUTPUTS_ENV="WLR_HEADLESS_OUTPUTS=${WLR_HEADLESS_OUTPUTS:-$OUTPUTS}"
+fi
+
+env WLR_BACKENDS="$BACKENDS" WLR_RENDERER="$RENDERER" "$OUTPUTS_ENV" \
+  ./fluxbox-wayland --no-xwayland --socket "$SOCKET" >"$LOG" 2>&1 &
 FBW_PID=$!
 
 timeout 5 bash -c "until rg -q 'Running fluxbox-wayland' '$LOG'; do sleep 0.05; done"
@@ -38,4 +50,3 @@ timeout 5 bash -c "until [[ \$(rg -c 'OutputLayout:' '$LOG') -ge 2 ]]; do sleep 
 rg -q '^ok output-management moved ' "$OM_LOG"
 
 echo "ok: output-management smoke passed (socket=$SOCKET log=$LOG)"
-
