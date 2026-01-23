@@ -31,6 +31,72 @@ extract_need_exes() {
     | sort -u
 }
 
+extract_dot_exes() {
+  local script="$1"
+  rg --no-filename -o -N '\\./(fluxbox-wayland|startfluxbox-wayland|fluxbox-remote|fbwl-[A-Za-z0-9_.-]+|fbx11-[A-Za-z0-9_.-]+)' "$script" \
+    | sort -u
+}
+
+extract_x_test_exes() {
+  local script="$1"
+  rg --no-filename -o -N -e '-x[[:space:]]+(/[^[:space:]]+|\\./[^[:space:]]+)' "$script" \
+    | awk '{print $NF}' \
+    | sort -u
+}
+
+extract_smoke_script_refs() {
+  local script="$1"
+  rg --no-filename -o -N 'scripts/fbwl-smoke-[A-Za-z0-9_.-]+\\.sh' "$script" \
+    | sort -u
+}
+
+collect_script_closure() {
+  local root_script="$1"
+
+  declare -A seen=()
+  local -a stack=("$root_script")
+  local -a out=()
+
+  while ((${#stack[@]} > 0)); do
+    local idx=$(( ${#stack[@]} - 1 ))
+    local s="${stack[$idx]}"
+    unset "stack[$idx]"
+
+    [[ -n "${seen[$s]:-}" ]] && continue
+    seen["$s"]=1
+    out+=("$s")
+
+    while IFS= read -r ref; do
+      [[ -z "$ref" ]] && continue
+      if [[ ! -f "$ref" ]]; then
+        echo "error: referenced smoke script not found: $ref (from $s)" >&2
+        exit 1
+      fi
+      stack+=("$ref")
+    done < <(extract_smoke_script_refs "$s")
+  done
+
+  printf '%s\n' "${out[@]}"
+}
+
+collect_required_cmds() {
+  local root_script="$1"
+  collect_script_closure "$root_script" \
+    | while IFS= read -r s; do extract_need_cmds "$s"; done \
+    | sort -u
+}
+
+collect_required_exes() {
+  local root_script="$1"
+  collect_script_closure "$root_script" \
+    | while IFS= read -r s; do
+        extract_need_exes "$s"
+        extract_x_test_exes "$s"
+        extract_dot_exes "$s"
+      done \
+    | sort -u
+}
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
@@ -117,13 +183,13 @@ for s in "${scripts[@]}"; do
     if ! have_cmd "$cmd"; then
       missing+=("$cmd")
     fi
-  done < <(extract_need_cmds "$s")
+  done < <(collect_required_cmds "$s")
 
   while IFS= read -r exe; do
     if ! have_exe "$exe"; then
       missing+=("$exe")
     fi
-  done < <(extract_need_exes "$s")
+  done < <(collect_required_exes "$s")
 
   if ((${#missing[@]} > 0)); then
     echo "==> $s (skip: missing: ${missing[*]})"
