@@ -37,9 +37,19 @@ timeout 5 bash -c "until rg -q 'Output: ' '$LOG'; do sleep 0.05; done"
 CLIENT_PID=$!
 
 timeout 5 bash -c "until rg -q 'Surface size: client-min 32x32' '$LOG'; do sleep 0.05; done"
+timeout 5 bash -c "until rg -q 'Place: client-min ' '$LOG'; do sleep 0.05; done"
+
+place_line="$(rg -m1 'Place: client-min ' "$LOG")"
+if [[ "$place_line" =~ x=([-0-9]+)\ y=([-0-9]+) ]]; then
+  CLICK_X=$((BASH_REMATCH[1] + 5))
+  CLICK_Y=$((BASH_REMATCH[2] + 5))
+else
+  echo "failed to parse Place line: $place_line" >&2
+  exit 1
+fi
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
-./fbwl-input-injector --socket "$SOCKET" click 65 65
+./fbwl-input-injector --socket "$SOCKET" click "$CLICK_X" "$CLICK_Y"
 tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Pointer press .* hit=client-min'
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
@@ -47,7 +57,7 @@ OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Minimize: client-min on reason=foreign-request'
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
-./fbwl-input-injector --socket "$SOCKET" click 65 65
+./fbwl-input-injector --socket "$SOCKET" click "$CLICK_X" "$CLICK_Y"
 tail -c +$((OFFSET + 1)) "$LOG" | rg -qF 'hit=(none)'
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
@@ -55,7 +65,7 @@ OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Minimize: client-min off reason=foreign-request'
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
-./fbwl-input-injector --socket "$SOCKET" click 65 65
+./fbwl-input-injector --socket "$SOCKET" click "$CLICK_X" "$CLICK_Y"
 tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Pointer press .* hit=client-min'
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
@@ -63,7 +73,7 @@ OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Minimize: client-min on reason=keybinding'
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
-./fbwl-input-injector --socket "$SOCKET" click 65 65
+./fbwl-input-injector --socket "$SOCKET" click "$CLICK_X" "$CLICK_Y"
 tail -c +$((OFFSET + 1)) "$LOG" | rg -qF 'hit=(none)'
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
@@ -71,7 +81,7 @@ OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Minimize: client-min off reason=keybinding'
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
-./fbwl-input-injector --socket "$SOCKET" click 65 65
+./fbwl-input-injector --socket "$SOCKET" click "$CLICK_X" "$CLICK_Y"
 tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Pointer press .* hit=client-min'
 
 echo "ok: minimize + foreign-toplevel smoke passed (socket=$SOCKET log=$LOG)"

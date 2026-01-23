@@ -32,7 +32,7 @@ trap cleanup EXIT
 : >"$SRC_LOG"
 : >"$DST_LOG"
 
-WLR_BACKENDS=headless WLR_RENDERER=pixman ./fluxbox-wayland --no-xwayland --socket "$SOCKET" >"$LOG" 2>&1 &
+WLR_BACKENDS="${WLR_BACKENDS:-headless}" WLR_RENDERER="${WLR_RENDERER:-pixman}" ./fluxbox-wayland --no-xwayland --socket "$SOCKET" >"$LOG" 2>&1 &
 FBW_PID=$!
 
 timeout 5 bash -c "until rg -q 'Running fluxbox-wayland' '$LOG'; do sleep 0.05; done"
@@ -49,7 +49,26 @@ timeout 5 bash -c "until rg -q '^fbwl-dnd-client: ready$' '$SRC_LOG'; do sleep 0
 DST_PID=$!
 timeout 5 bash -c "until rg -q '^fbwl-dnd-client: ready$' '$DST_LOG'; do sleep 0.05; done"
 
-./fbwl-input-injector --socket "$SOCKET" drag-left 80 80 110 110 >/dev/null
+timeout 5 bash -c "until rg -q 'Place: fbwl-dnd-src ' '$LOG' && rg -q 'Place: fbwl-dnd-dst ' '$LOG'; do sleep 0.05; done"
+SRC_PLACE_LINE="$(rg -m1 'Place: fbwl-dnd-src ' "$LOG")"
+DST_PLACE_LINE="$(rg -m1 'Place: fbwl-dnd-dst ' "$LOG")"
+
+if [[ "$SRC_PLACE_LINE" =~ x=([-0-9]+)\ y=([-0-9]+) ]]; then
+  SRC_X="${BASH_REMATCH[1]}"
+  SRC_Y="${BASH_REMATCH[2]}"
+else
+  echo "failed to parse Place line: $SRC_PLACE_LINE" >&2
+  exit 1
+fi
+if [[ "$DST_PLACE_LINE" =~ x=([-0-9]+)\ y=([-0-9]+) ]]; then
+  DST_X="${BASH_REMATCH[1]}"
+  DST_Y="${BASH_REMATCH[2]}"
+else
+  echo "failed to parse Place line: $DST_PLACE_LINE" >&2
+  exit 1
+fi
+
+./fbwl-input-injector --socket "$SOCKET" drag-left "$((SRC_X + 10))" "$((SRC_Y + 10))" "$((DST_X + 10))" "$((DST_Y + 10))" >/dev/null
 
 wait "$DST_PID"
 rg -q '^ok dnd$' "$DST_LOG"

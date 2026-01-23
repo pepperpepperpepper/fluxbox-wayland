@@ -79,13 +79,23 @@ else
 fi
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
-./fbwl-input-injector --socket "$SOCKET" drag-alt-left 70 70 170 170
+MOVE_START_X=$((X0 + 10))
+MOVE_START_Y=$((Y0 + 10))
+MOVE_END_X=$((MOVE_START_X + 100))
+MOVE_END_Y=$((MOVE_START_Y + 100))
+./fbwl-input-injector --socket "$SOCKET" drag-alt-left "$MOVE_START_X" "$MOVE_START_Y" "$MOVE_END_X" "$MOVE_END_Y"
 X1=$((X0 + 100))
 Y1=$((Y0 + 100))
 tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Move: xw-test x=$X1 y=$Y1"
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
-./fbwl-input-injector --socket "$SOCKET" drag-alt-right 190 190 240 250
+X0=$X1
+Y0=$Y1
+RESIZE_START_X=$((X0 + W0 - 10))
+RESIZE_START_Y=$((Y0 + H0 - 10))
+RESIZE_END_X=$((RESIZE_START_X + 50))
+RESIZE_END_Y=$((RESIZE_START_Y + 60))
+./fbwl-input-injector --socket "$SOCKET" drag-alt-right "$RESIZE_START_X" "$RESIZE_START_Y" "$RESIZE_END_X" "$RESIZE_END_Y"
 W1=$((W0 + 50))
 H1=$((H0 + 60))
 tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Resize: xw-test w=$W1 h=$H1"

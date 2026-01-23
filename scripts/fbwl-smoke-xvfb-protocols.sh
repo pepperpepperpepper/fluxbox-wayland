@@ -311,10 +311,25 @@ REL_LOG="/tmp/fbwl-relptr-xvfb-$UID-$$.log"
 REL_PID=$!
 timeout 5 bash -c "until rg -q '^fbwl-relptr-client: ready$' '$REL_LOG'; do sleep 0.05; done"
 
-./fbwl-input-injector --socket "$SOCKET" click 80 80 >/dev/null
+timeout 5 bash -c "until rg -q 'Place: fbwl-relptr-client ' '$LOG'; do sleep 0.05; done"
+REL_PLACE_LINE="$(rg -m1 'Place: fbwl-relptr-client ' "$LOG")"
+if [[ "$REL_PLACE_LINE" =~ x=([-0-9]+)\ y=([-0-9]+) ]]; then
+  REL_X="${BASH_REMATCH[1]}"
+  REL_Y="${BASH_REMATCH[2]}"
+else
+  echo "failed to parse Place line: $REL_PLACE_LINE" >&2
+  exit 1
+fi
+
+REL_CLICK_X=$((REL_X + 10))
+REL_CLICK_Y=$((REL_Y + 10))
+REL_DRAG_END_X=$((REL_CLICK_X + 40))
+REL_DRAG_END_Y=$((REL_CLICK_Y + 40))
+
+./fbwl-input-injector --socket "$SOCKET" click "$REL_CLICK_X" "$REL_CLICK_Y" >/dev/null
 timeout 5 bash -c "until rg -q '^ok locked$' '$REL_LOG'; do sleep 0.05; done"
 
-./fbwl-input-injector --socket "$SOCKET" drag-left 80 80 120 120 >/dev/null
+./fbwl-input-injector --socket "$SOCKET" drag-left "$REL_CLICK_X" "$REL_CLICK_Y" "$REL_DRAG_END_X" "$REL_DRAG_END_Y" >/dev/null
 
 wait "$REL_PID"
 unset REL_PID

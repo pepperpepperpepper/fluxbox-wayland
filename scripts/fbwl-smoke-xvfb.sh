@@ -118,10 +118,21 @@ rg -q '^ok screencopy$' "$SC_LOG"
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" drag-right 100 100 100 100
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Menu: open '
+open_line="$(tail -c +$((OFFSET + 1)) "$LOG" | rg -m1 'Menu: open at ' || true)"
+if [[ -z "$open_line" ]]; then
+  echo "expected menu open log line after right-click" >&2
+  exit 1
+fi
+if [[ "$open_line" =~ x=([-0-9]+)\ y=([-0-9]+) ]]; then
+  MENU_X="${BASH_REMATCH[1]}"
+  MENU_Y="${BASH_REMATCH[2]}"
+else
+  echo "failed to parse menu open line: $open_line" >&2
+  exit 1
+fi
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
-./fbwl-input-injector --socket "$SOCKET" click 110 110
+./fbwl-input-injector --socket "$SOCKET" click "$((MENU_X + 10))" "$((MENU_Y + 10))"
 tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Menu: exec '
 timeout 5 bash -c "until [[ -f '$MENU_MARKER' ]]; do sleep 0.05; done"
 

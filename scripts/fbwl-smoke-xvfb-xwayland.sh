@@ -99,8 +99,21 @@ PLACE_LINE="$(rg -m 1 "Place: $TITLE" "$LOG")"
 OLD_X="$(echo "$PLACE_LINE" | rg -o 'x=-?[0-9]+' | head -n 1 | cut -d= -f2)"
 OLD_Y="$(echo "$PLACE_LINE" | rg -o 'y=-?[0-9]+' | head -n 1 | cut -d= -f2)"
 
+SIZE_LINE="$(rg -m 1 "Surface size: $TITLE" "$LOG")"
+if [[ "$SIZE_LINE" =~ ([0-9]+)x([0-9]+) ]]; then
+  OLD_W="${BASH_REMATCH[1]}"
+  OLD_H="${BASH_REMATCH[2]}"
+else
+  echo "failed to parse Surface size line: $SIZE_LINE" >&2
+  exit 1
+fi
+
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
-./fbwl-input-injector --socket "$SOCKET" drag-alt-left 70 70 170 170
+MOVE_START_X=$((OLD_X + 10))
+MOVE_START_Y=$((OLD_Y + 10))
+MOVE_END_X=$((MOVE_START_X + 100))
+MOVE_END_Y=$((MOVE_START_Y + 100))
+./fbwl-input-injector --socket "$SOCKET" drag-alt-left "$MOVE_START_X" "$MOVE_START_Y" "$MOVE_END_X" "$MOVE_END_Y"
 
 MOVE_LINE="$(tail -c +$((OFFSET + 1)) "$LOG" | rg -m 1 "Move: $TITLE" || true)"
 if [[ -z "$MOVE_LINE" ]]; then
@@ -116,7 +129,11 @@ if (( NEW_X != OLD_X + 100 || NEW_Y != OLD_Y + 100 )); then
 fi
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
-./fbwl-input-injector --socket "$SOCKET" drag-alt-right 190 190 240 250
+RESIZE_START_X=$((NEW_X + OLD_W - 10))
+RESIZE_START_Y=$((NEW_Y + OLD_H - 10))
+RESIZE_END_X=$((RESIZE_START_X + 50))
+RESIZE_END_Y=$((RESIZE_START_Y + 60))
+./fbwl-input-injector --socket "$SOCKET" drag-alt-right "$RESIZE_START_X" "$RESIZE_START_Y" "$RESIZE_END_X" "$RESIZE_END_Y"
 
 RESIZE_LINE="$(tail -c +$((OFFSET + 1)) "$LOG" | rg -m 1 "Resize: $TITLE" || true)"
 if [[ -z "$RESIZE_LINE" ]]; then

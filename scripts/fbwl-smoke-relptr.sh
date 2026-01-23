@@ -27,7 +27,7 @@ trap cleanup EXIT
 : >"$LOG"
 : >"$REL_LOG"
 
-WLR_BACKENDS=headless WLR_RENDERER=pixman ./fluxbox-wayland --no-xwayland --socket "$SOCKET" >"$LOG" 2>&1 &
+WLR_BACKENDS="${WLR_BACKENDS:-headless}" WLR_RENDERER="${WLR_RENDERER:-pixman}" ./fluxbox-wayland --no-xwayland --socket "$SOCKET" >"$LOG" 2>&1 &
 FBW_PID=$!
 
 timeout 5 bash -c "until rg -q 'Running fluxbox-wayland' '$LOG'; do sleep 0.05; done"
@@ -39,14 +39,25 @@ timeout 5 bash -c "until rg -q 'New virtual pointer' '$LOG'; do sleep 0.05; done
 ./fbwl-relptr-client --socket "$SOCKET" --timeout-ms 8000 >"$REL_LOG" 2>&1 &
 REL_PID=$!
 timeout 5 bash -c "until rg -q '^fbwl-relptr-client: ready$' '$REL_LOG'; do sleep 0.05; done"
+timeout 5 bash -c "until rg -q 'Place: fbwl-relptr-client ' '$LOG'; do sleep 0.05; done"
 
-./fbwl-input-injector --socket "$SOCKET" click 80 80 >/dev/null
+place_line="$(rg -m1 'Place: fbwl-relptr-client ' "$LOG")"
+if [[ "$place_line" =~ x=([-0-9]+)\ y=([-0-9]+) ]]; then
+  CLICK_X=$((BASH_REMATCH[1] + 10))
+  CLICK_Y=$((BASH_REMATCH[2] + 10))
+else
+  echo "failed to parse Place line: $place_line" >&2
+  exit 1
+fi
+
+./fbwl-input-injector --socket "$SOCKET" click "$CLICK_X" "$CLICK_Y" >/dev/null
 timeout 5 bash -c "until rg -q '^ok locked$' '$REL_LOG'; do sleep 0.05; done"
 
-./fbwl-input-injector --socket "$SOCKET" drag-left 80 80 120 120 >/dev/null
+DRAG_END_X=$((CLICK_X + 40))
+DRAG_END_Y=$((CLICK_Y + 40))
+./fbwl-input-injector --socket "$SOCKET" drag-left "$CLICK_X" "$CLICK_Y" "$DRAG_END_X" "$DRAG_END_Y" >/dev/null
 
 wait "$REL_PID"
 rg -q '^ok relative$' "$REL_LOG"
 
 echo "ok: relptr/pointer-constraints smoke passed (socket=$SOCKET log=$LOG)"
-

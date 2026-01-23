@@ -62,7 +62,7 @@ cat >"$CFGDIR/mymenu" <<EOF
 [end]
 EOF
 
-WLR_BACKENDS=headless WLR_RENDERER=pixman ./fluxbox-wayland \
+WLR_BACKENDS="${WLR_BACKENDS:-headless}" WLR_RENDERER="${WLR_RENDERER:-pixman}" ./fluxbox-wayland \
   --no-xwayland \
   --socket "$SOCKET" \
   --terminal "touch '$MARK_DEFAULT'" \
@@ -75,8 +75,23 @@ timeout 5 bash -c "until rg -q 'IPC: listening' '$LOG'; do sleep 0.05; done"
 timeout 5 bash -c "until rg -q 'Style: loaded ' '$LOG'; do sleep 0.05; done"
 timeout 5 bash -c "until rg -q 'Menu: loaded ' '$LOG'; do sleep 0.05; done"
 
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" drag-right 50 50 50 50
-./fbwl-input-injector --socket "$SOCKET" click 60 60
+open_line="$(tail -c +$((OFFSET + 1)) "$LOG" | rg -m1 'Menu: open at ' || true)"
+if [[ -z "$open_line" ]]; then
+  echo "expected menu open log line after right-click" >&2
+  exit 1
+fi
+
+if [[ "$open_line" =~ x=([-0-9]+)\ y=([-0-9]+) ]]; then
+  MENU_X="${BASH_REMATCH[1]}"
+  MENU_Y="${BASH_REMATCH[2]}"
+else
+  echo "failed to parse menu open line: $open_line" >&2
+  exit 1
+fi
+
+./fbwl-input-injector --socket "$SOCKET" click "$((MENU_X + 10))" "$((MENU_Y + 10))"
 timeout 2 bash -c "until [[ -f '$MARK_MENU' ]]; do sleep 0.05; done"
 
 OUT="$(./fbwl-remote --socket "$SOCKET" workspace 4 || true)"

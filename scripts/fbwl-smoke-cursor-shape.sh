@@ -27,7 +27,7 @@ trap cleanup EXIT
 : >"$LOG"
 : >"$CLIENT_LOG"
 
-WLR_BACKENDS=headless WLR_RENDERER=pixman ./fluxbox-wayland --no-xwayland --socket "$SOCKET" >"$LOG" 2>&1 &
+WLR_BACKENDS="${WLR_BACKENDS:-headless}" WLR_RENDERER="${WLR_RENDERER:-pixman}" ./fluxbox-wayland --no-xwayland --socket "$SOCKET" >"$LOG" 2>&1 &
 FBW_PID=$!
 
 timeout 5 bash -c "until rg -q 'Running fluxbox-wayland' '$LOG'; do sleep 0.05; done"
@@ -40,8 +40,18 @@ timeout 5 bash -c "until rg -q 'New virtual pointer' '$LOG'; do sleep 0.05; done
 CLIENT_PID=$!
 
 timeout 5 bash -c "until rg -q '^ok ready$' '$CLIENT_LOG'; do sleep 0.05; done"
+timeout 5 bash -c "until rg -q 'Place: fbwl-cursor-shape ' '$LOG'; do sleep 0.05; done"
 
-./fbwl-input-injector --socket "$SOCKET" click 70 70 >/dev/null 2>&1
+place_line="$(rg -m1 'Place: fbwl-cursor-shape ' "$LOG")"
+if [[ "$place_line" =~ x=([-0-9]+)\ y=([-0-9]+) ]]; then
+  CLICK_X=$((BASH_REMATCH[1] + 10))
+  CLICK_Y=$((BASH_REMATCH[2] + 10))
+else
+  echo "failed to parse Place line: $place_line" >&2
+  exit 1
+fi
+
+./fbwl-input-injector --socket "$SOCKET" click "$CLICK_X" "$CLICK_Y" >/dev/null 2>&1
 
 timeout 5 bash -c "while kill -0 $CLIENT_PID 2>/dev/null; do sleep 0.05; done"
 wait "$CLIENT_PID"

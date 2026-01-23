@@ -34,7 +34,7 @@ cat >"$MENU_FILE" <<EOF
 [end]
 EOF
 
-WLR_BACKENDS=headless WLR_RENDERER=pixman ./fluxbox-wayland \
+WLR_BACKENDS="${WLR_BACKENDS:-headless}" WLR_RENDERER="${WLR_RENDERER:-pixman}" ./fluxbox-wayland \
   --no-xwayland \
   --socket "$SOCKET" \
   --menu "$MENU_FILE" \
@@ -46,14 +46,27 @@ timeout 5 bash -c "until rg -q 'Running fluxbox-wayland' '$LOG'; do sleep 0.05; 
 # Open the root menu with a background right-click.
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" drag-right 100 100 100 100
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Menu: open '
+open_line="$(tail -c +$((OFFSET + 1)) "$LOG" | rg -m1 'Menu: open at ' || true)"
+if [[ -z "$open_line" ]]; then
+  echo "expected menu open log line after right-click" >&2
+  exit 1
+fi
+
+if [[ "$open_line" =~ x=([-0-9]+)\ y=([-0-9]+) ]]; then
+  MENU_X="${BASH_REMATCH[1]}"
+  MENU_Y="${BASH_REMATCH[2]}"
+else
+  echo "failed to parse menu open line: $open_line" >&2
+  exit 1
+fi
 
 # Click the first menu item.
+CLICK_X=$((MENU_X + 10))
+CLICK_Y=$((MENU_Y + 10))
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
-./fbwl-input-injector --socket "$SOCKET" click 110 110
+./fbwl-input-injector --socket "$SOCKET" click "$CLICK_X" "$CLICK_Y"
 tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Menu: exec '
 
 timeout 5 bash -c "until [[ -f '$MARKER' ]]; do sleep 0.05; done"
 
 echo "ok: menu smoke passed (socket=$SOCKET log=$LOG)"
-
