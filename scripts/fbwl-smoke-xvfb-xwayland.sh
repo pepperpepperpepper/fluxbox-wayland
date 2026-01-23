@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || { echo "missing required command: $1" >&2; exit 1; }
 }
@@ -149,5 +152,11 @@ if (( NEW_W != 128 + 50 || NEW_H != 96 + 60 )); then
 fi
 
 timeout 10 bash -c "until rg -q \"Surface size: $TITLE ${NEW_W}x${NEW_H}\" '$LOG'; do sleep 0.05; done"
+
+kill "$FBW_PID" 2>/dev/null || true
+wait "$FBW_PID" 2>/dev/null || true
+unset FBW_PID
+
+DISPLAY=":$DISPLAY_NUM" WLR_BACKENDS=x11 WLR_RENDERER=pixman scripts/fbwl-smoke-apps-rules-xwayland.sh
 
 echo "ok: Xvfb+x11 backend + XWayland smoke passed (display=:$DISPLAY_NUM xwayland=$DISPLAY_NAME socket=$SOCKET log=$LOG)"

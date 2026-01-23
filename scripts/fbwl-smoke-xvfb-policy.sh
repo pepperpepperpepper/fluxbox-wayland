@@ -54,6 +54,7 @@ scripts=(
   scripts/fbwl-smoke-move-resize.sh
   scripts/fbwl-smoke-workspaces.sh
   scripts/fbwl-smoke-maximize-fullscreen.sh
+  scripts/fbwl-smoke-apps-rules.sh
   scripts/fbwl-smoke-minimize-foreign.sh
   scripts/fbwl-smoke-layer-shell.sh
   scripts/fbwl-smoke-fullscreen-stacking.sh

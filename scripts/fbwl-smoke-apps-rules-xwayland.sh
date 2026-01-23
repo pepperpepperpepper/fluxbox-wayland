@@ -41,7 +41,7 @@ cat >"$APPS_FILE" <<EOF
 [end]
 EOF
 
-WLR_BACKENDS=headless WLR_RENDERER=pixman ./fluxbox-wayland \
+WLR_BACKENDS="${WLR_BACKENDS:-headless}" WLR_RENDERER="${WLR_RENDERER:-pixman}" ./fluxbox-wayland \
   --socket "$SOCKET" \
   --workspaces 3 \
   --apps "$APPS_FILE" \
@@ -73,4 +73,3 @@ timeout 10 bash -c "until rg -q 'Focus: xw-apps' '$LOG'; do sleep 0.05; done"
 timeout 10 bash -c "until ./fbwl-remote --socket \"$SOCKET\" get-workspace | rg -q '^ok workspace=2$'; do sleep 0.05; done"
 
 echo "ok: apps rules (XWayland instance match) smoke passed (socket=$SOCKET display=$DISPLAY_NAME log=$LOG apps=$APPS_FILE)"
-

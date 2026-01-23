@@ -43,7 +43,7 @@ EOF
 
 : >"$LOG"
 
-WLR_BACKENDS=headless WLR_RENDERER=pixman ./fluxbox-wayland \
+WLR_BACKENDS="${WLR_BACKENDS:-headless}" WLR_RENDERER="${WLR_RENDERER:-pixman}" ./fluxbox-wayland \
   --no-xwayland \
   --socket "$SOCKET" \
   --workspaces 3 \
@@ -74,4 +74,3 @@ timeout 5 bash -c "until tail -c +$START '$LOG' | rg -q 'Workspace: view=apps-st
 ./fbwl-remote --socket "$SOCKET" get-workspace | rg -q '^ok workspace=2$'
 
 echo "ok: apps rules smoke passed (socket=$SOCKET log=$LOG apps=$APPS_FILE)"
-
