@@ -25,7 +25,7 @@ trap cleanup EXIT
 
 : >"$LOG"
 
-WLR_BACKENDS=headless WLR_RENDERER=pixman ./fluxbox-wayland --no-xwayland --socket "$SOCKET" >"$LOG" 2>&1 &
+WLR_BACKENDS="${WLR_BACKENDS:-headless}" WLR_RENDERER="${WLR_RENDERER:-pixman}" ./fluxbox-wayland --no-xwayland --socket "$SOCKET" >"$LOG" 2>&1 &
 FBW_PID=$!
 
 timeout 5 bash -c "until rg -q 'Running fluxbox-wayland' '$LOG'; do sleep 0.05; done"

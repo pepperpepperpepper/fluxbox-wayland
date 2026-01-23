@@ -31,7 +31,7 @@ export MESA_LOADER_DRIVER_OVERRIDE=swrast
 pick_display_num() {
   local base="${1:-99}"
   local d
-  for d in $(seq "$base" "$((base + 20))"); do
+  for ((d = base; d <= base + 20; d++)); do
     if [[ ! -e "/tmp/.X11-unix/X$d" && ! -e "/tmp/.X${d}-lock" ]]; then
       echo "$d"
       return 0

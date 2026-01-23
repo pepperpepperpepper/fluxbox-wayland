@@ -11,6 +11,7 @@ scripts=(
   scripts/fbwl-smoke-background.sh
   scripts/fbwl-smoke-xvfb.sh
   scripts/fbwl-smoke-xvfb-decor-style.sh
+  scripts/fbwl-smoke-xvfb-policy.sh
   scripts/fbwl-smoke-xvfb-protocols.sh
   scripts/fbwl-smoke-xvfb-tray.sh
   scripts/fbwl-smoke-xvfb-xwayland.sh

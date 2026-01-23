@@ -30,7 +30,7 @@ chmod 0700 "$XDG_RUNTIME_DIR"
 pick_display_num() {
   local base="${1:-99}"
   local d
-  for d in $(seq "$base" "$((base + 20))"); do
+  for ((d = base; d <= base + 20; d++)); do
     if [[ ! -e "/tmp/.X11-unix/X$d" && ! -e "/tmp/.X${d}-lock" ]]; then
       echo "$d"
       return 0

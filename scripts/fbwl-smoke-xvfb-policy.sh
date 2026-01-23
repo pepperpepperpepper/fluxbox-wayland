@@ -5,21 +5,11 @@ need_cmd() {
   command -v "$1" >/dev/null 2>&1 || { echo "missing required command: $1" >&2; exit 1; }
 }
 
-need_cmd Xvfb
 need_cmd timeout
+need_cmd Xvfb
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
-
-scripts=(
-  scripts/fbwl-smoke-portal-wlr.sh
-  scripts/fbwl-smoke-portal-wlr-screencast.sh
-  scripts/fbwl-smoke-xdg-desktop-portal.sh
-  scripts/fbwl-smoke-xdg-desktop-portal-screenshot.sh
-)
-for s in "${scripts[@]}"; do
-  [[ -x "$s" ]] || { echo "missing required executable: $s" >&2; exit 1; }
-done
 
 pick_display_num() {
   local base="${1:-99}"
@@ -34,7 +24,8 @@ pick_display_num() {
 }
 
 DISPLAY_NUM="$(pick_display_num "${DISPLAY_NUM:-99}")"
-XVFB_LOG="${XVFB_LOG:-/tmp/xvfb-portal-$UID-$$.log}"
+SCREEN="${SCREEN:-1280x720x24}"
+XVFB_LOG="${XVFB_LOG:-/tmp/xvfb-policy-$UID-$$.log}"
 
 cleanup() {
   if [[ -n "${XVFB_PID:-}" ]]; then
@@ -45,7 +36,7 @@ cleanup() {
 trap cleanup EXIT
 
 : >"$XVFB_LOG"
-Xvfb ":$DISPLAY_NUM" -screen 0 1280x720x24 -nolisten tcp -extension GLX >"$XVFB_LOG" 2>&1 &
+Xvfb ":$DISPLAY_NUM" -screen 0 "$SCREEN" -nolisten tcp -extension GLX >"$XVFB_LOG" 2>&1 &
 XVFB_PID=$!
 
 if ! timeout 5 bash -c "until [[ -S /tmp/.X11-unix/X$DISPLAY_NUM ]]; do sleep 0.05; done"; then
@@ -58,13 +49,18 @@ export DISPLAY=":$DISPLAY_NUM"
 export WLR_BACKENDS="x11"
 export WLR_RENDERER="${WLR_RENDERER:-pixman}"
 
-export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/xdg-runtime-$UID-xvfb-portal-$DISPLAY_NUM-$$}"
-mkdir -p "$XDG_RUNTIME_DIR"
-chmod 0700 "$XDG_RUNTIME_DIR"
+scripts=(
+  scripts/fbwl-smoke-workspaces.sh
+  scripts/fbwl-smoke-maximize-fullscreen.sh
+  scripts/fbwl-smoke-minimize-foreign.sh
+  scripts/fbwl-smoke-layer-shell.sh
+  scripts/fbwl-smoke-fullscreen-stacking.sh
+  scripts/fbwl-smoke-window-menu.sh
+)
 
 for s in "${scripts[@]}"; do
-  echo "==> $s (xvfb :$DISPLAY_NUM)"
+  echo "==> $s (DISPLAY=$DISPLAY WLR_BACKENDS=$WLR_BACKENDS WLR_RENDERER=$WLR_RENDERER)"
   "$s"
 done
 
-echo "ok: Xvfb portal smoke tests passed"
+echo "ok: xvfb policy smoke passed (DISPLAY=:$DISPLAY_NUM xvfb_log=$XVFB_LOG)"
