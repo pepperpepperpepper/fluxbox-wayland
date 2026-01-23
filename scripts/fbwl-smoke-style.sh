@@ -35,7 +35,7 @@ EOF
 
 : >"$LOG"
 
-WLR_BACKENDS=headless WLR_RENDERER=pixman ./fluxbox-wayland \
+WLR_BACKENDS="${WLR_BACKENDS:-headless}" WLR_RENDERER="${WLR_RENDERER:-pixman}" ./fluxbox-wayland \
   --no-xwayland \
   --socket "$SOCKET" \
   --style "$STYLE_FILE" \
