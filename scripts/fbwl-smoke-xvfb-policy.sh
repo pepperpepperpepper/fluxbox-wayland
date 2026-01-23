@@ -50,6 +50,8 @@ export WLR_BACKENDS="x11"
 export WLR_RENDERER="${WLR_RENDERER:-pixman}"
 
 scripts=(
+  scripts/fbwl-smoke-input.sh
+  scripts/fbwl-smoke-move-resize.sh
   scripts/fbwl-smoke-workspaces.sh
   scripts/fbwl-smoke-maximize-fullscreen.sh
   scripts/fbwl-smoke-minimize-foreign.sh

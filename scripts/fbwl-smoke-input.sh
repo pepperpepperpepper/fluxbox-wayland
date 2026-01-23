@@ -28,7 +28,7 @@ trap cleanup EXIT
 : >"$LOG"
 rm -f "$SPAWN_MARK"
 
-WLR_BACKENDS=headless WLR_RENDERER=pixman ./fluxbox-wayland \
+WLR_BACKENDS="${WLR_BACKENDS:-headless}" WLR_RENDERER="${WLR_RENDERER:-pixman}" ./fluxbox-wayland \
   --no-xwayland \
   --socket "$SOCKET" \
   --terminal "touch '$SPAWN_MARK'" \
@@ -43,10 +43,30 @@ A_PID=$!
 B_PID=$!
 
 timeout 5 bash -c "until rg -q 'Focus: client-a' '$LOG' && rg -q 'Focus: client-b' '$LOG'; do sleep 0.05; done"
+timeout 5 bash -c "until rg -q 'Place: client-a ' '$LOG' && rg -q 'Place: client-b ' '$LOG'; do sleep 0.05; done"
+
+PLACE_A_LINE="$(rg -m1 'Place: client-a ' "$LOG")"
+PLACE_B_LINE="$(rg -m1 'Place: client-b ' "$LOG")"
+
+if [[ "$PLACE_A_LINE" =~ x=([-0-9]+)\ y=([-0-9]+) ]]; then
+  A_X="${BASH_REMATCH[1]}"
+  A_Y="${BASH_REMATCH[2]}"
+else
+  echo "failed to parse Place line: $PLACE_A_LINE" >&2
+  exit 1
+fi
+
+if [[ "$PLACE_B_LINE" =~ x=([-0-9]+)\ y=([-0-9]+) ]]; then
+  B_X="${BASH_REMATCH[1]}"
+  B_Y="${BASH_REMATCH[2]}"
+else
+  echo "failed to parse Place line: $PLACE_B_LINE" >&2
+  exit 1
+fi
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 
-./fbwl-input-injector --socket "$SOCKET" click 70 70 100 100
+./fbwl-input-injector --socket "$SOCKET" click "$((A_X + 10))" "$((A_Y + 10))" "$((B_X + 10))" "$((B_Y + 10))"
 
 tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Policy: focus \(direct\) title=client-a'
 tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Policy: focus \(direct\) title=client-b'
