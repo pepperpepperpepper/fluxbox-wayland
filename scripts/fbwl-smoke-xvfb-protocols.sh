@@ -23,6 +23,8 @@ need_exe ./fbwl-fractional-scale-client
 need_exe ./fbwl-idle-client
 need_exe ./fbwl-input-injector
 need_exe ./fbwl-input-method-client
+need_exe ./fbwl-output-management-client
+need_exe ./fbwl-output-power-client
 need_exe ./fbwl-primary-selection-client
 need_exe ./fbwl-relptr-client
 need_exe ./fbwl-screencopy-client
@@ -34,6 +36,7 @@ need_exe ./fbwl-text-input-client
 need_exe ./fbwl-viewporter-client
 need_exe ./fbwl-xdg-activation-client
 need_exe ./fbwl-xdg-decoration-client
+need_exe ./fbwl-xdg-output-client
 
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/xdg-runtime-$UID}"
 mkdir -p "$XDG_RUNTIME_DIR"
@@ -65,6 +68,12 @@ LOG="${LOG:-/tmp/fluxbox-wayland-xvfb-proto-$UID-$$.log}"
 SC_LOG="${SC_LOG:-/tmp/fbwl-screencopy-xvfb-proto-$UID-$$.log}"
 BG_COLOR="${BG_COLOR:-#336699}"
 SPAWN_MARK="${SPAWN_MARK:-/tmp/fbwl-terminal-spawned-xvfb-$UID-$$}"
+OUTPUTS="${OUTPUTS:-${WLR_X11_OUTPUTS:-2}}"
+
+if [[ ! "$OUTPUTS" =~ ^[0-9]+$ || "$OUTPUTS" -lt 2 ]]; then
+  echo "OUTPUTS must be an integer >= 2 (got: $OUTPUTS)" >&2
+  exit 1
+fi
 
 cleanup() {
   rm -f "$SPAWN_MARK" 2>/dev/null || true
@@ -100,7 +109,7 @@ if ! timeout 5 bash -c "until [[ -S /tmp/.X11-unix/X$DISPLAY_NUM ]]; do sleep 0.
   exit 1
 fi
 
-DISPLAY=":$DISPLAY_NUM" WLR_BACKENDS=x11 WLR_RENDERER=pixman ./fluxbox-wayland \
+DISPLAY=":$DISPLAY_NUM" WLR_BACKENDS=x11 WLR_RENDERER=pixman WLR_X11_OUTPUTS="$OUTPUTS" ./fluxbox-wayland \
   --no-xwayland \
   --socket "$SOCKET" \
   --bg-color "$BG_COLOR" \
@@ -109,10 +118,26 @@ DISPLAY=":$DISPLAY_NUM" WLR_BACKENDS=x11 WLR_RENDERER=pixman ./fluxbox-wayland \
 FBW_PID=$!
 
 timeout 5 bash -c "until rg -q 'Running fluxbox-wayland' '$LOG'; do sleep 0.05; done"
+timeout 5 bash -c "until [[ \$(rg -c 'OutputLayout:' '$LOG') -ge $OUTPUTS ]]; do sleep 0.05; done"
 
 ./fbwl-input-injector --socket "$SOCKET" hold 60000 >/dev/null 2>&1 &
 HOLD_PID=$!
 timeout 5 bash -c "until rg -q 'New virtual pointer' '$LOG' && rg -q 'New virtual keyboard' '$LOG'; do sleep 0.05; done"
+
+XO_LOG="/tmp/fbwl-xdg-output-xvfb-proto-$UID-$$.log"
+: >"$XO_LOG"
+./fbwl-xdg-output-client --socket "$SOCKET" --timeout-ms 3000 --expect-outputs "$OUTPUTS" >"$XO_LOG" 2>&1
+rg -q "^ok xdg_output outputs=${OUTPUTS}\$" "$XO_LOG"
+
+OM_LOG="/tmp/fbwl-output-management-xvfb-proto-$UID-$$.log"
+: >"$OM_LOG"
+./fbwl-output-management-client --socket "$SOCKET" --timeout-ms 6000 --expect-heads "$OUTPUTS" --target-index 1 --delta-y 120 >"$OM_LOG" 2>&1
+rg -q '^ok output-management moved ' "$OM_LOG"
+
+OP_LOG="/tmp/fbwl-output-power-xvfb-proto-$UID-$$.log"
+: >"$OP_LOG"
+./fbwl-output-power-client --socket "$SOCKET" --timeout-ms 4000 --expect-outputs "$OUTPUTS" --target-index 1 >"$OP_LOG" 2>&1
+rg -q '^ok output-power toggled ' "$OP_LOG"
 
 timeout 5 bash -c "until rg -q 'Background: output ' '$LOG'; do sleep 0.05; done"
 ./fbwl-screencopy-client --socket "$SOCKET" --timeout-ms 4000 --expect-rgb "$BG_COLOR" --sample-x 1 --sample-y 1 >"$SC_LOG" 2>&1

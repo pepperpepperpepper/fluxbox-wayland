@@ -23,7 +23,15 @@ trap cleanup EXIT
 
 : >"$LOG"
 
-WLR_BACKENDS=headless WLR_RENDERER=pixman ./fluxbox-wayland --no-xwayland --socket "$SOCKET" >"$LOG" 2>&1 &
+BACKENDS="${WLR_BACKENDS:-headless}"
+RENDERER="${WLR_RENDERER:-pixman}"
+
+if [[ "$BACKENDS" == *x11* ]]; then
+  : "${DISPLAY:?DISPLAY must be set for x11 backend}"
+fi
+
+env WLR_BACKENDS="$BACKENDS" WLR_RENDERER="$RENDERER" \
+  ./fluxbox-wayland --no-xwayland --socket "$SOCKET" >"$LOG" 2>&1 &
 FBW_PID=$!
 
 timeout 5 bash -c "until rg -q 'Running fluxbox-wayland' '$LOG'; do sleep 0.05; done"
@@ -35,4 +43,3 @@ if [[ "$OUT" != ok* ]]; then
 fi
 
 echo "ok: presentation-time smoke passed (socket=$SOCKET log=$LOG)"
-
