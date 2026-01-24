@@ -12,6 +12,29 @@ export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/xdg-runtime-$UID}"
 mkdir -p "$XDG_RUNTIME_DIR"
 chmod 0700 "$XDG_RUNTIME_DIR"
 
+expect_err() {
+  local expected_re="$1"
+  shift
+
+  set +e
+  local out
+  out="$("$@" 2>&1)"
+  local rc=$?
+  set -e
+
+  if ((rc == 0)); then
+    echo "expected non-zero exit status but command succeeded: $*" >&2
+    echo "$out" >&2
+    exit 1
+  fi
+
+  echo "$out" | rg -q "$expected_re" || {
+    echo "expected error matching: $expected_re" >&2
+    echo "$out" >&2
+    exit 1
+  }
+}
+
 SOCKET="${SOCKET:-wayland-fbwl-test-$UID-$$}"
 LOG="${LOG:-/tmp/fluxbox-wayland-ipc-$UID-$$.log}"
 
@@ -46,6 +69,13 @@ timeout 5 bash -c "until rg -q 'IPC: listening' '$LOG'; do sleep 0.05; done"
 ./fbwl-remote --socket "$SOCKET" ping | rg -q '^ok pong$'
 ./fbwl-remote --socket "$SOCKET" get-workspace | rg -q '^ok workspace=1$'
 
+expect_err '^err empty_command$' ./fbwl-remote --socket "$SOCKET" " "
+expect_err '^err workspace_requires_number$' ./fbwl-remote --socket "$SOCKET" workspace
+expect_err '^err invalid_workspace_number$' ./fbwl-remote --socket "$SOCKET" workspace 0
+expect_err '^err invalid_workspace_number$' ./fbwl-remote --socket "$SOCKET" workspace nope
+expect_err '^err workspace_out_of_range$' ./fbwl-remote --socket "$SOCKET" workspace 4
+expect_err '^err unknown_command$' ./fbwl-remote --socket "$SOCKET" does-not-exist
+
 ./fbwl-smoke-client --socket "$SOCKET" --title ipc-a --stay-ms 20000 >/dev/null 2>&1 &
 A_PID=$!
 ./fbwl-smoke-client --socket "$SOCKET" --title ipc-b --stay-ms 20000 >/dev/null 2>&1 &
@@ -65,6 +95,11 @@ OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-remote --socket "$SOCKET" focus-next | rg -q '^ok$'
 START=$((OFFSET + 1))
 timeout 5 bash -c "until tail -c +$START '$LOG' | rg -F -q \"Focus: $OTHER_VIEW\"; do sleep 0.05; done"
+
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-remote --socket "$SOCKET" nextwindow | rg -q '^ok$'
+START=$((OFFSET + 1))
+timeout 5 bash -c "until tail -c +$START '$LOG' | rg -F -q \"Focus: $FOCUSED_VIEW\"; do sleep 0.05; done"
 
 ./fbwl-remote --socket "$SOCKET" workspace 2 | rg -q '^ok workspace=2$'
 timeout 5 bash -c "until rg -q 'Workspace: apply current=2 reason=ipc' '$LOG'; do sleep 0.05; done"
