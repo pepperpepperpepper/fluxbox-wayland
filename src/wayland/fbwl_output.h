@@ -1,6 +1,8 @@
 #pragma once
 
 #include <stddef.h>
+#include <stdbool.h>
+#include <stdint.h>
 
 #include <wayland-server-core.h>
 #include <wlr/util/box.h>
@@ -25,7 +27,12 @@ struct fbwl_output {
     fbwl_output_on_destroy_fn on_destroy;
     void *on_destroy_userdata;
 
+    uint32_t last_present_commit_seq;
+    bool have_present_commit_seq;
+    bool synth_present_in_progress;
+
     struct wl_listener frame;
+    struct wl_listener present;
     struct wl_listener request_state;
     struct wl_listener destroy;
 };
@@ -37,4 +44,3 @@ struct fbwl_output *fbwl_output_create(struct wl_list *outputs, struct wlr_outpu
         struct wlr_allocator *allocator, struct wlr_renderer *renderer,
         struct wlr_output_layout *output_layout, struct wlr_scene *scene, struct wlr_scene_output_layout *scene_layout,
         fbwl_output_on_destroy_fn on_destroy, void *on_destroy_userdata);
-

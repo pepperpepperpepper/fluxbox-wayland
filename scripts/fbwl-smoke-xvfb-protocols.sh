@@ -25,6 +25,7 @@ need_exe ./fbwl-input-injector
 need_exe ./fbwl-input-method-client
 need_exe ./fbwl-output-management-client
 need_exe ./fbwl-output-power-client
+need_exe ./fbwl-presentation-time-client
 need_exe ./fbwl-primary-selection-client
 need_exe ./fbwl-relptr-client
 need_exe ./fbwl-screencopy-client
@@ -142,6 +143,11 @@ rg -q '^ok output-power toggled ' "$OP_LOG"
 timeout 5 bash -c "until rg -q 'Background: output ' '$LOG'; do sleep 0.05; done"
 ./fbwl-screencopy-client --socket "$SOCKET" --timeout-ms 4000 --expect-rgb "$BG_COLOR" --sample-x 1 --sample-y 1 >"$SC_LOG" 2>&1
 rg -q '^ok screencopy$' "$SC_LOG"
+
+PT_LOG="/tmp/fbwl-presentation-time-xvfb-proto-$UID-$$.log"
+: >"$PT_LOG"
+./fbwl-presentation-time-client --socket "$SOCKET" --timeout-ms 5000 >"$PT_LOG" 2>&1
+rg -q '^ok' "$PT_LOG"
 
 CLIP_TEXT="fbwl-clipboard-xvfb-$UID-$$"
 CLIP_LOG="/tmp/fbwl-clipboard-xvfb-set-$UID-$$.log"
