@@ -16,6 +16,14 @@ SOCKET="${SOCKET:-wayland-fbwl-test-$UID-$$}"
 LOG="${LOG:-/tmp/fluxbox-wayland-fluxbox-remote-$UID-$$.log}"
 
 cleanup() {
+  if [[ -n "${B_PID:-}" ]]; then
+    kill "$B_PID" 2>/dev/null || true
+    wait "$B_PID" 2>/dev/null || true
+  fi
+  if [[ -n "${A_PID:-}" ]]; then
+    kill "$A_PID" 2>/dev/null || true
+    wait "$A_PID" 2>/dev/null || true
+  fi
   if [[ -n "${FBW_PID:-}" ]]; then
     kill "$FBW_PID" 2>/dev/null || true
     wait "$FBW_PID" 2>/dev/null || true
@@ -25,7 +33,11 @@ trap cleanup EXIT
 
 : >"$LOG"
 
-WLR_BACKENDS=headless WLR_RENDERER=pixman ./fluxbox-wayland --no-xwayland --socket "$SOCKET" >"$LOG" 2>&1 &
+WLR_BACKENDS=headless WLR_RENDERER=pixman ./fluxbox-wayland \
+  --no-xwayland \
+  --socket "$SOCKET" \
+  --workspaces 3 \
+  >"$LOG" 2>&1 &
 FBW_PID=$!
 
 timeout 5 bash -c "until rg -q 'Running fluxbox-wayland' '$LOG'; do sleep 0.05; done"
@@ -34,9 +46,47 @@ timeout 5 bash -c "until rg -q 'IPC: listening' '$LOG'; do sleep 0.05; done"
 DISPLAY='' ./fluxbox-remote --wayland --socket "$SOCKET" ping | rg -q '^ok pong$'
 DISPLAY='' ./fluxbox-remote --wayland --socket "$SOCKET" get-workspace | rg -q '^ok workspace=1$'
 
+./fbwl-smoke-client --socket "$SOCKET" --title fbr-a --stay-ms 20000 >/dev/null 2>&1 &
+A_PID=$!
+./fbwl-smoke-client --socket "$SOCKET" --title fbr-b --stay-ms 20000 >/dev/null 2>&1 &
+B_PID=$!
+
+timeout 5 bash -c "until rg -q 'Focus: fbr-a' '$LOG' && rg -q 'Focus: fbr-b' '$LOG'; do sleep 0.05; done"
+
+FOCUSED_LINE="$(rg -o 'Focus: fbr-[ab]' "$LOG" | tail -n 1)"
+FOCUSED_VIEW="${FOCUSED_LINE#Focus: }"
+case "$FOCUSED_VIEW" in
+  fbr-a) OTHER_VIEW=fbr-b ;;
+  fbr-b) OTHER_VIEW=fbr-a ;;
+  *) echo "failed to determine focused view (got: $FOCUSED_VIEW)" >&2; exit 1 ;;
+esac
+
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+DISPLAY='' ./fluxbox-remote --wayland --socket "$SOCKET" focus-next | rg -q '^ok$'
+START=$((OFFSET + 1))
+timeout 5 bash -c "until tail -c +$START '$LOG' | rg -F -q \"Focus: $OTHER_VIEW\"; do sleep 0.05; done"
+
 DISPLAY='' ./fluxbox-remote --wayland --socket "$SOCKET" workspace 2 | rg -q '^ok workspace=2$'
 timeout 5 bash -c "until rg -q 'Workspace: apply current=2 reason=ipc' '$LOG'; do sleep 0.05; done"
 DISPLAY='' ./fluxbox-remote --wayland --socket "$SOCKET" get-workspace | rg -q '^ok workspace=2$'
+
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+DISPLAY='' ./fluxbox-remote --wayland --socket "$SOCKET" nextworkspace | rg -q '^ok$'
+START=$((OFFSET + 1))
+timeout 5 bash -c "until tail -c +$START '$LOG' | rg -q 'Workspace: apply current=3 reason=ipc'; do sleep 0.05; done"
+DISPLAY='' ./fluxbox-remote --wayland --socket "$SOCKET" get-workspace | rg -q '^ok workspace=3$'
+
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+DISPLAY='' ./fluxbox-remote --wayland --socket "$SOCKET" nextworkspace | rg -q '^ok$'
+START=$((OFFSET + 1))
+timeout 5 bash -c "until tail -c +$START '$LOG' | rg -q 'Workspace: apply current=1 reason=ipc'; do sleep 0.05; done"
+DISPLAY='' ./fluxbox-remote --wayland --socket "$SOCKET" get-workspace | rg -q '^ok workspace=1$'
+
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+DISPLAY='' ./fluxbox-remote --wayland --socket "$SOCKET" prevworkspace | rg -q '^ok$'
+START=$((OFFSET + 1))
+timeout 5 bash -c "until tail -c +$START '$LOG' | rg -q 'Workspace: apply current=3 reason=ipc'; do sleep 0.05; done"
+DISPLAY='' ./fluxbox-remote --wayland --socket "$SOCKET" get-workspace | rg -q '^ok workspace=3$'
 
 DISPLAY='' ./fluxbox-remote --wayland --socket "$SOCKET" quit | rg -q '^ok quitting$'
 timeout 5 bash -c "while kill -0 '$FBW_PID' 2>/dev/null; do sleep 0.05; done"
