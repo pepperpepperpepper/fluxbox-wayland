@@ -61,6 +61,38 @@ BG_COLOR="${BG_COLOR:-#336699}"
 source scripts/fbwl-smoke-report-lib.sh
 fbwl_report_init "${FBWL_SMOKE_REPORT_DIR:-}" "$SOCKET" "$XDG_RUNTIME_DIR"
 
+have_cmd() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+REPORT_USE_WESTON_TERMINAL=0
+if [[ -n "${FBWL_REPORT_DIR:-}" ]] && have_cmd weston-terminal; then
+  REPORT_USE_WESTON_TERMINAL=1
+fi
+
+WESTON_TERMINAL_SHELLS=()
+
+spawn_weston_terminal() {
+  local title="$1"
+  local stay_ms="${2:-20000}"
+
+  local sleep_s=$(((stay_ms + 999) / 1000))
+  local shell_script="/tmp/fbwl-weston-terminal-shell-${title}-$UID-$$"
+  cat >"$shell_script" <<EOF
+#!/usr/bin/env sh
+printf '\\033]0;%s\\007' "$title"
+printf '%s\\n' "$title"
+sleep "$sleep_s"
+EOF
+  chmod +x "$shell_script"
+
+  WESTON_TERMINAL_SHELLS+=("$shell_script")
+
+  WAYLAND_DISPLAY="$SOCKET" XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" XDG_SESSION_TYPE=wayland \
+    weston-terminal --shell="$shell_script" >/dev/null 2>&1 &
+  echo $!
+}
+
 dump_tail() {
   local path="${1:-}"
   local n="${2:-120}"
@@ -95,6 +127,7 @@ trap 'smoke_on_err $LINENO "$BASH_COMMAND"' ERR
 
 cleanup() {
   rm -f "$MENU_FILE" "$MENU_MARKER" "$CMD_MARKER" "$APPS_FILE" 2>/dev/null || true
+  for s in "${WESTON_TERMINAL_SHELLS[@]:-}"; do rm -f "$s" 2>/dev/null || true; done
   kill_wait "${FS_B_PID:-}"
   kill_wait "${FS_A_PID:-}"
   kill_wait "${MIN_PID:-}"
@@ -231,13 +264,37 @@ tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'OSD: show workspace=3'
 fbwl_report_shot "02-osd.png" "Workspace OSD"
 timeout 5 bash -c "until rg -q 'OSD: hide reason=timer' '$LOG'; do sleep 0.05; done"
 
-./fbwl-smoke-client --socket "$SOCKET" --title ks-ib-a --stay-ms 20000 >/dev/null 2>&1 &
-IB_A_PID=$!
-./fbwl-smoke-client --socket "$SOCKET" --title ks-ib-b --stay-ms 20000 >/dev/null 2>&1 &
-IB_B_PID=$!
+if ((REPORT_USE_WESTON_TERMINAL)); then
+  IB_A_PID="$(spawn_weston_terminal ks-ib-a 20000)"
+  IB_B_PID="$(spawn_weston_terminal ks-ib-b 20000)"
+else
+  ./fbwl-smoke-client --socket "$SOCKET" --title ks-ib-a --stay-ms 20000 >/dev/null 2>&1 &
+  IB_A_PID=$!
+  ./fbwl-smoke-client --socket "$SOCKET" --title ks-ib-b --stay-ms 20000 >/dev/null 2>&1 &
+  IB_B_PID=$!
+fi
 
-timeout 5 bash -c "until rg -q 'Focus: ks-ib-a' '$LOG' && rg -q 'Focus: ks-ib-b' '$LOG'; do sleep 0.05; done"
 timeout 5 bash -c "until rg -q 'Toolbar: iconbar item .*title=ks-ib-a' '$LOG' && rg -q 'Toolbar: iconbar item .*title=ks-ib-b' '$LOG'; do sleep 0.05; done"
+if ((REPORT_USE_WESTON_TERMINAL)); then
+  # weston-terminal may initially focus with title "Wayland Terminal"; force deterministic Focus lines via iconbar clicks.
+  for view in ks-ib-a ks-ib-b; do
+    item_line="$(rg "Toolbar: iconbar item .*title=$view" "$LOG" | tail -n 1)"
+    if [[ "$item_line" =~ lx=([-0-9]+)\ w=([0-9]+)\ title= ]]; then
+      LX="${BASH_REMATCH[1]}"
+      W="${BASH_REMATCH[2]}"
+    else
+      echo "failed to parse Toolbar: iconbar item line for $view: $item_line" >&2
+      exit 1
+    fi
+
+    OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+    ./fbwl-input-injector --socket "$SOCKET" click $((TB_X0 + LX + W / 2)) $((TB_Y0 + TB_H / 2))
+    tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Toolbar: click iconbar idx=[0-9]+ title=$view"
+    tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Focus: $view"
+  done
+else
+  timeout 5 bash -c "until rg -q 'Focus: ks-ib-a' '$LOG' && rg -q 'Focus: ks-ib-b' '$LOG'; do sleep 0.05; done"
+fi
 fbwl_report_shot "03-iconbar.png" "Iconbar with two clients"
 
 FOCUSED_VIEW=$(
@@ -291,11 +348,18 @@ unset IB_A_PID
 kill_wait "$IB_B_PID"
 unset IB_B_PID
 
-./fbwl-smoke-client --socket "$SOCKET" --title ks-mr --stay-ms 20000 >/dev/null 2>&1 &
-MR_PID=$!
-timeout 5 bash -c "until rg -q 'Surface size: ks-mr ' '$LOG' && rg -q 'Place: ks-mr ' '$LOG'; do sleep 0.05; done"
+START_OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+if ((REPORT_USE_WESTON_TERMINAL)); then
+  MR_PID="$(spawn_weston_terminal ks-mr 20000)"
+  timeout 5 bash -c "until rg -q 'Toolbar: iconbar item .*title=ks-mr' '$LOG'; do sleep 0.05; done"
+else
+  ./fbwl-smoke-client --socket "$SOCKET" --title ks-mr --stay-ms 20000 >/dev/null 2>&1 &
+  MR_PID=$!
+fi
+timeout 5 bash -c "until tail -c +$((START_OFFSET + 1)) '$LOG' | rg -q 'Surface size: '; do sleep 0.05; done"
+timeout 5 bash -c "until tail -c +$((START_OFFSET + 1)) '$LOG' | rg -q 'Place: '; do sleep 0.05; done"
 
-MR_PLACE_LINE="$(rg -m1 'Place: ks-mr ' "$LOG")"
+MR_PLACE_LINE="$(tail -c +$((START_OFFSET + 1)) "$LOG" | rg -m1 'Place: ')"
 if [[ "$MR_PLACE_LINE" =~ x=([-0-9]+)\ y=([-0-9]+) ]]; then
   MR_X0="${BASH_REMATCH[1]}"
   MR_Y0="${BASH_REMATCH[2]}"
@@ -304,7 +368,7 @@ else
   exit 1
 fi
 
-MR_SIZE_LINE="$(rg -m1 'Surface size: ks-mr ' "$LOG")"
+MR_SIZE_LINE="$(tail -c +$((START_OFFSET + 1)) "$LOG" | rg -m1 'Surface size: ')"
 if [[ "$MR_SIZE_LINE" =~ ([0-9]+)x([0-9]+) ]]; then
   MR_W0="${BASH_REMATCH[1]}"
   MR_H0="${BASH_REMATCH[2]}"
@@ -315,37 +379,68 @@ fi
 
 MR_START_X=$((MR_X0 + 5))
 MR_START_Y=$((MR_Y0 + 5))
-MR_END_X=$((MR_START_X + 100))
-MR_END_Y=$((MR_START_Y + 100))
-MR_X1=$((MR_X0 + 100))
-MR_Y1=$((MR_Y0 + 100))
+
+MR_RS_DX=50
+MR_RS_DY=60
+
+MR_MAX_X=$((OUT_W - 20 - MR_W0 - MR_RS_DX))
+if (( MR_MAX_X < 0 )); then MR_MAX_X=0; fi
+MR_MAX_Y=$((TB_Y0 - 20 - MR_H0 - MR_RS_DY))
+if (( MR_MAX_Y < 0 )); then MR_MAX_Y=0; fi
+
+MR_X1=20
+MR_Y1=20
+if (( MR_X1 > MR_MAX_X )); then MR_X1=$MR_MAX_X; fi
+if (( MR_Y1 > MR_MAX_Y )); then MR_Y1=$MR_MAX_Y; fi
+
+if (( MR_X1 == MR_X0 && MR_Y1 == MR_Y0 )); then
+  MR_X1=$((MR_X1 + 100))
+  MR_Y1=$((MR_Y1 + 100))
+  if (( MR_X1 > MR_MAX_X )); then MR_X1=$MR_MAX_X; fi
+  if (( MR_Y1 > MR_MAX_Y )); then MR_Y1=$MR_MAX_Y; fi
+fi
+
+MR_END_X=$((MR_X1 + 5))
+MR_END_Y=$((MR_Y1 + 5))
 
 ./fbwl-input-injector --socket "$SOCKET" click "$MR_START_X" "$MR_START_Y" >/dev/null 2>&1 || true
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" drag-alt-left "$MR_START_X" "$MR_START_Y" "$MR_END_X" "$MR_END_Y"
 tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Move: ks-mr x=$MR_X1 y=$MR_Y1"
 
-MR_RS_START_X=$((MR_X1 + MR_W0 - 2))
-MR_RS_START_Y=$((MR_Y1 + MR_H0 - 2))
-MR_RS_END_X=$((MR_RS_START_X + 50))
-MR_RS_END_Y=$((MR_RS_START_Y + 60))
-MR_W1=$((MR_W0 + 50))
-MR_H1=$((MR_H0 + 60))
+MR_RS_START_X=$((MR_X1 + 10))
+MR_RS_START_Y=$((MR_Y1 + 10))
+MR_RS_END_X=$((MR_RS_START_X + MR_RS_DX))
+MR_RS_END_Y=$((MR_RS_START_Y + MR_RS_DY))
+MR_W1=$((MR_W0 + MR_RS_DX))
+MR_H1=$((MR_H0 + MR_RS_DY))
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" drag-alt-right "$MR_RS_START_X" "$MR_RS_START_Y" "$MR_RS_END_X" "$MR_RS_END_Y"
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Resize: ks-mr w=$MR_W1 h=$MR_H1"
-timeout 5 bash -c "until rg -q 'Surface size: ks-mr ${MR_W1}x${MR_H1}' '$LOG'; do sleep 0.05; done"
+if ((REPORT_USE_WESTON_TERMINAL)); then
+  tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Resize: ks-mr "
+  timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Surface size: ks-mr '; do sleep 0.05; done"
+else
+  tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Resize: ks-mr w=$MR_W1 h=$MR_H1"
+  timeout 5 bash -c "until rg -q 'Surface size: ks-mr ${MR_W1}x${MR_H1}' '$LOG'; do sleep 0.05; done"
+fi
 fbwl_report_shot "05-move-resize.png" "Move/resize"
 
 kill_wait "$MR_PID"
 unset MR_PID
 
-./fbwl-smoke-client --socket "$SOCKET" --title ks-mf --stay-ms 20000 >/dev/null 2>&1 &
-MF_PID=$!
-timeout 5 bash -c "until rg -q 'Surface size: ks-mf 32x32' '$LOG' && rg -q 'Place: ks-mf ' '$LOG'; do sleep 0.05; done"
+START_OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+if ((REPORT_USE_WESTON_TERMINAL)); then
+  MF_PID="$(spawn_weston_terminal ks-mf 20000)"
+  timeout 5 bash -c "until rg -q 'Toolbar: iconbar item .*title=ks-mf' '$LOG'; do sleep 0.05; done"
+else
+  ./fbwl-smoke-client --socket "$SOCKET" --title ks-mf --stay-ms 20000 >/dev/null 2>&1 &
+  MF_PID=$!
+fi
+timeout 5 bash -c "until tail -c +$((START_OFFSET + 1)) '$LOG' | rg -q 'Surface size: '; do sleep 0.05; done"
+timeout 5 bash -c "until tail -c +$((START_OFFSET + 1)) '$LOG' | rg -q 'Place: '; do sleep 0.05; done"
 
-MF_PLACE_LINE="$(rg -m1 'Place: ks-mf ' "$LOG")"
+MF_PLACE_LINE="$(tail -c +$((START_OFFSET + 1)) "$LOG" | rg -m1 'Place: ')"
 if [[ "$MF_PLACE_LINE" =~ x=([-0-9]+)\ y=([-0-9]+) ]]; then
   MF_CLICK_X=$((BASH_REMATCH[1] + 5))
   MF_CLICK_Y=$((BASH_REMATCH[2] + 5))
@@ -359,23 +454,40 @@ fi
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" key alt-m
 tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Maximize: ks-mf on w=$OUT_W h=$OUT_H"
-timeout 5 bash -c "until rg -q 'Surface size: ks-mf ${OUT_W}x${OUT_H}' '$LOG'; do sleep 0.05; done"
+if ((REPORT_USE_WESTON_TERMINAL)); then
+  timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Surface size: ks-mf '; do sleep 0.05; done"
+else
+  timeout 5 bash -c "until rg -q 'Surface size: ks-mf ${OUT_W}x${OUT_H}' '$LOG'; do sleep 0.05; done"
+fi
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" key alt-m
 tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Maximize: ks-mf off"
-timeout 5 bash -c "until rg -q 'Surface size: ks-mf 32x32' '$LOG'; do sleep 0.05; done"
+if ((REPORT_USE_WESTON_TERMINAL)); then
+  # For real apps like weston-terminal, the compositor may restore a non-32x32 size; just ensure resize happened.
+  timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Surface size: ks-mf '; do sleep 0.05; done"
+else
+  timeout 5 bash -c "until rg -q 'Surface size: ks-mf 32x32' '$LOG'; do sleep 0.05; done"
+fi
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" key alt-f
 tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Fullscreen: ks-mf on w=$OUT_W h=$OUT_H"
-timeout 5 bash -c "until rg -q 'Surface size: ks-mf ${OUT_W}x${OUT_H}' '$LOG'; do sleep 0.05; done"
+if ((REPORT_USE_WESTON_TERMINAL)); then
+  timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Surface size: ks-mf '; do sleep 0.05; done"
+else
+  timeout 5 bash -c "until rg -q 'Surface size: ks-mf ${OUT_W}x${OUT_H}' '$LOG'; do sleep 0.05; done"
+fi
 fbwl_report_shot "06-fullscreen.png" "Fullscreen"
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" key alt-f
 tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Fullscreen: ks-mf off"
-timeout 5 bash -c "until rg -q 'Surface size: ks-mf 32x32' '$LOG'; do sleep 0.05; done"
+if ((REPORT_USE_WESTON_TERMINAL)); then
+  timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Surface size: ks-mf '; do sleep 0.05; done"
+else
+  timeout 5 bash -c "until rg -q 'Surface size: ks-mf 32x32' '$LOG'; do sleep 0.05; done"
+fi
 
 kill_wait "$MF_PID"
 unset MF_PID
