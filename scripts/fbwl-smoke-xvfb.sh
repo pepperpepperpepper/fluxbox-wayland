@@ -44,6 +44,38 @@ MENU_FILE="${MENU_FILE:-/tmp/fbwl-menu-xvfb-$UID-$$.menu}"
 MENU_MARKER="${MENU_MARKER:-/tmp/fbwl-menu-xvfb-marker-$UID-$$}"
 BG_COLOR="${BG_COLOR:-#336699}"
 
+dump_tail() {
+  local path="${1:-}"
+  local n="${2:-120}"
+  [[ -z "$path" ]] && return 0
+  [[ -f "$path" ]] || return 0
+  echo "----- tail -n $n $path" >&2
+  tail -n "$n" "$path" >&2 || true
+}
+
+smoke_on_err() {
+  local rc=$?
+  trap - ERR
+  set +e
+
+  echo "error: $0 failed (rc=$rc line=${1:-} cmd=${2:-})" >&2
+  echo "debug: DISPLAY=:${DISPLAY_NUM:-} socket=${SOCKET:-} XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-}" >&2
+  echo "debug: logs: log=${LOG:-} xvfb_log=${XVFB_LOG:-} sc_log=${SC_LOG:-}" >&2
+
+  if command -v xwd >/dev/null 2>&1 && [[ -n "${DISPLAY_NUM:-}" ]]; then
+    local xwd_out="/tmp/fbwl-smoke-xvfb-$UID-$$.xwd"
+    if xwd -silent -root -display ":$DISPLAY_NUM" -out "$xwd_out" >/dev/null 2>&1; then
+      echo "debug: wrote screenshot: $xwd_out" >&2
+    fi
+  fi
+
+  dump_tail "${LOG:-}"
+  dump_tail "${XVFB_LOG:-}"
+  dump_tail "${SC_LOG:-}"
+  exit "$rc"
+}
+trap 'smoke_on_err $LINENO "$BASH_COMMAND"' ERR
+
 cleanup() {
   rm -f "$CMD_MARKER" "$MENU_FILE" "$MENU_MARKER" 2>/dev/null || true
   if [[ -n "${MR_PID:-}" ]]; then

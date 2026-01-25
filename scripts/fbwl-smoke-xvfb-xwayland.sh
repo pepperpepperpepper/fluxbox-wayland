@@ -49,6 +49,52 @@ XVFB_LOG="${XVFB_LOG:-/tmp/xvfb-xwayland-$UID-$$.log}"
 LOG="${LOG:-/tmp/fluxbox-wayland-xvfb-xwayland-$UID-$$.log}"
 TITLE="${TITLE:-xw-test-xvfb}"
 
+dump_tail() {
+  local path="${1:-}"
+  local n="${2:-120}"
+  [[ -z "$path" ]] && return 0
+  [[ -f "$path" ]] || return 0
+  echo "----- tail -n $n $path" >&2
+  tail -n "$n" "$path" >&2 || true
+}
+
+smoke_on_err() {
+  local rc=$?
+  trap - ERR
+  set +e
+
+  echo "error: $0 failed (rc=$rc line=${1:-} cmd=${2:-})" >&2
+  echo "debug: DISPLAY=:${DISPLAY_NUM:-} xwayland_display=${DISPLAY_NAME:-} socket=${SOCKET:-} XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-}" >&2
+  echo "debug: logs: log=${LOG:-} xvfb_log=${XVFB_LOG:-}" >&2
+
+  if command -v xwd >/dev/null 2>&1 && [[ -n "${DISPLAY_NUM:-}" ]]; then
+    local xwd_out="/tmp/fbwl-smoke-xvfb-xwayland-$UID-$$.xwd"
+    if xwd -silent -root -display ":$DISPLAY_NUM" -out "$xwd_out" >/dev/null 2>&1; then
+      echo "debug: wrote screenshot: $xwd_out" >&2
+    fi
+  fi
+
+  dump_tail "${LOG:-}"
+  dump_tail "${XVFB_LOG:-}"
+  exit "$rc"
+}
+trap 'smoke_on_err $LINENO "$BASH_COMMAND"' ERR
+
+wait_log_after_offset() {
+  local offset="$1"
+  local needle="$2"
+  local timeout_s="${3:-10}"
+  local end=$((SECONDS + timeout_s))
+  while ((SECONDS <= end)); do
+    if tail -c +$((offset + 1)) "$LOG" | rg -F -q "$needle"; then
+      return 0
+    fi
+    sleep 0.05
+  done
+  echo "timeout waiting for log: $needle (log=$LOG)" >&2
+  return 1
+}
+
 cleanup() {
   if [[ -n "${X11_PID:-}" ]]; then kill "$X11_PID" 2>/dev/null || true; fi
   if [[ -n "${FBW_PID:-}" ]]; then kill "$FBW_PID" 2>/dev/null || true; fi
@@ -118,7 +164,8 @@ MOVE_END_X=$((MOVE_START_X + 100))
 MOVE_END_Y=$((MOVE_START_Y + 100))
 ./fbwl-input-injector --socket "$SOCKET" drag-alt-left "$MOVE_START_X" "$MOVE_START_Y" "$MOVE_END_X" "$MOVE_END_Y"
 
-MOVE_LINE="$(tail -c +$((OFFSET + 1)) "$LOG" | rg -m 1 "Move: $TITLE" || true)"
+wait_log_after_offset "$OFFSET" "Move: $TITLE"
+MOVE_LINE="$(tail -c +$((OFFSET + 1)) "$LOG" | rg -F -m 1 "Move: $TITLE" || true)"
 if [[ -z "$MOVE_LINE" ]]; then
   echo "missing expected Move log for $TITLE (log=$LOG)" >&2
   exit 1
@@ -138,7 +185,8 @@ RESIZE_END_X=$((RESIZE_START_X + 50))
 RESIZE_END_Y=$((RESIZE_START_Y + 60))
 ./fbwl-input-injector --socket "$SOCKET" drag-alt-right "$RESIZE_START_X" "$RESIZE_START_Y" "$RESIZE_END_X" "$RESIZE_END_Y"
 
-RESIZE_LINE="$(tail -c +$((OFFSET + 1)) "$LOG" | rg -m 1 "Resize: $TITLE" || true)"
+wait_log_after_offset "$OFFSET" "Resize: $TITLE"
+RESIZE_LINE="$(tail -c +$((OFFSET + 1)) "$LOG" | rg -F -m 1 "Resize: $TITLE" || true)"
 if [[ -z "$RESIZE_LINE" ]]; then
   echo "missing expected Resize log for $TITLE (log=$LOG)" >&2
   exit 1

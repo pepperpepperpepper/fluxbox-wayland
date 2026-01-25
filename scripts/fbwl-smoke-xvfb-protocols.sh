@@ -76,6 +76,44 @@ if [[ ! "$OUTPUTS" =~ ^[0-9]+$ || "$OUTPUTS" -lt 2 ]]; then
   exit 1
 fi
 
+smoke_on_err() {
+  local rc=$?
+  trap - ERR
+  set +e
+
+  echo "error: $0 failed (rc=$rc line=${1:-} cmd=${2:-})" >&2
+  echo "debug: DISPLAY=:${DISPLAY_NUM:-} socket=${SOCKET:-} XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-} outputs=${OUTPUTS:-}" >&2
+  echo "debug: base logs: log=${LOG:-} xvfb_log=${XVFB_LOG:-} sc_log=${SC_LOG:-}" >&2
+
+  if command -v xwd >/dev/null 2>&1 && [[ -n "${DISPLAY_NUM:-}" ]]; then
+    local xwd_out="/tmp/fbwl-smoke-xvfb-proto-$UID-$$.xwd"
+    if xwd -silent -root -display ":$DISPLAY_NUM" -out "$xwd_out" >/dev/null 2>&1; then
+      echo "debug: wrote screenshot: $xwd_out" >&2
+    fi
+  fi
+
+  shopt -s nullglob
+  declare -A seen=()
+  local -a paths=(
+    "${LOG:-}"
+    "${XVFB_LOG:-}"
+    "${SC_LOG:-}"
+    /tmp/*-"$UID"-"$$".log
+  )
+
+  for path in "${paths[@]}"; do
+    [[ -n "$path" ]] || continue
+    [[ -f "$path" ]] || continue
+    [[ -n "${seen[$path]:-}" ]] && continue
+    seen["$path"]=1
+    echo "----- tail -n 120 $path" >&2
+    tail -n 120 "$path" >&2 || true
+  done
+
+  exit "$rc"
+}
+trap 'smoke_on_err $LINENO "$BASH_COMMAND"' ERR
+
 cleanup() {
   rm -f "$SPAWN_MARK" 2>/dev/null || true
   kill_wait "${LOCK_PID:-}"
