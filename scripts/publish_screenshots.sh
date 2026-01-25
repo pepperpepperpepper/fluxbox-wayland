@@ -130,7 +130,8 @@ for f in "${files[@]}"; do
     *.png) content_type=(--content-type "image/png") ;;
   esac
 
-  url="$(wtf-upload --prefix "$PREFIX" "${content_type[@]}" "$f")"
+  # Use an exact key so index.html can refer to manifest.tsv + images by filename.
+  url="$(wtf-upload --key "${PREFIX}${base}" "${content_type[@]}" "$f")"
   printf '%s\t%s\n' "$base" "$url"
   if [[ "$base" == "index.html" ]]; then
     index_url="$url"
