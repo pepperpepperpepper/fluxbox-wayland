@@ -563,6 +563,62 @@ OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" key alt-f
 tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Fullscreen: ks-fs-a off'
 
+WS_COUNT=3
+WS_ITERS="${WS_ITERS:-5}"
+ws_out="$(./fbwl-remote --socket "$SOCKET" get-workspace)"
+if [[ "$ws_out" =~ ^ok[[:space:]]workspace=([0-9]+)$ ]]; then
+  WS_START="${BASH_REMATCH[1]}"
+else
+  echo "failed to parse get-workspace output: '$ws_out'" >&2
+  exit 1
+fi
+
+ws_expect="$WS_START"
+for ((i = 0; i < WS_ITERS; i++)); do
+  ./fbwl-remote --socket "$SOCKET" nextworkspace | rg -q '^ok$'
+  ws_expect=$((ws_expect % WS_COUNT + 1))
+  ws_out="$(./fbwl-remote --socket "$SOCKET" get-workspace)"
+  if [[ "$ws_out" != "ok workspace=$ws_expect" ]]; then
+    echo "nextworkspace iteration $i: expected 'ok workspace=$ws_expect' got '$ws_out'" >&2
+    exit 1
+  fi
+done
+
+for ((i = 0; i < WS_ITERS; i++)); do
+  ./fbwl-remote --socket "$SOCKET" prevworkspace | rg -q '^ok$'
+  ws_expect=$((((ws_expect + WS_COUNT - 2) % WS_COUNT) + 1))
+  ws_out="$(./fbwl-remote --socket "$SOCKET" get-workspace)"
+  if [[ "$ws_out" != "ok workspace=$ws_expect" ]]; then
+    echo "prevworkspace iteration $i: expected 'ok workspace=$ws_expect' got '$ws_out'" >&2
+    exit 1
+  fi
+done
+
+./fbwl-remote --socket "$SOCKET" workspace "$WS_START" | rg -q "^ok workspace=$WS_START$"
+
+FOCUS_ITERS="${FOCUS_ITERS:-6}"
+cur_focus_line="$(rg -o 'Focus: ks-fs-[ab]' "$LOG" | tail -n 1 || true)"
+if [[ -z "$cur_focus_line" ]]; then
+  echo "failed to determine focused view for focus-next stress test (log: $LOG)" >&2
+  exit 1
+fi
+cur_focus="${cur_focus_line#Focus: }"
+case "$cur_focus" in
+  ks-fs-a) expect_focus=ks-fs-b ;;
+  ks-fs-b) expect_focus=ks-fs-a ;;
+  *) echo "unexpected focused view for focus-next stress test: $cur_focus" >&2; exit 1 ;;
+esac
+for ((i = 0; i < FOCUS_ITERS; i++)); do
+  OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+  ./fbwl-remote --socket "$SOCKET" focus-next | rg -q '^ok$'
+  timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q \"Focus: ${expect_focus}\"; do sleep 0.05; done"
+  if [[ "$expect_focus" == ks-fs-a ]]; then
+    expect_focus=ks-fs-b
+  else
+    expect_focus=ks-fs-a
+  fi
+done
+
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" key alt-f2
 tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'CmdDialog: open'
