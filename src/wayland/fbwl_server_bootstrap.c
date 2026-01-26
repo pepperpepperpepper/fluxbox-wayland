@@ -1,3 +1,4 @@
+#include <ctype.h>
 #include <errno.h>
 #include <signal.h>
 #include <stdbool.h>
@@ -70,6 +71,51 @@ static const char *focus_model_str(enum fbwl_focus_model model) {
     default:
         return "ClickToFocus";
     }
+}
+
+static char *trim_inplace(char *s) {
+    if (s == NULL) {
+        return NULL;
+    }
+    while (*s != '\0' && isspace((unsigned char)*s)) {
+        s++;
+    }
+    if (*s == '\0') {
+        return s;
+    }
+    char *end = s + strlen(s) - 1;
+    while (end > s && isspace((unsigned char)*end)) {
+        *end = '\0';
+        end--;
+    }
+    return s;
+}
+
+static void apply_workspace_names_from_init(struct fbwm_core *wm, const char *csv) {
+    if (wm == NULL || csv == NULL) {
+        return;
+    }
+
+    fbwm_core_clear_workspace_names(wm);
+
+    char *tmp = strdup(csv);
+    if (tmp == NULL) {
+        return;
+    }
+
+    char *saveptr = NULL;
+    char *tok = strtok_r(tmp, ",", &saveptr);
+    int idx = 0;
+    while (tok != NULL && idx < 1000) {
+        char *name = trim_inplace(tok);
+        if (name != NULL && *name != '\0') {
+            (void)fbwm_core_set_workspace_name(wm, idx, name);
+            idx++;
+        }
+        tok = strtok_r(NULL, ",", &saveptr);
+    }
+
+    free(tmp);
 }
 
 static bool server_keybindings_add_from_keys_file(void *userdata, xkb_keysym_t sym, uint32_t modifiers,
@@ -324,6 +370,11 @@ bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_
         }
         if (fbwl_resource_db_get_bool(&init, "session.screen0.focusNewWindows", &bool_val)) {
             server->focus.focus_new_windows = bool_val;
+        }
+
+        const char *workspace_names = fbwl_resource_db_get(&init, "session.screen0.workspaceNames");
+        if (workspace_names != NULL) {
+            apply_workspace_names_from_init(&server->wm, workspace_names);
         }
 
         wlr_log(WLR_INFO,

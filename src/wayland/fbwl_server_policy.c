@@ -732,8 +732,9 @@ static void server_osd_ui_show_workspace(struct fbwl_server *server, int workspa
     if (server == NULL || server->scene == NULL) {
         return;
     }
+    const char *name = fbwm_core_workspace_name(&server->wm, workspace);
     fbwl_ui_osd_show_workspace(&server->osd_ui, server->scene, server->layer_top,
-        &server->decor_theme, server->output_layout, workspace);
+        &server->decor_theme, server->output_layout, workspace, name);
 }
 
 void server_osd_ui_destroy(struct fbwl_server *server) {

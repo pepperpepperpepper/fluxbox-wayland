@@ -72,6 +72,7 @@ void fbwl_server_finish(struct fbwl_server *server) {
     server->auto_raise_pending_view = NULL;
     server_menu_free(server);
     fbwl_ui_toolbar_destroy(&server->toolbar_ui);
+    fbwm_core_finish(&server->wm);
 
     struct fbwl_output *out;
     wl_list_for_each(out, &server->outputs, link) {

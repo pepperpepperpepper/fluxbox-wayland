@@ -34,6 +34,5 @@ void fbwl_ui_osd_update_position(struct fbwl_osd_ui *ui, struct wlr_output_layou
 void fbwl_ui_osd_show_workspace(struct fbwl_osd_ui *ui,
     struct wlr_scene *scene, struct wlr_scene_tree *layer_top,
     const struct fbwl_decor_theme *decor_theme, struct wlr_output_layout *output_layout,
-    int workspace);
+    int workspace, const char *workspace_name);
 void fbwl_ui_osd_destroy(struct fbwl_osd_ui *ui);
-

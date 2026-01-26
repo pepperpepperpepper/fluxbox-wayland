@@ -339,8 +339,13 @@ void fbwl_ui_toolbar_rebuild(struct fbwl_toolbar_ui *ui, const struct fbwl_ui_to
         }
 
         for (size_t i = 0; i < ui->cell_count; i++) {
-            char label[16];
-            if (snprintf(label, sizeof(label), "%zu", i + 1) < 0) {
+            const char *name = fbwm_core_workspace_name(env->wm, (int)i);
+            char label[128];
+            if (name != NULL && *name != '\0') {
+                if (snprintf(label, sizeof(label), "%s", name) < 0) {
+                    continue;
+                }
+            } else if (snprintf(label, sizeof(label), "%zu", i + 1) < 0) {
                 continue;
             }
             struct wlr_buffer *buf = fbwl_text_buffer_create(label, ui->cell_w, ui->height, 8, fg);
@@ -719,4 +724,3 @@ bool fbwl_ui_toolbar_handle_click(struct fbwl_toolbar_ui *ui, const struct fbwl_
     }
     return button == BTN_LEFT;
 }
-

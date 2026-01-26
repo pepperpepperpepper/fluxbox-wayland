@@ -4,6 +4,8 @@
 
 #include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 static bool view_in_list(const struct fbwm_view *view) {
     return view != NULL && view->prev != NULL && view->next != NULL;
@@ -88,9 +90,15 @@ void fbwm_core_init(struct fbwm_core *core) {
 
     core->workspace_current = 0;
     core->workspace_count = 4;
+    core->workspace_names = NULL;
+    core->workspace_names_len = 0;
 
     core->place_next_x = 64;
     core->place_next_y = 64;
+}
+
+void fbwm_core_finish(struct fbwm_core *core) {
+    fbwm_core_clear_workspace_names(core);
 }
 
 void fbwm_core_view_map(struct fbwm_core *core, struct fbwm_view *view) {
@@ -206,6 +214,67 @@ int fbwm_core_workspace_count(const struct fbwm_core *core) {
 
 int fbwm_core_workspace_current(const struct fbwm_core *core) {
     return core != NULL ? core->workspace_current : 0;
+}
+
+void fbwm_core_clear_workspace_names(struct fbwm_core *core) {
+    if (core == NULL) {
+        return;
+    }
+    if (core->workspace_names != NULL) {
+        for (size_t i = 0; i < core->workspace_names_len; i++) {
+            free(core->workspace_names[i]);
+        }
+        free(core->workspace_names);
+    }
+    core->workspace_names = NULL;
+    core->workspace_names_len = 0;
+}
+
+bool fbwm_core_set_workspace_name(struct fbwm_core *core, int workspace, const char *name) {
+    if (core == NULL) {
+        return false;
+    }
+    if (workspace < 0) {
+        return false;
+    }
+
+    size_t needed = (size_t)workspace + 1;
+    if (needed > core->workspace_names_len) {
+        void *p = realloc(core->workspace_names, needed * sizeof(core->workspace_names[0]));
+        if (p == NULL) {
+            return false;
+        }
+        core->workspace_names = p;
+        for (size_t i = core->workspace_names_len; i < needed; i++) {
+            core->workspace_names[i] = NULL;
+        }
+        core->workspace_names_len = needed;
+    }
+
+    char *dup = NULL;
+    if (name != NULL && *name != '\0') {
+        dup = strdup(name);
+        if (dup == NULL) {
+            return false;
+        }
+    }
+
+    free(core->workspace_names[workspace]);
+    core->workspace_names[workspace] = dup;
+    return true;
+}
+
+const char *fbwm_core_workspace_name(const struct fbwm_core *core, int workspace) {
+    if (core == NULL) {
+        return NULL;
+    }
+    if (workspace < 0) {
+        return NULL;
+    }
+    if (core->workspace_names == NULL || (size_t)workspace >= core->workspace_names_len) {
+        return NULL;
+    }
+    return core->workspace_names[workspace];
 }
 
 bool fbwm_core_view_is_visible(const struct fbwm_core *core, const struct fbwm_view *view) {

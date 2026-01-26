@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stddef.h>
 
 struct fbwm_view;
 struct fbwm_output;
@@ -29,6 +30,8 @@ struct fbwm_core {
 
     int workspace_current;
     int workspace_count;
+    char **workspace_names;
+    size_t workspace_names_len;
 
     int place_next_x;
     int place_next_y;
@@ -37,6 +40,7 @@ struct fbwm_core {
 void fbwm_view_init(struct fbwm_view *view, const struct fbwm_view_ops *ops, void *userdata);
 
 void fbwm_core_init(struct fbwm_core *core);
+void fbwm_core_finish(struct fbwm_core *core);
 
 void fbwm_core_view_map(struct fbwm_core *core, struct fbwm_view *view);
 void fbwm_core_view_unmap(struct fbwm_core *core, struct fbwm_view *view);
@@ -49,6 +53,9 @@ void fbwm_core_refocus(struct fbwm_core *core);
 void fbwm_core_set_workspace_count(struct fbwm_core *core, int count);
 int fbwm_core_workspace_count(const struct fbwm_core *core);
 int fbwm_core_workspace_current(const struct fbwm_core *core);
+void fbwm_core_clear_workspace_names(struct fbwm_core *core);
+bool fbwm_core_set_workspace_name(struct fbwm_core *core, int workspace, const char *name);
+const char *fbwm_core_workspace_name(const struct fbwm_core *core, int workspace);
 
 bool fbwm_core_view_is_visible(const struct fbwm_core *core, const struct fbwm_view *view);
 void fbwm_core_workspace_switch(struct fbwm_core *core, int workspace);

@@ -1273,7 +1273,12 @@ Goal: users can drop in their existing `~/.fluxbox` directory and get the same b
     - `session.screen0.autoRaise` + `session.autoRaiseDelay` (auto-raise with delay on mouse-focus).
     - `session.screen0.clickRaises` (raise on click even when focus doesn't change; decor-only when disabled).
     - `session.screen0.focusNewWindows` (controls focusing newly-mapped views).
-  - [ ] Placement policy, workspace names/behavior, toolbar/menu behavior, tab-related policy, etc.
+  - [ ] Placement policy, workspace names/behavior, toolbar/menu behavior, tab-related policy, etc.:
+    - [x] Workspace names: `session.screen0.workspaceNames` (drives toolbar workspace labels + workspace OSD; numbers remain the fallback).
+    - [ ] Window placement strategy: `session.screen0.windowPlacement` + row/col direction resources.
+    - [ ] Toolbar behavior: `session.screen0.toolbar.*` (visible/placement/autoHide/autoRaise/width/height/tools).
+    - [ ] Menu behavior: `session.screen0.menuDelay` (+ other menu resources as needed).
+    - [ ] Tab-related policy: `session.screen0.tabs.*` (where applicable for Wayland UI).
   - Output mapping strategy for `screenN` resources (define how multiple Wayland outputs map to classic `screen0` semantics).
 - [ ] Extend `keys` support to full classic syntax and command set:
   - Include mouse bindings and the commonly used commands beyond the current subset.

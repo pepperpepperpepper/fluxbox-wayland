@@ -82,7 +82,7 @@ void fbwl_ui_osd_update_position(struct fbwl_osd_ui *ui, struct wlr_output_layou
 void fbwl_ui_osd_show_workspace(struct fbwl_osd_ui *ui,
         struct wlr_scene *scene, struct wlr_scene_tree *layer_top,
         const struct fbwl_decor_theme *decor_theme, struct wlr_output_layout *output_layout,
-        int workspace) {
+        int workspace, const char *workspace_name) {
     if (ui == NULL || scene == NULL || decor_theme == NULL) {
         return;
     }
@@ -122,8 +122,12 @@ void fbwl_ui_osd_show_workspace(struct fbwl_osd_ui *ui,
     }
     ui->visible = true;
 
-    char msg[64];
-    if (snprintf(msg, sizeof(msg), "Workspace %d", workspace + 1) < 0) {
+    char msg[256];
+    if (workspace_name != NULL && *workspace_name != '\0') {
+        if (snprintf(msg, sizeof(msg), "Workspace %d: %s", workspace + 1, workspace_name) < 0) {
+            msg[0] = '\0';
+        }
+    } else if (snprintf(msg, sizeof(msg), "Workspace %d", workspace + 1) < 0) {
         msg[0] = '\0';
     }
 
