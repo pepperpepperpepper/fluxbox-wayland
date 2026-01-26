@@ -73,6 +73,34 @@ static int create_shm_fd(size_t size) {
     return fd;
 }
 
+static void fill_buffer_argb8888(void *data, int width, int height) {
+    if (data == NULL || width < 1 || height < 1) {
+        return;
+    }
+
+    // This client is used in screenshots; avoid solid-white buffers (they look like
+    // compositor glitches in galleries).
+    const uint32_t bg0 = 0xFF1E1E1E;
+    const uint32_t bg1 = 0xFF242424;
+    const uint32_t border = 0xFF444444;
+    const int border_w = 2;
+
+    uint32_t *px = data;
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            const bool is_border =
+                (x < border_w) || (x >= width - border_w) ||
+                (y < border_w) || (y >= height - border_w);
+            if (is_border) {
+                px[y * width + x] = border;
+            } else {
+                const bool alt = (((x >> 4) ^ (y >> 4)) & 1) != 0;
+                px[y * width + x] = alt ? bg1 : bg0;
+            }
+        }
+    }
+}
+
 static struct wl_buffer *create_shm_buffer(struct wl_shm *shm, int width, int height) {
     const int stride = width * 4;
     const size_t size = (size_t)stride * (size_t)height;
@@ -87,7 +115,7 @@ static struct wl_buffer *create_shm_buffer(struct wl_shm *shm, int width, int he
         close(fd);
         return NULL;
     }
-    memset(data, 0xff, size);
+    fill_buffer_argb8888(data, width, height);
 
     struct wl_shm_pool *pool = wl_shm_create_pool(shm, fd, (int)size);
     close(fd);

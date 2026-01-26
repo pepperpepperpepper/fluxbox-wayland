@@ -29,6 +29,18 @@ static xcb_atom_t intern_atom(xcb_connection_t *conn, const char *name) {
     return atom;
 }
 
+static uint32_t alloc_color_or_fallback(xcb_connection_t *conn, xcb_colormap_t cmap,
+        uint16_t r, uint16_t g, uint16_t b, uint32_t fallback_pixel) {
+    xcb_alloc_color_cookie_t cookie = xcb_alloc_color(conn, cmap, r, g, b);
+    xcb_alloc_color_reply_t *reply = xcb_alloc_color_reply(conn, cookie, NULL);
+    if (reply == NULL) {
+        return fallback_pixel;
+    }
+    const uint32_t pixel = reply->pixel;
+    free(reply);
+    return pixel;
+}
+
 static void usage(const char *argv0) {
     fprintf(stderr, "Usage: %s [--display DISPLAY] [--title TITLE] [--class CLASS] [--instance INSTANCE] [--stay-ms MS] [--w W] [--h H]\n",
         argv0);
@@ -177,7 +189,11 @@ int main(int argc, char **argv) {
     xcb_map_window(conn, win);
 
     xcb_gcontext_t gc = xcb_generate_id(conn);
-    uint32_t gc_values[] = {screen->white_pixel};
+    // This client is used for XWayland smoke coverage. Avoid solid-white windows
+    // so debug screenshots don't look like compositor glitches.
+    const uint32_t fill_pixel = alloc_color_or_fallback(conn, screen->default_colormap,
+        0x2222, 0x2222, 0x2222, screen->black_pixel);
+    uint32_t gc_values[] = {fill_pixel};
     xcb_create_gc(conn, gc, win, XCB_GC_FOREGROUND, gc_values);
 
     draw_solid(conn, win, gc, win_w, win_h);
@@ -228,4 +244,3 @@ int main(int argc, char **argv) {
     xcb_disconnect(conn);
     return 0;
 }
-

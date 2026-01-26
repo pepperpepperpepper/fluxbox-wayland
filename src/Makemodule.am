@@ -86,8 +86,11 @@ endif
 
 if REMEMBER_SRC
 REMEMBER_SOURCE = \
+	src/RememberApp.hh \
 	src/Remember.hh \
-	src/Remember.cc
+	src/Remember.cc \
+	src/RememberIO.cc \
+	src/RememberMenu.cc
 endif
 
 if TOOLBAR_SRC
@@ -189,7 +192,9 @@ fluxbox_SOURCES = \
 	src/FbRootWindow.cc \
 	src/FbRootWindow.hh \
 	src/FbWinFrame.cc \
+	src/FbWinFrameEvents.cc \
 	src/FbWinFrame.hh \
+	src/FbWinFrameRender.cc \
 	src/FbWinFrameTheme.cc \
 	src/FbWinFrameTheme.hh \
 	src/FocusControl.cc \
@@ -226,7 +231,9 @@ fluxbox_SOURCES = \
 	src/RowSmartPlacement.cc \
 	src/RowSmartPlacement.hh \
 	src/Screen.cc \
+	src/ScreenGeometry.cc \
 	src/Screen.hh \
+	src/ScreenWorkspaces.cc \
 	src/ScreenPlacement.cc \
 	src/ScreenPlacement.hh \
 	src/ScreenResource.cc \
@@ -252,7 +259,10 @@ fluxbox_SOURCES = \
 	src/WinClient.cc \
 	src/WinClient.hh \
 	src/Window.cc \
+	src/WindowEvents.cc \
+	src/WindowMoveResize.cc \
 	src/Window.hh \
+	src/Window_internal.hh \
 	src/WindowCmd.cc \
 	src/WindowCmd.hh \
 	src/WindowMenuAccessor.hh \

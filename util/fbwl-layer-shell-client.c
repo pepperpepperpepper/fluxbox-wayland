@@ -81,7 +81,18 @@ static struct wl_buffer *create_shm_buffer(struct wl_shm *shm, int width, int he
         close(fd);
         return NULL;
     }
-    memset(data, 0xff, size);
+    // Default to a panel-like dark color (with a subtle border) so smoke
+    // screenshots are readable and don't look like a compositor glitch.
+    uint32_t *px = data;
+    const int stride_px = stride / 4;
+    const uint32_t bg = 0xFF2B2B2B;     // ARGB
+    const uint32_t border = 0xFF444444; // ARGB
+    for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+            const bool is_border = (x == 0 || y == 0 || x == width - 1 || y == height - 1);
+            px[y * stride_px + x] = is_border ? border : bg;
+        }
+    }
 
     struct wl_shm_pool *pool = wl_shm_create_pool(shm, fd, (int)size);
     close(fd);
@@ -472,4 +483,3 @@ int main(int argc, char **argv) {
     cleanup(&app);
     return 0;
 }
-

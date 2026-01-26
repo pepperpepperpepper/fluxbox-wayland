@@ -27,6 +27,31 @@ if [[ ! -x ./fluxbox-wayland ]]; then
   exit 1
 fi
 
+OUT_FILE="/tmp/out.png"
+
+# xdg-desktop-portal-wlr currently writes screenshot output to a fixed path
+# (/tmp/out.png). On systems with fs.protected_regular=1, an existing /tmp/out.png
+# owned by a different user cannot be overwritten even if it is 0666.
+# To keep this smoke test robust in shared/persistent /tmp environments, fall
+# back to running inside a private /tmp (tmpfs) via an unprivileged user+mount
+# namespace when needed.
+if [[ -e "$OUT_FILE" ]] && [[ ! -O "$OUT_FILE" ]] && [[ -z "${FBWL_PRIVATE_TMP:-}" ]]; then
+  if command -v unshare >/dev/null 2>&1; then
+    echo "note: $OUT_FILE exists and is not owned by uid=$UID ($(id -un)); retrying with a private /tmp via unshare" >&2
+    export FBWL_PRIVATE_TMP=1
+    exec unshare -Ur -m bash -c 'mount -t tmpfs tmpfs /tmp && exec "$0" "$@"' "$0" "$@"
+  fi
+  echo "skip: $OUT_FILE exists and is not owned by uid=$UID ($(id -un)); cannot isolate /tmp (missing unshare)" >&2
+  exit 0
+fi
+
+cleanup_out_file() {
+  if [[ -e "$OUT_FILE" ]] && [[ -O "$OUT_FILE" ]]; then
+    rm -f "$OUT_FILE" 2>/dev/null || true
+  fi
+}
+trap cleanup_out_file EXIT
+
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/xdg-runtime-$UID}"
 mkdir -p "$XDG_RUNTIME_DIR"
 chmod 0700 "$XDG_RUNTIME_DIR"
@@ -60,15 +85,16 @@ dbus-run-session -- bash -c '
   : >"$WP_LOG"
 
   OUT_FILE="/tmp/out.png"
-  if [[ -e "$OUT_FILE" ]] && [[ ! -w "$OUT_FILE" ]]; then
-    echo "precondition failed: $OUT_FILE exists but is not writable by uid=$UID ($(id -un))" >&2
+  rm -f "$OUT_FILE" 2>/dev/null || true
+  if ! : >"$OUT_FILE" 2>/dev/null; then
+    echo "precondition failed: cannot create/truncate $OUT_FILE as uid=$UID ($(id -un))" >&2
     ls -la "$OUT_FILE" >&2 || true
-    echo "note: xdg-desktop-portal-wlr (backend) writes screenshots to $OUT_FILE; remove it or chmod it so this user can write it" >&2
+    if command -v sysctl >/dev/null 2>&1; then
+      sysctl fs.protected_regular fs.protected_fifos 2>/dev/null >&2 || true
+    fi
+    echo "note: xdg-desktop-portal-wlr writes screenshots to $OUT_FILE; in shared /tmp environments this may require an isolated /tmp" >&2
     exit 1
   fi
-
-  : >"$OUT_FILE"
-  chmod a+rw "$OUT_FILE" 2>/dev/null || true
 
   pipewire >"$PW_LOG" 2>&1 &
   PW_PID=$!

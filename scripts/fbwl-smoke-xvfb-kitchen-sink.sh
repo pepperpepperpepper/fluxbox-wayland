@@ -509,6 +509,15 @@ timeout 5 bash -c "until tail -c +$START '$LOG' | rg -q 'Apps: applied .*app_id=
 timeout 5 bash -c "until tail -c +$START '$LOG' | rg -q 'Workspace: view=ks-apps-sticky ws=3 visible=1'; do sleep 0.05; done"
 
 ./fbwl-remote --socket "$SOCKET" get-workspace | rg -q '^ok workspace=2$'
+
+# The apps-rules smoke clients are intentionally simple wl_shm clients (solid-color buffers).
+# Hide them before taking the screenshot so the report focuses on the toolbar/iconbar state.
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-foreign-toplevel-client --socket "$SOCKET" --timeout-ms 3000 minimize ks-apps-jump >/dev/null 2>&1
+./fbwl-foreign-toplevel-client --socket "$SOCKET" --timeout-ms 3000 minimize ks-apps-sticky >/dev/null 2>&1
+timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Minimize: ks-apps-jump on reason=foreign-request'; do sleep 0.05; done"
+timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Minimize: ks-apps-sticky on reason=foreign-request'; do sleep 0.05; done"
+
 fbwl_report_shot "07-apps-rules.png" "Apps rules (jump + sticky)"
 
 kill_wait "$APPS_JUMP_PID"
@@ -768,21 +777,29 @@ case "$cur_focus" in
   ks-fs-b) expect_focus=ks-fs-a ;;
   *) echo "unexpected focused view for focus-next stress test: $cur_focus" >&2; exit 1 ;;
 esac
-for ((i = 0; i < FOCUS_ITERS; i++)); do
-  OFFSET=$(wc -c <"$LOG" | tr -d ' ')
-  ./fbwl-remote --socket "$SOCKET" focus-next | rg -q '^ok$'
-  timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q \"Focus: ${expect_focus}\"; do sleep 0.05; done"
-  if [[ "$expect_focus" == ks-fs-a ]]; then
-    expect_focus=ks-fs-b
-  else
-    expect_focus=ks-fs-a
-  fi
-done
+	for ((i = 0; i < FOCUS_ITERS; i++)); do
+	  OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+	  ./fbwl-remote --socket "$SOCKET" focus-next | rg -q '^ok$'
+	  timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q \"Focus: ${expect_focus}\"; do sleep 0.05; done"
+	  if [[ "$expect_focus" == ks-fs-a ]]; then
+	    expect_focus=ks-fs-b
+	  else
+	    expect_focus=ks-fs-a
+	  fi
+	done
 
-OFFSET=$(wc -c <"$LOG" | tr -d ' ')
-./fbwl-input-injector --socket "$SOCKET" key alt-f2
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'CmdDialog: open'
-fbwl_report_shot "12-command-dialog.png" "Command dialog"
+	# The fullscreen stress-test windows are intentionally simple wl_shm clients (solid-color buffers).
+	# Hide them before opening the command dialog so the report screenshot is readable.
+	OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+	./fbwl-foreign-toplevel-client --socket "$SOCKET" --timeout-ms 3000 minimize ks-fs-a >/dev/null 2>&1
+	./fbwl-foreign-toplevel-client --socket "$SOCKET" --timeout-ms 3000 minimize ks-fs-b >/dev/null 2>&1
+	timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Minimize: ks-fs-a on reason=foreign-request'; do sleep 0.05; done"
+	timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Minimize: ks-fs-b on reason=foreign-request'; do sleep 0.05; done"
+
+	OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+	./fbwl-input-injector --socket "$SOCKET" key alt-f2
+	tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'CmdDialog: open'
+	fbwl_report_shot "12-command-dialog.png" "Command dialog"
 
 CMD="touch $CMD_MARKER"
 ./fbwl-input-injector --socket "$SOCKET" type "$CMD"

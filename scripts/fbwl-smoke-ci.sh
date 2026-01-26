@@ -106,6 +106,7 @@ need_cmd sort
 
 scripts=(
   scripts/fbwl-check-wayland-loc.sh
+  scripts/fbwl-check-code-sloc.sh
   scripts/fbwl-smoke-headless.sh
   scripts/fbwl-smoke-log-protocol.sh
   scripts/fbwl-smoke-background.sh

@@ -1,0 +1,2 @@
+# Temporary allowlist for code-SLOC monoliths.
+# Remove entries as files are split below the code-SLOC limit.
