@@ -51,7 +51,6 @@ Makefile.in
 /util/fluxbox-generate_menu
 /util/startfluxbox
 /version.h
-/plan.md
 /refactor_plan.md
 
 # build artifacts from wlroots/Wayland smoke utilities
@@ -61,6 +60,10 @@ Makefile.in
 
 # editor/backup files
 *~
+
+# Python bytecode
+__pycache__/
+*.pyc
 
 # off source build directory
 build
