@@ -18,11 +18,43 @@ struct wlr_scene_buffer;
 struct wlr_scene_rect;
 struct wlr_scene_tree;
 
+enum fbwl_toolbar_placement {
+    FBWL_TOOLBAR_PLACEMENT_BOTTOM_LEFT = 0,
+    FBWL_TOOLBAR_PLACEMENT_BOTTOM_CENTER,
+    FBWL_TOOLBAR_PLACEMENT_BOTTOM_RIGHT,
+    FBWL_TOOLBAR_PLACEMENT_LEFT_BOTTOM,
+    FBWL_TOOLBAR_PLACEMENT_LEFT_CENTER,
+    FBWL_TOOLBAR_PLACEMENT_LEFT_TOP,
+    FBWL_TOOLBAR_PLACEMENT_RIGHT_BOTTOM,
+    FBWL_TOOLBAR_PLACEMENT_RIGHT_CENTER,
+    FBWL_TOOLBAR_PLACEMENT_RIGHT_TOP,
+    FBWL_TOOLBAR_PLACEMENT_TOP_LEFT,
+    FBWL_TOOLBAR_PLACEMENT_TOP_CENTER,
+    FBWL_TOOLBAR_PLACEMENT_TOP_RIGHT,
+};
+
+enum fbwl_toolbar_tool {
+    FBWL_TOOLBAR_TOOL_WORKSPACES = 1u << 0,
+    FBWL_TOOLBAR_TOOL_ICONBAR = 1u << 1,
+    FBWL_TOOLBAR_TOOL_SYSTEMTRAY = 1u << 2,
+    FBWL_TOOLBAR_TOOL_CLOCK = 1u << 3,
+};
+
 struct fbwl_toolbar_ui {
     bool enabled;
 
+    enum fbwl_toolbar_placement placement;
+    int width_percent;
+    int height_override;
+    uint32_t tools;
+    bool auto_hide;
+    bool auto_raise;
+    bool hidden;
+
     int x;
     int y;
+    int base_x;
+    int base_y;
     int height;
     int cell_w;
     int width;
@@ -53,6 +85,9 @@ struct fbwl_toolbar_ui {
     int clock_w;
     char clock_text[16];
     struct wl_event_source *clock_timer;
+    struct wl_event_source *auto_timer;
+    bool hovered;
+    uint32_t auto_pending;
     struct wlr_scene_buffer *clock_label;
 
     struct wlr_scene_tree *tree;
@@ -85,8 +120,9 @@ struct fbwl_ui_toolbar_hooks {
 void fbwl_ui_toolbar_destroy(struct fbwl_toolbar_ui *ui);
 void fbwl_ui_toolbar_rebuild(struct fbwl_toolbar_ui *ui, const struct fbwl_ui_toolbar_env *env);
 void fbwl_ui_toolbar_update_position(struct fbwl_toolbar_ui *ui, const struct fbwl_ui_toolbar_env *env);
+void fbwl_ui_toolbar_handle_motion(struct fbwl_toolbar_ui *ui, const struct fbwl_ui_toolbar_env *env,
+    int lx, int ly, int delay_ms);
 void fbwl_ui_toolbar_update_iconbar_focus(struct fbwl_toolbar_ui *ui, const struct fbwl_decor_theme *decor_theme,
     const struct fbwl_view *focused_view);
 bool fbwl_ui_toolbar_handle_click(struct fbwl_toolbar_ui *ui, const struct fbwl_ui_toolbar_env *env,
     const struct fbwl_ui_toolbar_hooks *hooks, int lx, int ly, uint32_t button);
-

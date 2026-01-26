@@ -1277,7 +1277,10 @@ Goal: users can drop in their existing `~/.fluxbox` directory and get the same b
     - [x] Workspace names: `session.screen0.workspaceNames` (drives toolbar workspace labels + workspace OSD; numbers remain the fallback).
     - [x] Window placement strategy: `session.screen0.windowPlacement` + row/col direction resources.
       - Supports Row/Col Smart + MinOverlap + Cascade + UnderMouse; Autotab currently falls back to RowSmart until tabs exist.
-    - [ ] Toolbar behavior: `session.screen0.toolbar.*` (visible/placement/autoHide/autoRaise/width/height/tools).
+    - [x] Toolbar behavior: `session.screen0.toolbar.*` (visible/placement/autoHide/autoRaise/width/height/tools).
+      - Implemented: `visible`, `placement`, `widthPercent`, `height`, `tools` (workspace/iconbar/systemtray/clock), `autoHide`, `autoRaise` (uses `session.autoRaiseDelay`).
+      - Note: Left/Right placements currently map to top/bottom-aligned horizontal placement; true vertical toolbars are not implemented yet.
+      - Smoke: extended `scripts/fbwl-smoke-config-dir.sh` to validate placement/size/tools plus autoHide/autoRaise logs.
     - [ ] Menu behavior: `session.screen0.menuDelay` (+ other menu resources as needed).
     - [ ] Tab-related policy: `session.screen0.tabs.*` (where applicable for Wayland UI).
   - Output mapping strategy for `screenN` resources (define how multiple Wayland outputs map to classic `screen0` semantics).

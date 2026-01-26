@@ -33,11 +33,19 @@ trap cleanup EXIT
 rm -f "$MARK_DEFAULT" "$MARK_OVERRIDE" "$MARK_MENU"
 
 cat >"$CFGDIR/init" <<EOF
+session.autoRaiseDelay: 50
 session.screen0.workspaces: 3
 session.keyFile: mykeys
 session.appsFile: myapps
 session.styleFile: mystyle
 session.menuFile: mymenu
+session.screen0.toolbar.visible: true
+session.screen0.toolbar.placement: TopCenter
+session.screen0.toolbar.widthPercent: 50
+session.screen0.toolbar.height: 30
+session.screen0.toolbar.tools: workspacename,clock
+session.screen0.toolbar.autoHide: true
+session.screen0.toolbar.autoRaise: true
 EOF
 
 cat >"$CFGDIR/mykeys" <<EOF
@@ -72,8 +80,82 @@ FBW_PID=$!
 
 timeout 5 bash -c "until rg -q 'Running fluxbox-wayland' '$LOG'; do sleep 0.05; done"
 timeout 5 bash -c "until rg -q 'IPC: listening' '$LOG'; do sleep 0.05; done"
+timeout 5 bash -c "until rg -q 'OutputLayout: ' '$LOG'; do sleep 0.05; done"
 timeout 5 bash -c "until rg -q 'Style: loaded ' '$LOG'; do sleep 0.05; done"
 timeout 5 bash -c "until rg -q 'Menu: loaded ' '$LOG'; do sleep 0.05; done"
+timeout 5 bash -c "until rg -q 'Toolbar: built ' '$LOG'; do sleep 0.05; done"
+timeout 5 bash -c "until rg -q 'Toolbar: position ' '$LOG'; do sleep 0.05; done"
+
+OUT_GEOM=$(
+  rg -m1 'Output: ' "$LOG" \
+    | awk '{print $NF}'
+)
+OUT_W=${OUT_GEOM%x*}
+OUT_H=${OUT_GEOM#*x}
+
+OUTLINE=$(rg -m1 'OutputLayout: ' "$LOG")
+OUT_X=$(echo "$OUTLINE" | rg -o 'x=-?[0-9]+' | head -n 1 | cut -d= -f2)
+OUT_Y=$(echo "$OUTLINE" | rg -o 'y=-?[0-9]+' | head -n 1 | cut -d= -f2)
+
+BUILT_LINE="$(rg 'Toolbar: built ' "$LOG" | tail -n 1)"
+if [[ "$BUILT_LINE" =~ w=([0-9]+)\ h=([0-9]+) ]]; then
+  TB_W="${BASH_REMATCH[1]}"
+  TB_H="${BASH_REMATCH[2]}"
+else
+  echo "failed to parse Toolbar: built line: $BUILT_LINE" >&2
+  exit 1
+fi
+
+EXPECTED_TB_W=$((OUT_W * 50 / 100))
+if [[ "$TB_W" -ne "$EXPECTED_TB_W" ]]; then
+  echo "unexpected toolbar width: got $TB_W expected $EXPECTED_TB_W (out_w=$OUT_W)" >&2
+  exit 1
+fi
+if [[ "$TB_H" -ne 30 ]]; then
+  echo "unexpected toolbar height: got $TB_H expected 30" >&2
+  exit 1
+fi
+
+POS_LINE="$(rg 'Toolbar: position ' "$LOG" | tail -n 1)"
+if [[ "$POS_LINE" =~ x=([-0-9]+)\ y=([-0-9]+)\ h=([0-9]+)\ cell_w=([0-9]+)\ workspaces=([0-9]+) ]]; then
+  TB_X="${BASH_REMATCH[1]}"
+  TB_Y="${BASH_REMATCH[2]}"
+  H="${BASH_REMATCH[3]}"
+  CELL_W="${BASH_REMATCH[4]}"
+  WS="${BASH_REMATCH[5]}"
+else
+  echo "failed to parse Toolbar: position line: $POS_LINE" >&2
+  exit 1
+fi
+
+EXPECTED_TB_X=$((OUT_X + (OUT_W - TB_W) / 2))
+if [[ "$TB_X" -ne "$EXPECTED_TB_X" ]]; then
+  echo "unexpected toolbar x: got $TB_X expected $EXPECTED_TB_X (out_x=$OUT_X out_w=$OUT_W tb_w=$TB_W)" >&2
+  exit 1
+fi
+if [[ "$TB_Y" -ne "$OUT_Y" ]]; then
+  echo "unexpected toolbar y: got $TB_Y expected $OUT_Y (out_y=$OUT_Y)" >&2
+  exit 1
+fi
+
+WS_WIDTH=$((CELL_W * WS))
+CLICK_X=$((TB_X + WS_WIDTH + 5))
+MAX_X=$((TB_X + TB_W - 1))
+if (( CLICK_X > MAX_X )); then CLICK_X=$MAX_X; fi
+CLICK_Y=$((TB_Y + H / 2))
+
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-input-injector --socket "$SOCKET" click "$CLICK_X" "$CLICK_Y" >/dev/null 2>&1 || true
+timeout 2 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Toolbar: autoRaise raise'; do sleep 0.05; done"
+
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-input-injector --socket "$SOCKET" click 10 $((OUT_Y + 200)) >/dev/null 2>&1 || true
+timeout 2 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Toolbar: autoHide hide'; do sleep 0.05; done"
+timeout 2 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Toolbar: autoRaise lower'; do sleep 0.05; done"
+
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-input-injector --socket "$SOCKET" click "$CLICK_X" $((OUT_Y + 1)) >/dev/null 2>&1 || true
+timeout 2 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Toolbar: autoHide show'; do sleep 0.05; done"
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" drag-right 50 50 50 50

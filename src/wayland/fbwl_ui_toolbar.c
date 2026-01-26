@@ -24,6 +24,112 @@
 #include <wlr/util/box.h>
 #include <wlr/util/log.h>
 
+enum fbwl_toolbar_pending_action {
+    FBWL_TOOLBAR_PENDING_HIDE = 1u << 0,
+    FBWL_TOOLBAR_PENDING_RAISE = 1u << 1,
+    FBWL_TOOLBAR_PENDING_LOWER = 1u << 2,
+};
+
+static void placement_edge_and_align(enum fbwl_toolbar_placement placement, bool *top, int *align) {
+    bool is_top = false;
+    int a = 1; // center
+
+    switch (placement) {
+    case FBWL_TOOLBAR_PLACEMENT_BOTTOM_LEFT:
+        is_top = false;
+        a = 0;
+        break;
+    case FBWL_TOOLBAR_PLACEMENT_BOTTOM_CENTER:
+        is_top = false;
+        a = 1;
+        break;
+    case FBWL_TOOLBAR_PLACEMENT_BOTTOM_RIGHT:
+        is_top = false;
+        a = 2;
+        break;
+    case FBWL_TOOLBAR_PLACEMENT_TOP_LEFT:
+        is_top = true;
+        a = 0;
+        break;
+    case FBWL_TOOLBAR_PLACEMENT_TOP_CENTER:
+        is_top = true;
+        a = 1;
+        break;
+    case FBWL_TOOLBAR_PLACEMENT_TOP_RIGHT:
+        is_top = true;
+        a = 2;
+        break;
+    case FBWL_TOOLBAR_PLACEMENT_LEFT_TOP:
+        is_top = true;
+        a = 0;
+        break;
+    case FBWL_TOOLBAR_PLACEMENT_LEFT_BOTTOM:
+        is_top = false;
+        a = 0;
+        break;
+    case FBWL_TOOLBAR_PLACEMENT_RIGHT_TOP:
+        is_top = true;
+        a = 2;
+        break;
+    case FBWL_TOOLBAR_PLACEMENT_RIGHT_BOTTOM:
+        is_top = false;
+        a = 2;
+        break;
+    case FBWL_TOOLBAR_PLACEMENT_LEFT_CENTER:
+        is_top = false;
+        a = 0;
+        break;
+    case FBWL_TOOLBAR_PLACEMENT_RIGHT_CENTER:
+        is_top = false;
+        a = 2;
+        break;
+    default:
+        is_top = false;
+        a = 1;
+        break;
+    }
+
+    if (top != NULL) {
+        *top = is_top;
+    }
+    if (align != NULL) {
+        *align = a;
+    }
+}
+
+static int toolbar_hidden_offset_y(const struct fbwl_toolbar_ui *ui) {
+    if (ui == NULL || !ui->auto_hide || !ui->hidden || ui->height < 1) {
+        return 0;
+    }
+
+    const int peek = 2;
+    int delta = ui->height - peek;
+    if (delta < 0) {
+        delta = 0;
+    }
+
+    bool top = false;
+    placement_edge_and_align(ui->placement, &top, NULL);
+    return top ? -delta : delta;
+}
+
+static void fbwl_ui_toolbar_apply_position(struct fbwl_toolbar_ui *ui) {
+    if (ui == NULL || !ui->enabled || ui->tree == NULL) {
+        return;
+    }
+
+    const int x = ui->base_x;
+    const int y = ui->base_y + toolbar_hidden_offset_y(ui);
+
+    if (x == ui->x && y == ui->y) {
+        return;
+    }
+
+    ui->x = x;
+    ui->y = y;
+    wlr_scene_node_set_position(&ui->tree->node, ui->x, ui->y);
+}
+
 static void fbwl_ui_toolbar_destroy_scene(struct fbwl_toolbar_ui *ui) {
     if (ui == NULL) {
         return;
@@ -31,6 +137,10 @@ static void fbwl_ui_toolbar_destroy_scene(struct fbwl_toolbar_ui *ui) {
     if (ui->clock_timer != NULL) {
         wl_event_source_remove(ui->clock_timer);
         ui->clock_timer = NULL;
+    }
+    if (ui->auto_timer != NULL) {
+        wl_event_source_remove(ui->auto_timer);
+        ui->auto_timer = NULL;
     }
     if (ui->tree != NULL) {
         wlr_scene_node_destroy(&ui->tree->node);
@@ -95,6 +205,11 @@ static void fbwl_ui_toolbar_destroy_scene(struct fbwl_toolbar_ui *ui) {
 
     ui->clock_label = NULL;
     ui->clock_text[0] = '\0';
+    ui->hovered = false;
+    ui->auto_pending = 0;
+    ui->hidden = false;
+    ui->base_x = 0;
+    ui->base_y = 0;
 }
 
 void fbwl_ui_toolbar_destroy(struct fbwl_toolbar_ui *ui) {
@@ -199,8 +314,6 @@ void fbwl_ui_toolbar_rebuild(struct fbwl_toolbar_ui *ui, const struct fbwl_ui_to
         return;
     }
 
-    ui->enabled = true;
-
     fbwl_ui_toolbar_destroy_scene(ui);
 
     if (!ui->enabled) {
@@ -216,14 +329,18 @@ void fbwl_ui_toolbar_rebuild(struct fbwl_toolbar_ui *ui, const struct fbwl_ui_to
 
     ui->x = 0;
     ui->y = 0;
+    ui->base_x = 0;
+    ui->base_y = 0;
     wlr_scene_node_set_position(&ui->tree->node, ui->x, ui->y);
 
-    int workspaces = fbwm_core_workspace_count(env->wm);
-    if (workspaces < 1) {
-        workspaces = 1;
+    int h = 0;
+    if (ui->height_override > 0) {
+        h = ui->height_override;
+    } else if (env->decor_theme->title_height > 0) {
+        h = env->decor_theme->title_height;
+    } else {
+        h = 24;
     }
-
-    const int h = env->decor_theme->title_height > 0 ? env->decor_theme->title_height : 24;
     int cell_w = h * 2;
     if (cell_w < 32) {
         cell_w = 32;
@@ -234,8 +351,16 @@ void fbwl_ui_toolbar_rebuild(struct fbwl_toolbar_ui *ui, const struct fbwl_ui_to
 
     ui->height = h;
     ui->cell_w = cell_w;
-    ui->cell_count = (size_t)workspaces;
-    ui->ws_width = (int)ui->cell_count * ui->cell_w;
+    ui->cell_count = 0;
+    ui->ws_width = 0;
+    if ((ui->tools & FBWL_TOOLBAR_TOOL_WORKSPACES) != 0) {
+        int workspaces = fbwm_core_workspace_count(env->wm);
+        if (workspaces < 1) {
+            workspaces = 1;
+        }
+        ui->cell_count = (size_t)workspaces;
+        ui->ws_width = (int)ui->cell_count * ui->cell_w;
+    }
 
     int output_w = 0;
     if (env->output_layout != NULL) {
@@ -247,23 +372,39 @@ void fbwl_ui_toolbar_rebuild(struct fbwl_toolbar_ui *ui, const struct fbwl_ui_to
         }
     }
 
-    ui->width = output_w > ui->ws_width ? output_w : ui->ws_width;
-    ui->clock_w = 120;
-    const int avail_right = ui->width - ui->ws_width;
-    if (avail_right < 1) {
-        ui->clock_w = 0;
-    } else if (ui->clock_w > avail_right) {
-        ui->clock_w = avail_right;
+    int percent = ui->width_percent;
+    if (percent < 1 || percent > 100) {
+        percent = 100;
     }
-    if (ui->clock_w < 0) {
-        ui->clock_w = 0;
+    const int desired_w = output_w > 0 ? (output_w * percent) / 100 : 0;
+    ui->width = desired_w > ui->ws_width ? desired_w : ui->ws_width;
+    if (ui->width < 1) {
+        ui->width = 1;
     }
-    ui->clock_x = ui->width - ui->clock_w;
+
+    int right_edge = ui->width;
+    ui->clock_w = 0;
+    ui->clock_x = ui->width;
+    if ((ui->tools & FBWL_TOOLBAR_TOOL_CLOCK) != 0) {
+        ui->clock_w = 120;
+        const int avail_right = ui->width - ui->ws_width;
+        if (avail_right < 1) {
+            ui->clock_w = 0;
+        } else if (ui->clock_w > avail_right) {
+            ui->clock_w = avail_right;
+        }
+        if (ui->clock_w < 0) {
+            ui->clock_w = 0;
+        }
+        ui->clock_x = ui->width - ui->clock_w;
+        right_edge = ui->clock_x;
+    }
 
     size_t tray_count = 0;
 #ifdef HAVE_SYSTEMD
     {
-        if (env->sni != NULL && env->sni->items.prev != NULL && env->sni->items.next != NULL) {
+        if ((ui->tools & FBWL_TOOLBAR_TOOL_SYSTEMTRAY) != 0 &&
+                env->sni != NULL && env->sni->items.prev != NULL && env->sni->items.next != NULL) {
             struct fbwl_sni_item *item;
             wl_list_for_each(item, &env->sni->items, link) {
                 if (item->status != FBWL_SNI_STATUS_PASSIVE) {
@@ -274,12 +415,12 @@ void fbwl_ui_toolbar_rebuild(struct fbwl_toolbar_ui *ui, const struct fbwl_ui_to
     }
 #endif
 
-    ui->tray_x = ui->clock_x;
+    ui->tray_x = right_edge;
     ui->tray_w = 0;
     ui->tray_icon_w = 0;
     ui->tray_count = 0;
 
-    int avail_mid = ui->width - ui->ws_width - ui->clock_w;
+    int avail_mid = right_edge - ui->ws_width;
     if (avail_mid < 0) {
         avail_mid = 0;
     }
@@ -297,15 +438,18 @@ void fbwl_ui_toolbar_rebuild(struct fbwl_toolbar_ui *ui, const struct fbwl_ui_to
         if (tray_count > 0) {
             ui->tray_icon_w = tray_icon_w;
             ui->tray_w = (int)tray_count * ui->tray_icon_w;
-            ui->tray_x = ui->clock_x - ui->tray_w;
+            ui->tray_x = right_edge - ui->tray_w;
             ui->tray_count = tray_count;
         }
     }
 
     ui->iconbar_x = ui->ws_width;
-    ui->iconbar_w = ui->tray_x - ui->iconbar_x;
-    if (ui->iconbar_w < 0) {
-        ui->iconbar_w = 0;
+    ui->iconbar_w = 0;
+    if ((ui->tools & FBWL_TOOLBAR_TOOL_ICONBAR) != 0) {
+        ui->iconbar_w = ui->tray_x - ui->iconbar_x;
+        if (ui->iconbar_w < 0) {
+            ui->iconbar_w = 0;
+        }
     }
 
     float bg[4] = {env->decor_theme->titlebar_inactive[0], env->decor_theme->titlebar_inactive[1],
@@ -319,12 +463,15 @@ void fbwl_ui_toolbar_rebuild(struct fbwl_toolbar_ui *ui, const struct fbwl_ui_to
         wlr_scene_node_set_position(&ui->bg->node, 0, 0);
     }
 
-    ui->highlight = wlr_scene_rect_create(ui->tree, ui->cell_w, ui->height, hi);
-    if (ui->highlight != NULL) {
-        fbwl_ui_toolbar_update_current(ui, env->wm);
+    ui->highlight = NULL;
+    if ((ui->tools & FBWL_TOOLBAR_TOOL_WORKSPACES) != 0) {
+        ui->highlight = wlr_scene_rect_create(ui->tree, ui->cell_w, ui->height, hi);
+        if (ui->highlight != NULL) {
+            fbwl_ui_toolbar_update_current(ui, env->wm);
+        }
     }
 
-    if (ui->cell_count > 0) {
+    if ((ui->tools & FBWL_TOOLBAR_TOOL_WORKSPACES) != 0 && ui->cell_count > 0) {
         ui->cells = calloc(ui->cell_count, sizeof(*ui->cells));
         ui->labels = calloc(ui->cell_count, sizeof(*ui->labels));
 
@@ -364,15 +511,17 @@ void fbwl_ui_toolbar_rebuild(struct fbwl_toolbar_ui *ui, const struct fbwl_ui_to
 
     const int cur_ws = fbwm_core_workspace_current(env->wm);
     size_t icon_count = 0;
-    for (struct fbwm_view *wm_view = env->wm->views.next; wm_view != &env->wm->views; wm_view = wm_view->next) {
-        struct fbwl_view *view = wm_view->userdata;
-        if (view == NULL || !view->mapped) {
-            continue;
+    if ((ui->tools & FBWL_TOOLBAR_TOOL_ICONBAR) != 0) {
+        for (struct fbwm_view *wm_view = env->wm->views.next; wm_view != &env->wm->views; wm_view = wm_view->next) {
+            struct fbwl_view *view = wm_view->userdata;
+            if (view == NULL || !view->mapped) {
+                continue;
+            }
+            if (!wm_view->sticky && wm_view->workspace != cur_ws) {
+                continue;
+            }
+            icon_count++;
         }
-        if (!wm_view->sticky && wm_view->workspace != cur_ws) {
-            continue;
-        }
-        icon_count++;
     }
 
     if (ui->iconbar_w > 0 && icon_count > 0) {
@@ -549,7 +698,7 @@ void fbwl_ui_toolbar_rebuild(struct fbwl_toolbar_ui *ui, const struct fbwl_ui_to
         }
     }
 
-    if (ui->clock_w > 0) {
+    if ((ui->tools & FBWL_TOOLBAR_TOOL_CLOCK) != 0 && ui->clock_w > 0) {
         ui->clock_label = wlr_scene_buffer_create(ui->tree, NULL);
         if (ui->clock_label != NULL) {
             wlr_scene_node_set_position(&ui->clock_label->node, ui->clock_x, 0);
@@ -593,27 +742,161 @@ void fbwl_ui_toolbar_update_position(struct fbwl_toolbar_ui *ui, const struct fb
         return;
     }
 
-    const int desired_w = box.width > ui->ws_width ? box.width : ui->ws_width;
+    int percent = ui->width_percent;
+    if (percent < 1 || percent > 100) {
+        percent = 100;
+    }
+    int desired_w = (box.width * percent) / 100;
+    if (desired_w < ui->ws_width) {
+        desired_w = ui->ws_width;
+    }
+    if (desired_w < 1) {
+        desired_w = 1;
+    }
     if (desired_w != ui->width) {
         fbwl_ui_toolbar_rebuild(ui, env);
         return;
     }
 
-    int x = box.x;
-    int y = box.y + box.height - ui->height;
-    if (y < box.y) {
-        y = box.y;
+    bool top = false;
+    int align = 1;
+    placement_edge_and_align(ui->placement, &top, &align);
+
+    int base_x = box.x;
+    if (ui->width > 0 && ui->width < box.width) {
+        if (align == 2) {
+            base_x = box.x + box.width - ui->width;
+        } else if (align == 1) {
+            base_x = box.x + (box.width - ui->width) / 2;
+        }
     }
 
-    if (x == ui->x && y == ui->y) {
+    int base_y = top ? box.y : box.y + box.height - ui->height;
+    if (base_y < box.y) {
+        base_y = box.y;
+    }
+
+    const int prev_x = ui->x;
+    const int prev_y = ui->y;
+    ui->base_x = base_x;
+    ui->base_y = base_y;
+    fbwl_ui_toolbar_apply_position(ui);
+
+    if (ui->x != prev_x || ui->y != prev_y) {
+        wlr_log(WLR_INFO, "Toolbar: position x=%d y=%d h=%d cell_w=%d workspaces=%zu",
+            ui->x, ui->y, ui->height, ui->cell_w, ui->cell_count);
+    }
+}
+
+static void toolbar_cancel_auto_timer(struct fbwl_toolbar_ui *ui) {
+    if (ui == NULL) {
+        return;
+    }
+    if (ui->auto_timer != NULL) {
+        wl_event_source_remove(ui->auto_timer);
+        ui->auto_timer = NULL;
+    }
+    ui->auto_pending = 0;
+}
+
+static int fbwl_ui_toolbar_auto_timer(void *data) {
+    struct fbwl_toolbar_ui *ui = data;
+    if (ui == NULL || !ui->enabled || ui->tree == NULL) {
+        return 0;
+    }
+
+    const uint32_t pending = ui->auto_pending;
+    ui->auto_pending = 0;
+
+    if ((pending & FBWL_TOOLBAR_PENDING_HIDE) != 0) {
+        if (ui->auto_hide && !ui->hovered && !ui->hidden) {
+            ui->hidden = true;
+            fbwl_ui_toolbar_apply_position(ui);
+            wlr_log(WLR_INFO, "Toolbar: autoHide hide");
+        }
+    }
+
+    if ((pending & FBWL_TOOLBAR_PENDING_RAISE) != 0) {
+        if (ui->auto_raise && ui->hovered) {
+            wlr_scene_node_raise_to_top(&ui->tree->node);
+            wlr_log(WLR_INFO, "Toolbar: autoRaise raise");
+        }
+    }
+
+    if ((pending & FBWL_TOOLBAR_PENDING_LOWER) != 0) {
+        if (ui->auto_raise && !ui->hovered) {
+            wlr_scene_node_lower_to_bottom(&ui->tree->node);
+            wlr_log(WLR_INFO, "Toolbar: autoRaise lower");
+        }
+    }
+
+    toolbar_cancel_auto_timer(ui);
+    return 0;
+}
+
+void fbwl_ui_toolbar_handle_motion(struct fbwl_toolbar_ui *ui, const struct fbwl_ui_toolbar_env *env,
+        int lx, int ly, int delay_ms) {
+    if (ui == NULL || env == NULL || env->wl_display == NULL) {
+        return;
+    }
+    if (!ui->enabled || ui->tree == NULL || ui->width < 1 || ui->height < 1) {
+        return;
+    }
+    if (!ui->auto_hide && !ui->auto_raise) {
         return;
     }
 
-    ui->x = x;
-    ui->y = y;
-    wlr_scene_node_set_position(&ui->tree->node, ui->x, ui->y);
-    wlr_log(WLR_INFO, "Toolbar: position x=%d y=%d h=%d cell_w=%d workspaces=%zu",
-        ui->x, ui->y, ui->height, ui->cell_w, ui->cell_count);
+    const bool was_hovered = ui->hovered;
+    const bool hovered =
+        lx >= ui->x && lx < ui->x + ui->width &&
+        ly >= ui->y && ly < ui->y + ui->height;
+    ui->hovered = hovered;
+
+    if (hovered && !was_hovered) {
+        toolbar_cancel_auto_timer(ui);
+
+        if (ui->auto_hide && ui->hidden) {
+            ui->hidden = false;
+            fbwl_ui_toolbar_apply_position(ui);
+            wlr_log(WLR_INFO, "Toolbar: autoHide show");
+        }
+
+        if (ui->auto_raise) {
+            ui->auto_pending |= FBWL_TOOLBAR_PENDING_RAISE;
+        }
+    } else if (!hovered && was_hovered) {
+        toolbar_cancel_auto_timer(ui);
+
+        if (ui->auto_hide && !ui->hidden) {
+            ui->auto_pending |= FBWL_TOOLBAR_PENDING_HIDE;
+        }
+        if (ui->auto_raise) {
+            ui->auto_pending |= FBWL_TOOLBAR_PENDING_LOWER;
+        }
+    } else {
+        return;
+    }
+
+    if (ui->auto_pending == 0) {
+        return;
+    }
+
+    struct wl_event_loop *loop = wl_display_get_event_loop(env->wl_display);
+    if (loop == NULL) {
+        ui->auto_pending = 0;
+        return;
+    }
+
+    ui->auto_timer = wl_event_loop_add_timer(loop, fbwl_ui_toolbar_auto_timer, ui);
+    if (ui->auto_timer == NULL) {
+        ui->auto_pending = 0;
+        return;
+    }
+
+    if (delay_ms < 0) {
+        delay_ms = 0;
+    }
+    wl_event_source_timer_update(ui->auto_timer, delay_ms);
 }
 
 bool fbwl_ui_toolbar_handle_click(struct fbwl_toolbar_ui *ui, const struct fbwl_ui_toolbar_env *env,
@@ -621,7 +904,7 @@ bool fbwl_ui_toolbar_handle_click(struct fbwl_toolbar_ui *ui, const struct fbwl_
     if (ui == NULL || env == NULL || env->wm == NULL) {
         return false;
     }
-    if (!ui->enabled || ui->tree == NULL || ui->cell_w < 1 || ui->height < 1 || ui->cell_count < 1) {
+    if (!ui->enabled || ui->tree == NULL || ui->width < 1 || ui->height < 1) {
         return false;
     }
 
@@ -631,7 +914,8 @@ bool fbwl_ui_toolbar_handle_click(struct fbwl_toolbar_ui *ui, const struct fbwl_
         return false;
     }
 
-    if (x < ui->ws_width) {
+    if ((ui->tools & FBWL_TOOLBAR_TOOL_WORKSPACES) != 0 &&
+            ui->cell_w > 0 && ui->cell_count > 0 && x < ui->ws_width) {
         if (button != BTN_LEFT) {
             return false;
         }

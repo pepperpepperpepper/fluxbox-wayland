@@ -122,6 +122,134 @@ static const char *window_placement_str(enum fbwm_window_placement_strategy plac
     }
 }
 
+static enum fbwl_toolbar_placement parse_toolbar_placement(const char *s) {
+    if (s == NULL) {
+        return FBWL_TOOLBAR_PLACEMENT_BOTTOM_CENTER;
+    }
+    if (strcasecmp(s, "BottomLeft") == 0) {
+        return FBWL_TOOLBAR_PLACEMENT_BOTTOM_LEFT;
+    }
+    if (strcasecmp(s, "BottomCenter") == 0) {
+        return FBWL_TOOLBAR_PLACEMENT_BOTTOM_CENTER;
+    }
+    if (strcasecmp(s, "BottomRight") == 0) {
+        return FBWL_TOOLBAR_PLACEMENT_BOTTOM_RIGHT;
+    }
+    if (strcasecmp(s, "LeftBottom") == 0) {
+        return FBWL_TOOLBAR_PLACEMENT_LEFT_BOTTOM;
+    }
+    if (strcasecmp(s, "LeftCenter") == 0) {
+        return FBWL_TOOLBAR_PLACEMENT_LEFT_CENTER;
+    }
+    if (strcasecmp(s, "LeftTop") == 0) {
+        return FBWL_TOOLBAR_PLACEMENT_LEFT_TOP;
+    }
+    if (strcasecmp(s, "RightBottom") == 0) {
+        return FBWL_TOOLBAR_PLACEMENT_RIGHT_BOTTOM;
+    }
+    if (strcasecmp(s, "RightCenter") == 0) {
+        return FBWL_TOOLBAR_PLACEMENT_RIGHT_CENTER;
+    }
+    if (strcasecmp(s, "RightTop") == 0) {
+        return FBWL_TOOLBAR_PLACEMENT_RIGHT_TOP;
+    }
+    if (strcasecmp(s, "TopLeft") == 0) {
+        return FBWL_TOOLBAR_PLACEMENT_TOP_LEFT;
+    }
+    if (strcasecmp(s, "TopCenter") == 0) {
+        return FBWL_TOOLBAR_PLACEMENT_TOP_CENTER;
+    }
+    if (strcasecmp(s, "TopRight") == 0) {
+        return FBWL_TOOLBAR_PLACEMENT_TOP_RIGHT;
+    }
+    return FBWL_TOOLBAR_PLACEMENT_BOTTOM_CENTER;
+}
+
+static const char *toolbar_placement_str(enum fbwl_toolbar_placement placement) {
+    switch (placement) {
+    case FBWL_TOOLBAR_PLACEMENT_BOTTOM_LEFT:
+        return "BottomLeft";
+    case FBWL_TOOLBAR_PLACEMENT_BOTTOM_CENTER:
+        return "BottomCenter";
+    case FBWL_TOOLBAR_PLACEMENT_BOTTOM_RIGHT:
+        return "BottomRight";
+    case FBWL_TOOLBAR_PLACEMENT_LEFT_BOTTOM:
+        return "LeftBottom";
+    case FBWL_TOOLBAR_PLACEMENT_LEFT_CENTER:
+        return "LeftCenter";
+    case FBWL_TOOLBAR_PLACEMENT_LEFT_TOP:
+        return "LeftTop";
+    case FBWL_TOOLBAR_PLACEMENT_RIGHT_BOTTOM:
+        return "RightBottom";
+    case FBWL_TOOLBAR_PLACEMENT_RIGHT_CENTER:
+        return "RightCenter";
+    case FBWL_TOOLBAR_PLACEMENT_RIGHT_TOP:
+        return "RightTop";
+    case FBWL_TOOLBAR_PLACEMENT_TOP_LEFT:
+        return "TopLeft";
+    case FBWL_TOOLBAR_PLACEMENT_TOP_CENTER:
+        return "TopCenter";
+    case FBWL_TOOLBAR_PLACEMENT_TOP_RIGHT:
+        return "TopRight";
+    default:
+        return "BottomCenter";
+    }
+}
+
+static uint32_t toolbar_tools_default(void) {
+    return FBWL_TOOLBAR_TOOL_WORKSPACES | FBWL_TOOLBAR_TOOL_ICONBAR | FBWL_TOOLBAR_TOOL_SYSTEMTRAY |
+        FBWL_TOOLBAR_TOOL_CLOCK;
+}
+
+static uint32_t parse_toolbar_tools(const char *s) {
+    if (s == NULL || *s == '\0') {
+        return toolbar_tools_default();
+    }
+
+    uint32_t tools = 0;
+    char *copy = strdup(s);
+    if (copy == NULL) {
+        return toolbar_tools_default();
+    }
+
+    char *save = NULL;
+    for (char *tok = strtok_r(copy, ",", &save); tok != NULL; tok = strtok_r(NULL, ",", &save)) {
+        while (*tok != '\0' && isspace((unsigned char)*tok)) {
+            tok++;
+        }
+        char *end = tok + strlen(tok);
+        while (end > tok && isspace((unsigned char)end[-1])) {
+            end--;
+        }
+        *end = '\0';
+        if (*tok == '\0') {
+            continue;
+        }
+
+        for (char *p = tok; *p != '\0'; p++) {
+            *p = (char)tolower((unsigned char)*p);
+        }
+
+        if (strcmp(tok, "workspacename") == 0 || strcmp(tok, "prevworkspace") == 0 || strcmp(tok, "nextworkspace") == 0) {
+            tools |= FBWL_TOOLBAR_TOOL_WORKSPACES;
+        } else if (strcmp(tok, "iconbar") == 0 || strcmp(tok, "prevwindow") == 0 || strcmp(tok, "nextwindow") == 0) {
+            tools |= FBWL_TOOLBAR_TOOL_ICONBAR;
+        } else if (strcmp(tok, "systemtray") == 0) {
+            tools |= FBWL_TOOLBAR_TOOL_SYSTEMTRAY;
+        } else if (strcmp(tok, "clock") == 0) {
+            tools |= FBWL_TOOLBAR_TOOL_CLOCK;
+        } else if (strncmp(tok, "button.", 7) == 0) {
+            // not implemented yet
+        }
+    }
+
+    free(copy);
+    if (tools == 0) {
+        tools = toolbar_tools_default();
+    }
+    return tools;
+}
+
 static enum fbwm_row_placement_direction parse_row_dir(const char *s) {
     if (s != NULL && strcasecmp(s, "RightToLeft") == 0) {
         return FBWM_ROW_RIGHT_TO_LEFT;
@@ -265,6 +393,17 @@ bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_
     server->focus_reason = FBWL_FOCUS_REASON_NONE;
     server->auto_raise_timer = NULL;
     server->auto_raise_pending_view = NULL;
+
+    server->toolbar_ui.enabled = true;
+    server->toolbar_ui.placement = FBWL_TOOLBAR_PLACEMENT_BOTTOM_CENTER;
+    server->toolbar_ui.width_percent = 100;
+    server->toolbar_ui.height_override = 0;
+    server->toolbar_ui.tools = toolbar_tools_default();
+    server->toolbar_ui.auto_hide = false;
+    server->toolbar_ui.auto_raise = false;
+    server->toolbar_ui.hidden = false;
+    server->toolbar_ui.hovered = false;
+    server->toolbar_ui.auto_pending = 0;
 
     server->wl_display = wl_display_create();
     if (server->wl_display == NULL) {
@@ -461,6 +600,40 @@ bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_
             fbwm_core_set_col_placement_direction(&server->wm, parse_col_dir(col_dir));
         }
 
+        if (fbwl_resource_db_get_bool(&init, "session.screen0.toolbar.visible", &bool_val)) {
+            server->toolbar_ui.enabled = bool_val;
+        }
+        if (fbwl_resource_db_get_bool(&init, "session.screen0.toolbar.autoHide", &bool_val)) {
+            server->toolbar_ui.auto_hide = bool_val;
+        }
+        if (fbwl_resource_db_get_bool(&init, "session.screen0.toolbar.autoRaise", &bool_val)) {
+            server->toolbar_ui.auto_raise = bool_val;
+        }
+        if (fbwl_resource_db_get_int(&init, "session.screen0.toolbar.widthPercent", &int_val)) {
+            if (int_val < 1) {
+                int_val = 1;
+            }
+            if (int_val > 100) {
+                int_val = 100;
+            }
+            server->toolbar_ui.width_percent = int_val;
+        }
+        if (fbwl_resource_db_get_int(&init, "session.screen0.toolbar.height", &int_val) && int_val >= 0) {
+            server->toolbar_ui.height_override = int_val;
+        }
+        const char *toolbar_placement = fbwl_resource_db_get(&init, "session.screen0.toolbar.placement");
+        if (toolbar_placement != NULL) {
+            server->toolbar_ui.placement = parse_toolbar_placement(toolbar_placement);
+        }
+        const char *toolbar_tools = fbwl_resource_db_get(&init, "session.screen0.toolbar.tools");
+        if (toolbar_tools != NULL) {
+            server->toolbar_ui.tools = parse_toolbar_tools(toolbar_tools);
+        }
+        if (server->toolbar_ui.tools == 0) {
+            server->toolbar_ui.tools = toolbar_tools_default();
+        }
+        server->toolbar_ui.hidden = false;
+
         wlr_log(WLR_INFO,
             "Init: focusModel=%s autoRaise=%d autoRaiseDelay=%d clickRaises=%d focusNewWindows=%d windowPlacement=%s rowDir=%s colDir=%s",
             focus_model_str(server->focus.model),
@@ -471,6 +644,16 @@ bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_
             window_placement_str(fbwm_core_window_placement(&server->wm)),
             row_dir_str(fbwm_core_row_placement_direction(&server->wm)),
             col_dir_str(fbwm_core_col_placement_direction(&server->wm)));
+
+        wlr_log(WLR_INFO,
+            "Init: toolbar visible=%d placement=%s autoHide=%d autoRaise=%d widthPercent=%d height=%d tools=0x%x",
+            server->toolbar_ui.enabled ? 1 : 0,
+            toolbar_placement_str(server->toolbar_ui.placement),
+            server->toolbar_ui.auto_hide ? 1 : 0,
+            server->toolbar_ui.auto_raise ? 1 : 0,
+            server->toolbar_ui.width_percent,
+            server->toolbar_ui.height_override,
+            server->toolbar_ui.tools);
 
         if (!workspaces_set) {
             int ws = 0;

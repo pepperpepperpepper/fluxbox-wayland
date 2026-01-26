@@ -25,6 +25,8 @@
 #include "wayland/fbwl_util.h"
 #include "wayland/fbwl_view.h"
 
+static struct fbwl_ui_toolbar_env toolbar_ui_env(struct fbwl_server *server);
+
 static void session_lock_clear_keyboard_focus(void *userdata) {
     clear_keyboard_focus(userdata);
 }
@@ -357,6 +359,12 @@ void server_cursor_motion(struct wl_listener *listener, void *data) {
             server->focus_reason = prev_reason;
         }
     }
+
+    {
+        const struct fbwl_ui_toolbar_env env = toolbar_ui_env(server);
+        fbwl_ui_toolbar_handle_motion(&server->toolbar_ui, &env,
+            (int)server->cursor->x, (int)server->cursor->y, server->focus.auto_raise_delay_ms);
+    }
 }
 
 void server_cursor_motion_absolute(struct wl_listener *listener, void *data) {
@@ -385,6 +393,12 @@ void server_cursor_motion_absolute(struct wl_listener *listener, void *data) {
             fbwm_core_focus_view(&server->wm, &view->wm_view);
             server->focus_reason = prev_reason;
         }
+    }
+
+    {
+        const struct fbwl_ui_toolbar_env env = toolbar_ui_env(server);
+        fbwl_ui_toolbar_handle_motion(&server->toolbar_ui, &env,
+            (int)server->cursor->x, (int)server->cursor->y, server->focus.auto_raise_delay_ms);
     }
 }
 
