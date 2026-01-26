@@ -101,6 +101,12 @@ static void xdg_toplevel_map(struct wl_listener *listener, void *data) {
     struct fbwl_xdg_shell_hooks hooks = xdg_shell_hooks(server);
     fbwl_xdg_shell_handle_toplevel_map(view, &server->wm, server->output_layout, &server->outputs,
         server->cursor->x, server->cursor->y, server->apps_rules, server->apps_rule_count, &hooks);
+    if (server->focus.focus_new_windows && fbwm_core_view_is_visible(&server->wm, &view->wm_view)) {
+        const enum fbwl_focus_reason prev_reason = server->focus_reason;
+        server->focus_reason = FBWL_FOCUS_REASON_MAP;
+        fbwm_core_focus_view(&server->wm, &view->wm_view);
+        server->focus_reason = prev_reason;
+    }
 }
 
 static void xdg_toplevel_unmap(struct wl_listener *listener, void *data) {
@@ -215,6 +221,12 @@ static void xwayland_surface_map(struct wl_listener *listener, void *data) {
     struct fbwl_xwayland_hooks hooks = xwayland_hooks(server);
     fbwl_xwayland_handle_surface_map(view, &server->wm, server->output_layout, &server->outputs,
         server->cursor->x, server->cursor->y, server->apps_rules, server->apps_rule_count, &hooks);
+    if (server->focus.focus_new_windows && fbwm_core_view_is_visible(&server->wm, &view->wm_view)) {
+        const enum fbwl_focus_reason prev_reason = server->focus_reason;
+        server->focus_reason = FBWL_FOCUS_REASON_MAP;
+        fbwm_core_focus_view(&server->wm, &view->wm_view);
+        server->focus_reason = prev_reason;
+    }
 }
 
 static void xwayland_surface_unmap(struct wl_listener *listener, void *data) {
@@ -370,4 +382,3 @@ void server_new_xdg_toplevel(struct wl_listener *listener, void *data) {
         xdg_toplevel_set_title, xdg_toplevel_set_app_id,
         server->foreign_toplevel_mgr, foreign_handlers);
 }
-

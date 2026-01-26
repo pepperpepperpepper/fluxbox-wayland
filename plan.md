@@ -1268,7 +1268,12 @@ Goal: users can drop in their existing `~/.fluxbox` directory and get the same b
   - Added Fluxbox-compatible path resolution + discovery helpers (`session.keyFile/appsFile/menuFile/styleFile`), and switched `--config-dir` to use them (`src/wayland/fbwl_server_bootstrap.c`).
   - Kept parsing X11-free (no Xrm/X11 deps).
 - [ ] Apply the full resource set to Wayland compositor behavior:
-  - Focus/raise/click behavior, auto-raise delay, placement policy, workspace behavior/names, toolbar/menu behavior, tab-related policy, etc.
+  - [x] Focus/raise/click behavior:
+    - `session.screen0.focusModel` (ClickToFocus/MouseFocus/StrictMouseFocus; StrictMouseFocus currently behaves like MouseFocus).
+    - `session.screen0.autoRaise` + `session.autoRaiseDelay` (auto-raise with delay on mouse-focus).
+    - `session.screen0.clickRaises` (raise on click even when focus doesn't change; titlebar-only when disabled).
+    - `session.screen0.focusNewWindows` (controls focusing newly-mapped views).
+  - [ ] Placement policy, workspace names/behavior, toolbar/menu behavior, tab-related policy, etc.
   - Output mapping strategy for `screenN` resources (define how multiple Wayland outputs map to classic `screen0` semantics).
 - [ ] Extend `keys` support to full classic syntax and command set:
   - Include mouse bindings and the commonly used commands beyond the current subset.

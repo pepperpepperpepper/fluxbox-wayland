@@ -181,7 +181,6 @@ void fbwl_xdg_shell_handle_toplevel_map(struct fbwl_view *view,
     if (apps_rule != NULL && hooks != NULL && hooks->apps_rules_apply_post_map != NULL) {
         hooks->apps_rules_apply_post_map(view, apps_rule);
     }
-    fbwm_core_focus_view(wm, &view->wm_view);
 }
 
 void fbwl_xdg_shell_handle_toplevel_unmap(struct fbwl_view *view,
@@ -312,4 +311,3 @@ void fbwl_xdg_shell_handle_toplevel_destroy(struct fbwl_view *view,
     }
     free(view);
 }
-

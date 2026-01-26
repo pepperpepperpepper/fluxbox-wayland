@@ -153,7 +153,6 @@ void fbwl_xwayland_handle_surface_map(struct fbwl_view *view,
     if (apps_rule != NULL && hooks != NULL && hooks->apps_rules_apply_post_map != NULL) {
         hooks->apps_rules_apply_post_map(view, apps_rule);
     }
-    fbwm_core_focus_view(wm, &view->wm_view);
     wlr_log(WLR_INFO, "XWayland: map title=%s class=%s",
         fbwl_view_title(view) != NULL ? fbwl_view_title(view) : "(no-title)",
         fbwl_view_app_id(view) != NULL ? fbwl_view_app_id(view) : "(no-class)");

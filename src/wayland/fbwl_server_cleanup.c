@@ -65,6 +65,11 @@ void fbwl_server_finish(struct fbwl_server *server) {
 
     server_cmd_dialog_ui_close(server, "shutdown");
     server_osd_ui_destroy(server);
+    if (server->auto_raise_timer != NULL) {
+        wl_event_source_remove(server->auto_raise_timer);
+        server->auto_raise_timer = NULL;
+    }
+    server->auto_raise_pending_view = NULL;
     server_menu_free(server);
     fbwl_ui_toolbar_destroy(&server->toolbar_ui);
 
@@ -112,4 +117,3 @@ void fbwl_server_finish(struct fbwl_server *server) {
         server->wl_display = NULL;
     }
 }
-

@@ -83,6 +83,29 @@ struct fbwl_resource_db {
     size_t items_cap;
 };
 
+enum fbwl_focus_model {
+    FBWL_FOCUS_MODEL_CLICK_TO_FOCUS = 0,
+    FBWL_FOCUS_MODEL_MOUSE_FOCUS,
+    FBWL_FOCUS_MODEL_STRICT_MOUSE_FOCUS,
+};
+
+enum fbwl_focus_reason {
+    FBWL_FOCUS_REASON_NONE = 0,
+    FBWL_FOCUS_REASON_POINTER_CLICK,
+    FBWL_FOCUS_REASON_POINTER_MOTION,
+    FBWL_FOCUS_REASON_KEYBIND,
+    FBWL_FOCUS_REASON_MAP,
+    FBWL_FOCUS_REASON_ACTIVATE,
+};
+
+struct fbwl_focus_config {
+    enum fbwl_focus_model model;
+    bool auto_raise;
+    int auto_raise_delay_ms;
+    bool click_raises;
+    bool focus_new_windows;
+};
+
 struct fbwl_server;
 
 struct fbwl_shortcuts_inhibitor {
@@ -215,6 +238,11 @@ struct fbwl_server {
     struct fbwl_view *focused_view;
 
     struct fbwl_grab grab;
+
+    struct fbwl_focus_config focus;
+    enum fbwl_focus_reason focus_reason;
+    struct wl_event_source *auto_raise_timer;
+    struct fbwl_view *auto_raise_pending_view;
 };
 
 struct fbwl_server_bootstrap_options {
@@ -298,6 +326,7 @@ void server_cmd_dialog_ui_close(struct fbwl_server *server, const char *why);
 void server_cmd_dialog_ui_open(struct fbwl_server *server);
 bool server_cmd_dialog_ui_handle_key(struct fbwl_server *server, xkb_keysym_t sym, uint32_t modifiers);
 int server_osd_hide_timer(void *data);
+int server_auto_raise_timer(void *data);
 void server_osd_ui_update_position(struct fbwl_server *server);
 void server_osd_ui_destroy(struct fbwl_server *server);
 bool server_menu_ui_handle_keypress(struct fbwl_server *server, xkb_keysym_t sym);

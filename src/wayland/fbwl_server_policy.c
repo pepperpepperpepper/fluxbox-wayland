@@ -68,6 +68,16 @@ void server_update_shortcuts_inhibitor(struct fbwl_server *server) {
     fbwl_shortcuts_inhibit_update(&server->shortcuts_inhibit);
 }
 
+static void raise_view(struct fbwl_view *view, const char *why) {
+    if (view == NULL || view->scene_tree == NULL) {
+        return;
+    }
+    wlr_scene_node_raise_to_top(&view->scene_tree->node);
+    wlr_log(WLR_INFO, "Raise: %s reason=%s",
+        fbwl_view_display_title(view),
+        why != NULL ? why : "(null)");
+}
+
 void focus_view(struct fbwl_view *view) {
     if (view == NULL) {
         return;
@@ -111,8 +121,19 @@ void focus_view(struct fbwl_view *view) {
         }
     }
 
+    if (!server->focus.auto_raise) {
+        server->auto_raise_pending_view = NULL;
+    } else if (server->focus_reason == FBWL_FOCUS_REASON_POINTER_MOTION && server->focus.auto_raise_delay_ms > 0) {
+        server->auto_raise_pending_view = view;
+        if (server->auto_raise_timer != NULL) {
+            wl_event_source_timer_update(server->auto_raise_timer, server->focus.auto_raise_delay_ms);
+        }
+    } else {
+        server->auto_raise_pending_view = NULL;
+        raise_view(view, "focus");
+    }
+
     struct wlr_keyboard *keyboard = wlr_seat_get_keyboard(seat);
-    wlr_scene_node_raise_to_top(&view->scene_tree->node);
 
     fbwl_view_set_activated(view, true);
     fbwl_view_decor_set_active(view, &server->decor_theme, true);
@@ -127,6 +148,20 @@ void focus_view(struct fbwl_view *view) {
     }
     server_text_input_update_focus(server, surface);
     server_update_shortcuts_inhibitor(server);
+}
+
+int server_auto_raise_timer(void *data) {
+    struct fbwl_server *server = data;
+    if (server == NULL) {
+        return 0;
+    }
+
+    struct fbwl_view *view = server->auto_raise_pending_view;
+    if (view != NULL && server->focus.auto_raise && server->focused_view == view) {
+        raise_view(view, "autoRaiseDelay");
+    }
+    server->auto_raise_pending_view = NULL;
+    return 0;
 }
 
 void clear_keyboard_focus(struct fbwl_server *server) {
@@ -307,6 +342,21 @@ void server_cursor_motion(struct wl_listener *listener, void *data) {
         &server->pointer_constraints.phys_valid, &server->pointer_constraints.phys_x, &server->pointer_constraints.phys_y,
         server->grab.mode, cursor_grab_update, server,
         &hooks, event);
+
+    if (server->focus.model != FBWL_FOCUS_MODEL_CLICK_TO_FOCUS &&
+            server->grab.mode == FBWL_CURSOR_PASSTHROUGH &&
+            !server->cmd_dialog_ui.open &&
+            !server->menu_ui.open) {
+        double sx = 0, sy = 0;
+        struct wlr_surface *surface = NULL;
+        struct fbwl_view *view = fbwl_view_at(server->scene, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
+        if (view != NULL && view != server->focused_view) {
+            const enum fbwl_focus_reason prev_reason = server->focus_reason;
+            server->focus_reason = FBWL_FOCUS_REASON_POINTER_MOTION;
+            fbwm_core_focus_view(&server->wm, &view->wm_view);
+            server->focus_reason = prev_reason;
+        }
+    }
 }
 
 void server_cursor_motion_absolute(struct wl_listener *listener, void *data) {
@@ -321,6 +371,21 @@ void server_cursor_motion_absolute(struct wl_listener *listener, void *data) {
         &server->pointer_constraints.phys_valid, &server->pointer_constraints.phys_x, &server->pointer_constraints.phys_y,
         server->grab.mode, cursor_grab_update, server,
         &hooks, event);
+
+    if (server->focus.model != FBWL_FOCUS_MODEL_CLICK_TO_FOCUS &&
+            server->grab.mode == FBWL_CURSOR_PASSTHROUGH &&
+            !server->cmd_dialog_ui.open &&
+            !server->menu_ui.open) {
+        double sx = 0, sy = 0;
+        struct wlr_surface *surface = NULL;
+        struct fbwl_view *view = fbwl_view_at(server->scene, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
+        if (view != NULL && view != server->focused_view) {
+            const enum fbwl_focus_reason prev_reason = server->focus_reason;
+            server->focus_reason = FBWL_FOCUS_REASON_POINTER_MOTION;
+            fbwm_core_focus_view(&server->wm, &view->wm_view);
+            server->focus_reason = prev_reason;
+        }
+    }
 }
 
 static void server_menu_ui_open_root(struct fbwl_server *server, int x, int y);
@@ -390,7 +455,11 @@ void server_cursor_button(struct wl_listener *listener, void *data) {
         }
 
         if (alt && view != NULL && (event->button == BTN_LEFT || event->button == BTN_RIGHT)) {
+            const enum fbwl_focus_reason prev_reason = server->focus_reason;
+            server->focus_reason = FBWL_FOCUS_REASON_POINTER_CLICK;
             fbwm_core_focus_view(&server->wm, &view->wm_view);
+            server->focus_reason = prev_reason;
+            raise_view(view, "alt-grab");
 
             server->grab.view = view;
             server->grab.button = event->button;
@@ -421,6 +490,11 @@ void server_cursor_button(struct wl_listener *listener, void *data) {
             const struct fbwl_decor_hit hit =
                 fbwl_view_decor_hit_test(view, &server->decor_theme, server->cursor->x, server->cursor->y);
             if (hit.kind == FBWL_DECOR_HIT_TITLEBAR) {
+                const enum fbwl_focus_reason prev_reason = server->focus_reason;
+                server->focus_reason = FBWL_FOCUS_REASON_POINTER_CLICK;
+                fbwm_core_focus_view(&server->wm, &view->wm_view);
+                server->focus_reason = prev_reason;
+                raise_view(view, "titlebar-menu");
                 server_menu_ui_open_window(server, view, (int)server->cursor->x, (int)server->cursor->y);
                 return;
             }
@@ -430,7 +504,11 @@ void server_cursor_button(struct wl_listener *listener, void *data) {
             const struct fbwl_decor_hit hit =
                 fbwl_view_decor_hit_test(view, &server->decor_theme, server->cursor->x, server->cursor->y);
             if (hit.kind != FBWL_DECOR_HIT_NONE) {
+                const enum fbwl_focus_reason prev_reason = server->focus_reason;
+                server->focus_reason = FBWL_FOCUS_REASON_POINTER_CLICK;
                 fbwm_core_focus_view(&server->wm, &view->wm_view);
+                server->focus_reason = prev_reason;
+                raise_view(view, "decor");
 
                 if (hit.kind == FBWL_DECOR_HIT_TITLEBAR) {
                     server->grab.view = view;
@@ -485,7 +563,21 @@ void server_cursor_button(struct wl_listener *listener, void *data) {
         }
 
         if (view != NULL) {
+            const bool click_raises_anywhere = server->focus.click_raises;
+            bool click_raises = click_raises_anywhere;
+            if (!click_raises_anywhere && surface == NULL) {
+                const struct fbwl_decor_hit hit =
+                    fbwl_view_decor_hit_test(view, &server->decor_theme, server->cursor->x, server->cursor->y);
+                click_raises = hit.kind != FBWL_DECOR_HIT_NONE;
+            }
+
+            const enum fbwl_focus_reason prev_reason = server->focus_reason;
+            server->focus_reason = FBWL_FOCUS_REASON_POINTER_CLICK;
             fbwm_core_focus_view(&server->wm, &view->wm_view);
+            server->focus_reason = prev_reason;
+            if (click_raises) {
+                raise_view(view, "click");
+            }
         }
     }
 

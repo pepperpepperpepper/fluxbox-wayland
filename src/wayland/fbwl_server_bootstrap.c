@@ -46,6 +46,32 @@ static int handle_signal(int signo, void *data) {
     return 0;
 }
 
+static enum fbwl_focus_model parse_focus_model(const char *s) {
+    if (s == NULL) {
+        return FBWL_FOCUS_MODEL_CLICK_TO_FOCUS;
+    }
+    if (strcasecmp(s, "MouseFocus") == 0) {
+        return FBWL_FOCUS_MODEL_MOUSE_FOCUS;
+    }
+    if (strcasecmp(s, "StrictMouseFocus") == 0) {
+        return FBWL_FOCUS_MODEL_STRICT_MOUSE_FOCUS;
+    }
+    return FBWL_FOCUS_MODEL_CLICK_TO_FOCUS;
+}
+
+static const char *focus_model_str(enum fbwl_focus_model model) {
+    switch (model) {
+    case FBWL_FOCUS_MODEL_CLICK_TO_FOCUS:
+        return "ClickToFocus";
+    case FBWL_FOCUS_MODEL_MOUSE_FOCUS:
+        return "MouseFocus";
+    case FBWL_FOCUS_MODEL_STRICT_MOUSE_FOCUS:
+        return "StrictMouseFocus";
+    default:
+        return "ClickToFocus";
+    }
+}
+
 static bool server_keybindings_add_from_keys_file(void *userdata, xkb_keysym_t sym, uint32_t modifiers,
         enum fbwl_keybinding_action action, int arg, const char *cmd) {
     struct fbwl_server *server = userdata;
@@ -112,6 +138,16 @@ bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_
 #ifdef HAVE_SYSTEMD
     wl_list_init(&server->sni.items);
 #endif
+    server->focus = (struct fbwl_focus_config){
+        .model = FBWL_FOCUS_MODEL_CLICK_TO_FOCUS,
+        .auto_raise = true,
+        .auto_raise_delay_ms = 250,
+        .click_raises = true,
+        .focus_new_windows = true,
+    };
+    server->focus_reason = FBWL_FOCUS_REASON_NONE;
+    server->auto_raise_timer = NULL;
+    server->auto_raise_pending_view = NULL;
 
     server->wl_display = wl_display_create();
     if (server->wl_display == NULL) {
@@ -131,6 +167,8 @@ bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_
     struct wl_event_loop *loop = wl_display_get_event_loop(server->wl_display);
     wl_event_loop_add_signal(loop, SIGINT, handle_signal, server);
     wl_event_loop_add_signal(loop, SIGTERM, handle_signal, server);
+
+    server->auto_raise_timer = wl_event_loop_add_timer(loop, server_auto_raise_timer, server);
 
     server->osd_ui.enabled = true;
     server->osd_ui.visible = false;
@@ -271,6 +309,30 @@ bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_
     if (config_dir != NULL) {
         struct fbwl_resource_db init = {0};
         (void)fbwl_resource_db_load_init(&init, config_dir);
+
+        server->focus.model = parse_focus_model(fbwl_resource_db_get(&init, "session.screen0.focusModel"));
+        bool bool_val = false;
+        int int_val = 0;
+        if (fbwl_resource_db_get_bool(&init, "session.screen0.autoRaise", &bool_val)) {
+            server->focus.auto_raise = bool_val;
+        }
+        if (fbwl_resource_db_get_int(&init, "session.autoRaiseDelay", &int_val) && int_val >= 0) {
+            server->focus.auto_raise_delay_ms = int_val;
+        }
+        if (fbwl_resource_db_get_bool(&init, "session.screen0.clickRaises", &bool_val)) {
+            server->focus.click_raises = bool_val;
+        }
+        if (fbwl_resource_db_get_bool(&init, "session.screen0.focusNewWindows", &bool_val)) {
+            server->focus.focus_new_windows = bool_val;
+        }
+
+        wlr_log(WLR_INFO,
+            "Init: focusModel=%s autoRaise=%d autoRaiseDelay=%d clickRaises=%d focusNewWindows=%d",
+            focus_model_str(server->focus.model),
+            server->focus.auto_raise ? 1 : 0,
+            server->focus.auto_raise_delay_ms,
+            server->focus.click_raises ? 1 : 0,
+            server->focus.focus_new_windows ? 1 : 0);
 
         if (!workspaces_set) {
             int ws = 0;
