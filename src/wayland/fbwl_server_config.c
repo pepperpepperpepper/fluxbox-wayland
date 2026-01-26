@@ -10,6 +10,7 @@
 #include <wlr/util/log.h>
 
 #include "wayland/fbwl_server_internal.h"
+#include "wayland/fbwl_util.h"
 
 static char *trim_inplace(char *s) {
     if (s == NULL) {
@@ -29,20 +30,20 @@ static char *trim_inplace(char *s) {
     return s;
 }
 
-void fbwl_init_settings_free(struct fbwl_init_settings *settings) {
-    if (settings == NULL) {
-        return;
+static bool strip_outer_quotes_inplace(char *s) {
+    if (s == NULL) {
+        return false;
     }
-    free(settings->keys_file);
-    settings->keys_file = NULL;
-    free(settings->apps_file);
-    settings->apps_file = NULL;
-    free(settings->style_file);
-    settings->style_file = NULL;
-    free(settings->menu_file);
-    settings->menu_file = NULL;
-    settings->set_workspaces = false;
-    settings->workspaces = 0;
+    const size_t len = strlen(s);
+    if (len < 2) {
+        return false;
+    }
+    if (!((s[0] == '"' && s[len - 1] == '"') || (s[0] == '\'' && s[len - 1] == '\''))) {
+        return false;
+    }
+    memmove(s, s + 1, len - 1);
+    s[len - 2] = '\0';
+    return true;
 }
 
 char *fbwl_path_join(const char *dir, const char *rel) {
@@ -150,26 +151,77 @@ char *fbwl_resolve_config_path(const char *config_dir, const char *value) {
     return joined;
 }
 
-bool fbwl_init_load_file(const char *config_dir, struct fbwl_init_settings *settings) {
-    if (settings == NULL) {
+static bool resource_db_reserve(struct fbwl_resource_db *db, size_t n) {
+    if (db == NULL) {
+        return false;
+    }
+    if (n <= db->items_cap) {
+        return true;
+    }
+    size_t new_cap = db->items_cap > 0 ? db->items_cap : 16;
+    while (new_cap < n) {
+        new_cap *= 2;
+    }
+
+    void *p = realloc(db->items, new_cap * sizeof(db->items[0]));
+    if (p == NULL) {
+        return false;
+    }
+    db->items = p;
+    db->items_cap = new_cap;
+    return true;
+}
+
+static bool resource_db_set_owned(struct fbwl_resource_db *db, char *key, char *value) {
+    if (db == NULL || key == NULL || *key == '\0' || value == NULL) {
+        free(key);
+        free(value);
         return false;
     }
 
-    fbwl_init_settings_free(settings);
+    for (size_t i = 0; i < db->items_len; i++) {
+        if (strcasecmp(db->items[i].key, key) == 0) {
+            free(db->items[i].value);
+            db->items[i].value = value;
+            free(key);
+            return true;
+        }
+    }
 
-    char *path = fbwl_path_join(config_dir, "init");
-    if (path == NULL) {
+    if (!resource_db_reserve(db, db->items_len + 1)) {
+        free(key);
+        free(value);
         return false;
     }
-    if (!fbwl_file_exists(path)) {
-        free(path);
+
+    db->items[db->items_len].key = key;
+    db->items[db->items_len].value = value;
+    db->items_len++;
+    return true;
+}
+
+void fbwl_resource_db_free(struct fbwl_resource_db *db) {
+    if (db == NULL) {
+        return;
+    }
+    for (size_t i = 0; i < db->items_len; i++) {
+        free(db->items[i].key);
+        free(db->items[i].value);
+    }
+    free(db->items);
+    db->items = NULL;
+    db->items_len = 0;
+    db->items_cap = 0;
+}
+
+static bool fbwl_resource_db_load_file(struct fbwl_resource_db *db, const char *path) {
+    if (db == NULL || path == NULL || *path == '\0') {
         return false;
     }
 
     FILE *f = fopen(path, "r");
     if (f == NULL) {
         wlr_log(WLR_ERROR, "Init: failed to open %s: %s", path, strerror(errno));
-        free(path);
         return false;
     }
 
@@ -200,57 +252,151 @@ bool fbwl_init_load_file(const char *config_dir, struct fbwl_init_settings *sett
             continue;
         }
 
-        if (strcasecmp(key, "session.screen0.workspaces") == 0) {
-            char *end = NULL;
-            long ws = strtol(val, &end, 10);
-            if (end != val && (end == NULL || *end == '\0') && ws > 0 && ws < 1000) {
-                settings->workspaces = (int)ws;
-                settings->set_workspaces = true;
-            }
+        char *key_dup = strdup(key);
+        char *val_dup = strdup(val);
+        if (key_dup == NULL || val_dup == NULL) {
+            free(key_dup);
+            free(val_dup);
             continue;
         }
-
-        if (strcasecmp(key, "session.keyFile") == 0) {
-            char *resolved = fbwl_resolve_config_path(config_dir, val);
-            if (resolved != NULL) {
-                free(settings->keys_file);
-                settings->keys_file = resolved;
-            }
-            continue;
-        }
-
-        if (strcasecmp(key, "session.appsFile") == 0) {
-            char *resolved = fbwl_resolve_config_path(config_dir, val);
-            if (resolved != NULL) {
-                free(settings->apps_file);
-                settings->apps_file = resolved;
-            }
-            continue;
-        }
-
-        if (strcasecmp(key, "session.styleFile") == 0) {
-            char *resolved = fbwl_resolve_config_path(config_dir, val);
-            if (resolved != NULL) {
-                free(settings->style_file);
-                settings->style_file = resolved;
-            }
-            continue;
-        }
-
-        if (strcasecmp(key, "session.menuFile") == 0) {
-            char *resolved = fbwl_resolve_config_path(config_dir, val);
-            if (resolved != NULL) {
-                free(settings->menu_file);
-                settings->menu_file = resolved;
-            }
-            continue;
-        }
+        strip_outer_quotes_inplace(val_dup);
+        (void)resource_db_set_owned(db, key_dup, val_dup);
     }
 
     free(line);
     fclose(f);
-
-    wlr_log(WLR_INFO, "Init: loaded %s", path);
-    free(path);
     return true;
+}
+
+bool fbwl_resource_db_load_init(struct fbwl_resource_db *db, const char *config_dir) {
+    if (db == NULL) {
+        return false;
+    }
+    fbwl_resource_db_free(db);
+
+    char *path = fbwl_path_join(config_dir, "init");
+    if (path == NULL) {
+        return false;
+    }
+    if (!fbwl_file_exists(path)) {
+        free(path);
+        return false;
+    }
+
+    const bool ok = fbwl_resource_db_load_file(db, path);
+    if (ok) {
+        wlr_log(WLR_INFO, "Init: loaded %s", path);
+    }
+    free(path);
+    return ok;
+}
+
+const char *fbwl_resource_db_get(const struct fbwl_resource_db *db, const char *key) {
+    if (db == NULL || key == NULL || *key == '\0') {
+        return NULL;
+    }
+    for (size_t i = 0; i < db->items_len; i++) {
+        if (strcasecmp(db->items[i].key, key) == 0) {
+            return db->items[i].value;
+        }
+    }
+    return NULL;
+}
+
+static bool parse_bool(const char *s, bool *out) {
+    if (s == NULL || out == NULL) {
+        return false;
+    }
+
+    while (*s != '\0' && isspace((unsigned char)*s)) {
+        s++;
+    }
+    if (*s == '\0') {
+        return false;
+    }
+
+    if (strcasecmp(s, "true") == 0 || strcasecmp(s, "yes") == 0 || strcasecmp(s, "on") == 0) {
+        *out = true;
+        return true;
+    }
+    if (strcasecmp(s, "false") == 0 || strcasecmp(s, "no") == 0 || strcasecmp(s, "off") == 0) {
+        *out = false;
+        return true;
+    }
+
+    char *end = NULL;
+    long v = strtol(s, &end, 10);
+    if (end != s && end != NULL) {
+        while (*end != '\0' && isspace((unsigned char)*end)) {
+            end++;
+        }
+        if (*end == '\0') {
+            *out = v != 0;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool fbwl_resource_db_get_bool(const struct fbwl_resource_db *db, const char *key, bool *out) {
+    return parse_bool(fbwl_resource_db_get(db, key), out);
+}
+
+bool fbwl_resource_db_get_int(const struct fbwl_resource_db *db, const char *key, int *out) {
+    if (out == NULL) {
+        return false;
+    }
+    const char *s = fbwl_resource_db_get(db, key);
+    if (s == NULL) {
+        return false;
+    }
+    while (*s != '\0' && isspace((unsigned char)*s)) {
+        s++;
+    }
+    if (*s == '\0') {
+        return false;
+    }
+    char *end = NULL;
+    long v = strtol(s, &end, 10);
+    if (end == s || end == NULL) {
+        return false;
+    }
+    while (*end != '\0' && isspace((unsigned char)*end)) {
+        end++;
+    }
+    if (*end != '\0') {
+        return false;
+    }
+    *out = (int)v;
+    return true;
+}
+
+bool fbwl_resource_db_get_color(const struct fbwl_resource_db *db, const char *key, float rgba[static 4]) {
+    return fbwl_parse_hex_color(fbwl_resource_db_get(db, key), rgba);
+}
+
+char *fbwl_resource_db_resolve_path(const struct fbwl_resource_db *db, const char *config_dir, const char *key) {
+    const char *val = fbwl_resource_db_get(db, key);
+    if (val == NULL || *val == '\0') {
+        return NULL;
+    }
+    return fbwl_resolve_config_path(config_dir, val);
+}
+
+char *fbwl_resource_db_discover_path(const struct fbwl_resource_db *db, const char *config_dir, const char *key,
+        const char *fallback_rel) {
+    char *resolved = fbwl_resource_db_resolve_path(db, config_dir, key);
+    if (resolved != NULL) {
+        return resolved;
+    }
+    if (fallback_rel == NULL || config_dir == NULL || *config_dir == '\0') {
+        return NULL;
+    }
+    char *joined = fbwl_path_join(config_dir, fallback_rel);
+    if (joined != NULL && !fbwl_file_exists(joined)) {
+        free(joined);
+        joined = NULL;
+    }
+    return joined;
 }

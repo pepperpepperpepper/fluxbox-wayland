@@ -72,13 +72,15 @@ struct wlr_surface;
 
 struct fbwl_view;
 
-struct fbwl_init_settings {
-    bool set_workspaces;
-    int workspaces;
-    char *keys_file;
-    char *apps_file;
-    char *style_file;
-    char *menu_file;
+struct fbwl_resource_kv {
+    char *key;
+    char *value;
+};
+
+struct fbwl_resource_db {
+    struct fbwl_resource_kv *items;
+    size_t items_len;
+    size_t items_cap;
 };
 
 struct fbwl_server;
@@ -232,11 +234,19 @@ struct fbwl_server_bootstrap_options {
     bool log_protocol;
 };
 
-void fbwl_init_settings_free(struct fbwl_init_settings *settings);
-bool fbwl_init_load_file(const char *config_dir, struct fbwl_init_settings *settings);
 char *fbwl_path_join(const char *dir, const char *rel);
 bool fbwl_file_exists(const char *path);
 char *fbwl_resolve_config_path(const char *config_dir, const char *value);
+
+void fbwl_resource_db_free(struct fbwl_resource_db *db);
+bool fbwl_resource_db_load_init(struct fbwl_resource_db *db, const char *config_dir);
+const char *fbwl_resource_db_get(const struct fbwl_resource_db *db, const char *key);
+bool fbwl_resource_db_get_bool(const struct fbwl_resource_db *db, const char *key, bool *out);
+bool fbwl_resource_db_get_int(const struct fbwl_resource_db *db, const char *key, int *out);
+bool fbwl_resource_db_get_color(const struct fbwl_resource_db *db, const char *key, float rgba[static 4]);
+char *fbwl_resource_db_resolve_path(const struct fbwl_resource_db *db, const char *config_dir, const char *key);
+char *fbwl_resource_db_discover_path(const struct fbwl_resource_db *db, const char *config_dir, const char *key,
+        const char *fallback_rel);
 
 struct fbwl_session_lock_hooks session_lock_hooks(struct fbwl_server *server);
 

@@ -269,64 +269,39 @@ bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_
         }
     }
     if (config_dir != NULL) {
-        struct fbwl_init_settings init = {0};
-        (void)fbwl_init_load_file(config_dir, &init);
+        struct fbwl_resource_db init = {0};
+        (void)fbwl_resource_db_load_init(&init, config_dir);
 
-        if (!workspaces_set && init.set_workspaces) {
-            workspaces = init.workspaces;
+        if (!workspaces_set) {
+            int ws = 0;
+            if (fbwl_resource_db_get_int(&init, "session.screen0.workspaces", &ws) && ws > 0 && ws < 1000) {
+                workspaces = ws;
+            }
         }
 
         if (keys_file == NULL) {
-            if (init.keys_file != NULL) {
-                keys_file_owned = init.keys_file;
-                init.keys_file = NULL;
-            } else {
-                keys_file_owned = fbwl_path_join(config_dir, "keys");
-                if (keys_file_owned != NULL && !fbwl_file_exists(keys_file_owned)) {
-                    free(keys_file_owned);
-                    keys_file_owned = NULL;
-                }
-            }
+            keys_file_owned = fbwl_resource_db_discover_path(&init, config_dir, "session.keyFile", "keys");
             keys_file = keys_file_owned;
         }
 
         if (apps_file == NULL) {
-            if (init.apps_file != NULL) {
-                apps_file_owned = init.apps_file;
-                init.apps_file = NULL;
-            } else {
-                apps_file_owned = fbwl_path_join(config_dir, "apps");
-                if (apps_file_owned != NULL && !fbwl_file_exists(apps_file_owned)) {
-                    free(apps_file_owned);
-                    apps_file_owned = NULL;
-                }
-            }
+            apps_file_owned = fbwl_resource_db_discover_path(&init, config_dir, "session.appsFile", "apps");
             apps_file = apps_file_owned;
         }
 
         if (style_file == NULL) {
-            if (init.style_file != NULL) {
-                style_file_owned = init.style_file;
-                init.style_file = NULL;
+            style_file_owned = fbwl_resource_db_resolve_path(&init, config_dir, "session.styleFile");
+            if (style_file_owned != NULL) {
                 style_file = style_file_owned;
             }
         }
 
         if (menu_file == NULL) {
-            if (init.menu_file != NULL) {
-                menu_file_owned = init.menu_file;
-                init.menu_file = NULL;
-            } else {
-                menu_file_owned = fbwl_path_join(config_dir, "menu");
-                if (menu_file_owned != NULL && !fbwl_file_exists(menu_file_owned)) {
-                    free(menu_file_owned);
-                    menu_file_owned = NULL;
-                }
-            }
+            menu_file_owned = fbwl_resource_db_discover_path(&init, config_dir, "session.menuFile", "menu");
             menu_file = menu_file_owned;
         }
 
-        fbwl_init_settings_free(&init);
+        fbwl_resource_db_free(&init);
     }
     fbwm_core_set_workspace_count(&server->wm, workspaces);
     fbwl_keybindings_add_defaults(&server->keybindings, &server->keybinding_count, server->terminal_cmd);
