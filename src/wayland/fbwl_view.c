@@ -15,6 +15,7 @@
 
 #include "wmcore/fbwm_output.h"
 #include "wayland/fbwl_output.h"
+#include "wayland/fbwl_server_internal.h"
 #include "wayland/fbwl_ui_decor_theme.h"
 #include "wayland/fbwl_ui_text.h"
 
@@ -627,12 +628,26 @@ void fbwl_view_place_initial(struct fbwl_view *view, struct fbwm_core *wm, struc
         }
     }
 
+    int frame_left = 0;
+    int frame_top = 0;
+    int frame_w = fbwl_view_current_width(view);
+    int frame_h = fbwl_view_current_height(view);
+    if (view->decor_enabled && !view->fullscreen) {
+        const struct fbwl_decor_theme *theme = &view->server->decor_theme;
+        const int border = theme->border_width;
+        const int title_h = theme->title_height;
+        frame_left = border;
+        frame_top = title_h + border;
+        frame_w += 2 * border;
+        frame_h += title_h + 2 * border;
+    }
+
     int x = 0;
     int y = 0;
-    fbwm_core_place_next(wm, wm_output, &x, &y);
+    fbwm_core_place_next(wm, wm_output, frame_w, frame_h, (int)cursor_x, (int)cursor_y, &x, &y);
 
-    view->x = x;
-    view->y = y;
+    view->x = x + frame_left;
+    view->y = y + frame_top;
     if (view->scene_tree != NULL) {
         wlr_scene_node_set_position(&view->scene_tree->node, view->x, view->y);
     }

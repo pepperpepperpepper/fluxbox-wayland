@@ -1275,7 +1275,8 @@ Goal: users can drop in their existing `~/.fluxbox` directory and get the same b
     - `session.screen0.focusNewWindows` (controls focusing newly-mapped views).
   - [ ] Placement policy, workspace names/behavior, toolbar/menu behavior, tab-related policy, etc.:
     - [x] Workspace names: `session.screen0.workspaceNames` (drives toolbar workspace labels + workspace OSD; numbers remain the fallback).
-    - [ ] Window placement strategy: `session.screen0.windowPlacement` + row/col direction resources.
+    - [x] Window placement strategy: `session.screen0.windowPlacement` + row/col direction resources.
+      - Supports Row/Col Smart + MinOverlap + Cascade + UnderMouse; Autotab currently falls back to RowSmart until tabs exist.
     - [ ] Toolbar behavior: `session.screen0.toolbar.*` (visible/placement/autoHide/autoRaise/width/height/tools).
     - [ ] Menu behavior: `session.screen0.menuDelay` (+ other menu resources as needed).
     - [ ] Tab-related policy: `session.screen0.tabs.*` (where applicable for Wayland UI).

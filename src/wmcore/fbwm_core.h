@@ -3,12 +3,14 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+struct fbwm_box;
 struct fbwm_view;
 struct fbwm_output;
 
 struct fbwm_view_ops {
     void (*focus)(struct fbwm_view *view);
     bool (*is_mapped)(const struct fbwm_view *view);
+    bool (*get_box)(const struct fbwm_view *view, struct fbwm_box *out);
     const char *(*title)(const struct fbwm_view *view);
     const char *(*app_id)(const struct fbwm_view *view);
 };
@@ -24,6 +26,26 @@ struct fbwm_view {
     bool sticky;
 };
 
+enum fbwm_window_placement_strategy {
+    FBWM_PLACE_ROW_SMART = 0,
+    FBWM_PLACE_COL_SMART,
+    FBWM_PLACE_CASCADE,
+    FBWM_PLACE_UNDER_MOUSE,
+    FBWM_PLACE_ROW_MIN_OVERLAP,
+    FBWM_PLACE_COL_MIN_OVERLAP,
+    FBWM_PLACE_AUTOTAB,
+};
+
+enum fbwm_row_placement_direction {
+    FBWM_ROW_LEFT_TO_RIGHT = 0,
+    FBWM_ROW_RIGHT_TO_LEFT,
+};
+
+enum fbwm_col_placement_direction {
+    FBWM_COL_TOP_TO_BOTTOM = 0,
+    FBWM_COL_BOTTOM_TO_TOP,
+};
+
 struct fbwm_core {
     struct fbwm_view views;
     struct fbwm_view *focused;
@@ -32,6 +54,10 @@ struct fbwm_core {
     int workspace_count;
     char **workspace_names;
     size_t workspace_names_len;
+
+    enum fbwm_window_placement_strategy placement_strategy;
+    enum fbwm_row_placement_direction placement_row_dir;
+    enum fbwm_col_placement_direction placement_col_dir;
 
     int place_next_x;
     int place_next_y;
@@ -57,8 +83,16 @@ void fbwm_core_clear_workspace_names(struct fbwm_core *core);
 bool fbwm_core_set_workspace_name(struct fbwm_core *core, int workspace, const char *name);
 const char *fbwm_core_workspace_name(const struct fbwm_core *core, int workspace);
 
+enum fbwm_window_placement_strategy fbwm_core_window_placement(const struct fbwm_core *core);
+void fbwm_core_set_window_placement(struct fbwm_core *core, enum fbwm_window_placement_strategy strategy);
+enum fbwm_row_placement_direction fbwm_core_row_placement_direction(const struct fbwm_core *core);
+void fbwm_core_set_row_placement_direction(struct fbwm_core *core, enum fbwm_row_placement_direction dir);
+enum fbwm_col_placement_direction fbwm_core_col_placement_direction(const struct fbwm_core *core);
+void fbwm_core_set_col_placement_direction(struct fbwm_core *core, enum fbwm_col_placement_direction dir);
+
 bool fbwm_core_view_is_visible(const struct fbwm_core *core, const struct fbwm_view *view);
 void fbwm_core_workspace_switch(struct fbwm_core *core, int workspace);
 void fbwm_core_move_focused_to_workspace(struct fbwm_core *core, int workspace);
 
-void fbwm_core_place_next(struct fbwm_core *core, const struct fbwm_output *output, int *x, int *y);
+void fbwm_core_place_next(struct fbwm_core *core, const struct fbwm_output *output,
+        int view_width, int view_height, int cursor_x, int cursor_y, int *x, int *y);

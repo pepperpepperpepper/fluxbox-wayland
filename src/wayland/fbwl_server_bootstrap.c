@@ -73,6 +73,77 @@ static const char *focus_model_str(enum fbwl_focus_model model) {
     }
 }
 
+static enum fbwm_window_placement_strategy parse_window_placement(const char *s) {
+    if (s == NULL) {
+        return FBWM_PLACE_ROW_SMART;
+    }
+    if (strcasecmp(s, "RowSmartPlacement") == 0) {
+        return FBWM_PLACE_ROW_SMART;
+    }
+    if (strcasecmp(s, "ColSmartPlacement") == 0) {
+        return FBWM_PLACE_COL_SMART;
+    }
+    if (strcasecmp(s, "CascadePlacement") == 0) {
+        return FBWM_PLACE_CASCADE;
+    }
+    if (strcasecmp(s, "UnderMousePlacement") == 0) {
+        return FBWM_PLACE_UNDER_MOUSE;
+    }
+    if (strcasecmp(s, "RowMinOverlapPlacement") == 0) {
+        return FBWM_PLACE_ROW_MIN_OVERLAP;
+    }
+    if (strcasecmp(s, "ColMinOverlapPlacement") == 0) {
+        return FBWM_PLACE_COL_MIN_OVERLAP;
+    }
+    if (strcasecmp(s, "AutotabPlacement") == 0) {
+        return FBWM_PLACE_AUTOTAB;
+    }
+    return FBWM_PLACE_ROW_SMART;
+}
+
+static const char *window_placement_str(enum fbwm_window_placement_strategy placement) {
+    switch (placement) {
+    case FBWM_PLACE_ROW_SMART:
+        return "RowSmartPlacement";
+    case FBWM_PLACE_COL_SMART:
+        return "ColSmartPlacement";
+    case FBWM_PLACE_CASCADE:
+        return "CascadePlacement";
+    case FBWM_PLACE_UNDER_MOUSE:
+        return "UnderMousePlacement";
+    case FBWM_PLACE_ROW_MIN_OVERLAP:
+        return "RowMinOverlapPlacement";
+    case FBWM_PLACE_COL_MIN_OVERLAP:
+        return "ColMinOverlapPlacement";
+    case FBWM_PLACE_AUTOTAB:
+        return "AutotabPlacement";
+    default:
+        return "RowSmartPlacement";
+    }
+}
+
+static enum fbwm_row_placement_direction parse_row_dir(const char *s) {
+    if (s != NULL && strcasecmp(s, "RightToLeft") == 0) {
+        return FBWM_ROW_RIGHT_TO_LEFT;
+    }
+    return FBWM_ROW_LEFT_TO_RIGHT;
+}
+
+static const char *row_dir_str(enum fbwm_row_placement_direction dir) {
+    return dir == FBWM_ROW_RIGHT_TO_LEFT ? "RightToLeft" : "LeftToRight";
+}
+
+static enum fbwm_col_placement_direction parse_col_dir(const char *s) {
+    if (s != NULL && strcasecmp(s, "BottomToTop") == 0) {
+        return FBWM_COL_BOTTOM_TO_TOP;
+    }
+    return FBWM_COL_TOP_TO_BOTTOM;
+}
+
+static const char *col_dir_str(enum fbwm_col_placement_direction dir) {
+    return dir == FBWM_COL_BOTTOM_TO_TOP ? "BottomToTop" : "TopToBottom";
+}
+
 static char *trim_inplace(char *s) {
     if (s == NULL) {
         return NULL;
@@ -377,13 +448,29 @@ bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_
             apply_workspace_names_from_init(&server->wm, workspace_names);
         }
 
+        const char *placement = fbwl_resource_db_get(&init, "session.screen0.windowPlacement");
+        if (placement != NULL) {
+            fbwm_core_set_window_placement(&server->wm, parse_window_placement(placement));
+        }
+        const char *row_dir = fbwl_resource_db_get(&init, "session.screen0.rowPlacementDirection");
+        if (row_dir != NULL) {
+            fbwm_core_set_row_placement_direction(&server->wm, parse_row_dir(row_dir));
+        }
+        const char *col_dir = fbwl_resource_db_get(&init, "session.screen0.colPlacementDirection");
+        if (col_dir != NULL) {
+            fbwm_core_set_col_placement_direction(&server->wm, parse_col_dir(col_dir));
+        }
+
         wlr_log(WLR_INFO,
-            "Init: focusModel=%s autoRaise=%d autoRaiseDelay=%d clickRaises=%d focusNewWindows=%d",
+            "Init: focusModel=%s autoRaise=%d autoRaiseDelay=%d clickRaises=%d focusNewWindows=%d windowPlacement=%s rowDir=%s colDir=%s",
             focus_model_str(server->focus.model),
             server->focus.auto_raise ? 1 : 0,
             server->focus.auto_raise_delay_ms,
             server->focus.click_raises ? 1 : 0,
-            server->focus.focus_new_windows ? 1 : 0);
+            server->focus.focus_new_windows ? 1 : 0,
+            window_placement_str(fbwm_core_window_placement(&server->wm)),
+            row_dir_str(fbwm_core_row_placement_direction(&server->wm)),
+            col_dir_str(fbwm_core_col_placement_direction(&server->wm)));
 
         if (!workspaces_set) {
             int ws = 0;

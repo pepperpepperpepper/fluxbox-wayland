@@ -9,6 +9,7 @@
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/xwayland.h>
 
+#include "wmcore/fbwm_output.h"
 #include "wayland/fbwl_server_internal.h"
 #include "wayland/fbwl_view.h"
 #include "wayland/fbwl_view_foreign_toplevel.h"
@@ -33,9 +34,47 @@ static const char *fbwl_wm_view_app_id(const struct fbwm_view *wm_view) {
     return fbwl_view_app_id(view);
 }
 
+static bool fbwl_wm_view_get_box(const struct fbwm_view *wm_view, struct fbwm_box *out) {
+    const struct fbwl_view *view = wm_view != NULL ? wm_view->userdata : NULL;
+    if (view == NULL || out == NULL) {
+        return false;
+    }
+
+    const int w = fbwl_view_current_width(view);
+    const int h = fbwl_view_current_height(view);
+    if (w < 1 || h < 1) {
+        return false;
+    }
+
+    int x = view->x;
+    int y = view->y;
+    int fw = w;
+    int fh = h;
+
+    if (view->decor_enabled && !view->fullscreen) {
+        const struct fbwl_decor_theme *theme = &view->server->decor_theme;
+        const int border = theme->border_width;
+        const int title_h = theme->title_height;
+
+        x -= border;
+        y -= title_h + border;
+        fw += 2 * border;
+        fh += title_h + 2 * border;
+    }
+
+    *out = (struct fbwm_box){
+        .x = x,
+        .y = y,
+        .width = fw,
+        .height = fh,
+    };
+    return true;
+}
+
 const struct fbwm_view_ops fbwl_wm_view_ops = {
     .focus = fbwl_wm_view_focus,
     .is_mapped = fbwl_wm_view_is_mapped,
+    .get_box = fbwl_wm_view_get_box,
     .title = fbwl_wm_view_title,
     .app_id = fbwl_wm_view_app_id,
 };
