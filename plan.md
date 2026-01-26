@@ -1271,7 +1271,7 @@ Goal: users can drop in their existing `~/.fluxbox` directory and get the same b
   - [x] Focus/raise/click behavior:
     - `session.screen0.focusModel` (ClickToFocus/MouseFocus/StrictMouseFocus; StrictMouseFocus currently behaves like MouseFocus).
     - `session.screen0.autoRaise` + `session.autoRaiseDelay` (auto-raise with delay on mouse-focus).
-    - `session.screen0.clickRaises` (raise on click even when focus doesn't change; titlebar-only when disabled).
+    - `session.screen0.clickRaises` (raise on click even when focus doesn't change; decor-only when disabled).
     - `session.screen0.focusNewWindows` (controls focusing newly-mapped views).
   - [ ] Placement policy, workspace names/behavior, toolbar/menu behavior, tab-related policy, etc.
   - Output mapping strategy for `screenN` resources (define how multiple Wayland outputs map to classic `screen0` semantics).
