@@ -22,6 +22,7 @@
 
 #include "wayland/fbwl_cursor.h"
 #include "wayland/fbwl_server_internal.h"
+#include "wayland/fbwl_tabs.h"
 #include "wayland/fbwl_util.h"
 #include "wayland/fbwl_view.h"
 
@@ -89,6 +90,8 @@ void focus_view(struct fbwl_view *view) {
     if (server != NULL && fbwl_session_lock_is_locked(&server->session_lock)) {
         return;
     }
+
+    fbwl_tabs_activate(view, "focus");
     struct wlr_seat *seat = server->seat;
 
     struct wlr_surface *surface = fbwl_view_wlr_surface(view);
@@ -214,6 +217,8 @@ void apply_workspace_visibility(struct fbwl_server *server, const char *why) {
         server->osd_ui.last_workspace = cur;
     }
 
+    fbwl_tabs_repair(server);
+
     for (struct fbwm_view *wm_view = server->wm.views.next;
             wm_view != &server->wm.views;
             wm_view = wm_view->next) {
@@ -222,7 +227,8 @@ void apply_workspace_visibility(struct fbwl_server *server, const char *why) {
             continue;
         }
 
-        const bool visible = fbwm_core_view_is_visible(&server->wm, wm_view);
+        const bool visible_ws = fbwm_core_view_is_visible(&server->wm, wm_view);
+        const bool visible = visible_ws && fbwl_tabs_view_is_active(view);
         wlr_scene_node_set_enabled(&view->scene_tree->node, visible);
 
         const char *title = NULL;

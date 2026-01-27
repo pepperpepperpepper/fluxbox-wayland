@@ -16,6 +16,7 @@
 #include "wmcore/fbwm_output.h"
 #include "wayland/fbwl_output.h"
 #include "wayland/fbwl_server_internal.h"
+#include "wayland/fbwl_tabs.h"
 #include "wayland/fbwl_ui_decor_theme.h"
 #include "wayland/fbwl_ui_text.h"
 
@@ -714,6 +715,7 @@ void fbwl_view_set_maximized(struct fbwl_view *view, bool maximized, struct wlr_
             wlr_xwayland_surface_configure(view->xwayland_surface, view->x, view->y,
                 (uint16_t)box.width, (uint16_t)box.height);
         }
+        fbwl_tabs_sync_geometry_from_view(view, true, box.width, box.height, "maximize-on");
         fbwl_view_foreign_update_output_from_position(view, output_layout);
         wlr_log(WLR_INFO, "Maximize: %s on w=%d h=%d", fbwl_view_display_title(view), box.width, box.height);
     } else {
@@ -741,6 +743,10 @@ void fbwl_view_set_maximized(struct fbwl_view *view, bool maximized, struct wlr_
                 (uint16_t)(view->saved_w > 0 ? view->saved_w : 1),
                 (uint16_t)(view->saved_h > 0 ? view->saved_h : 1));
         }
+        fbwl_tabs_sync_geometry_from_view(view, true,
+            view->saved_w > 0 ? view->saved_w : fbwl_view_current_width(view),
+            view->saved_h > 0 ? view->saved_h : fbwl_view_current_height(view),
+            "maximize-off");
         fbwl_view_foreign_update_output_from_position(view, output_layout);
         wlr_log(WLR_INFO, "Maximize: %s off", fbwl_view_display_title(view));
     }

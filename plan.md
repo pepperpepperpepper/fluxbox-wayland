@@ -1276,14 +1276,17 @@ Goal: users can drop in their existing `~/.fluxbox` directory and get the same b
   - [ ] Placement policy, workspace names/behavior, toolbar/menu behavior, tab-related policy, etc.:
     - [x] Workspace names: `session.screen0.workspaceNames` (drives toolbar workspace labels + workspace OSD; numbers remain the fallback).
     - [x] Window placement strategy: `session.screen0.windowPlacement` + row/col direction resources.
-      - Supports Row/Col Smart + MinOverlap + Cascade + UnderMouse; Autotab currently falls back to RowSmart until tabs exist.
+      - Supports Row/Col Smart + MinOverlap + Cascade + UnderMouse; Autotab tabs new windows to the currently focused one.
 	    - [x] Toolbar behavior: `session.screen0.toolbar.*` (visible/placement/autoHide/autoRaise/width/height/tools).
 	      - Implemented: `visible`, `placement`, `widthPercent`, `height`, `tools` (workspace/iconbar/systemtray/clock), `autoHide`, `autoRaise` (uses `session.autoRaiseDelay`).
 	      - Note: Left/Right placements currently map to top/bottom-aligned horizontal placement; true vertical toolbars are not implemented yet.
 	      - Smoke: extended `scripts/fbwl-smoke-config-dir.sh` to validate placement/size/tools plus autoHide/autoRaise logs.
 	    - [x] Menu behavior: `session.screen0.menuDelay` (hover-to-open submenus after delay).
 	      - Smoke: extended `scripts/fbwl-smoke-config-dir.sh` to validate delayed submenu open (via `fbwl-input-injector motion`).
-	    - [ ] Tab-related policy: `session.screen0.tabs.*` (where applicable for Wayland UI).
+		    - [x] Tab-related policy: `session.screen0.tabs.*` + `session.screen0.tab.*` + `session.tabsAttachArea` + `session.tabPadding` (MVP).
+		      - Implemented: AutotabPlacement attaches new windows to the currently focused one and keeps the group together (workspace/sticky + move/resize/maximize sync).
+		      - Init parsing/logging: `tabs.intitlebar/maxOver/usePixmap`, `tab.placement/width`, `tabFocusModel`, `tabsAttachArea`, `tabPadding`.
+		      - Smoke: extended `scripts/fbwl-smoke-config-dir.sh` to assert init parsing + `Tabs: attach reason=autotab`.
 	  - Output mapping strategy for `screenN` resources (define how multiple Wayland outputs map to classic `screen0` semantics).
 	- [ ] Extend `keys` support to full classic syntax and command set:
   - Include mouse bindings and the commonly used commands beyond the current subset.

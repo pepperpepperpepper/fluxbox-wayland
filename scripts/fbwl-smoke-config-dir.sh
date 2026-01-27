@@ -24,6 +24,7 @@ cleanup() {
   rm -rf "$CFGDIR" 2>/dev/null || true
   rm -f "$MARK_DEFAULT" "$MARK_OVERRIDE" "$MARK_MENU" 2>/dev/null || true
   if [[ -n "${APP_PID:-}" ]]; then kill "$APP_PID" 2>/dev/null || true; fi
+  if [[ -n "${TAB_PID:-}" ]]; then kill "$TAB_PID" 2>/dev/null || true; fi
   if [[ -n "${FBW_PID:-}" ]]; then kill "$FBW_PID" 2>/dev/null || true; fi
   wait 2>/dev/null || true
 }
@@ -35,6 +36,7 @@ rm -f "$MARK_DEFAULT" "$MARK_OVERRIDE" "$MARK_MENU"
 cat >"$CFGDIR/init" <<EOF
 session.autoRaiseDelay: 50
 session.screen0.workspaces: 3
+session.screen0.windowPlacement: AutotabPlacement
 session.keyFile: mykeys
 session.appsFile: myapps
 session.styleFile: mystyle
@@ -47,6 +49,14 @@ session.screen0.toolbar.tools: workspacename,clock
 session.screen0.toolbar.autoHide: true
 session.screen0.toolbar.autoRaise: true
 session.screen0.menuDelay: 250
+session.screen0.tabs.intitlebar: false
+session.screen0.tabs.maxOver: true
+session.screen0.tabs.usePixmap: false
+session.screen0.tab.placement: TopRight
+session.screen0.tab.width: 123
+session.tabPadding: 4
+session.tabsAttachArea: Titlebar
+session.screen0.tabFocusModel: MouseTabFocus
 EOF
 
 cat >"$CFGDIR/mykeys" <<EOF
@@ -88,6 +98,7 @@ timeout 5 bash -c "until rg -q 'Style: loaded ' '$LOG'; do sleep 0.05; done"
 timeout 5 bash -c "until rg -q 'Menu: loaded ' '$LOG'; do sleep 0.05; done"
 timeout 5 bash -c "until rg -q 'Toolbar: built ' '$LOG'; do sleep 0.05; done"
 timeout 5 bash -c "until rg -q 'Toolbar: position ' '$LOG'; do sleep 0.05; done"
+rg -q "Init: tabs intitlebar=0 maxOver=1 usePixmap=0 placement=TopRight width=123 padding=4 attachArea=Titlebar tabFocusModel=MouseTabFocus" "$LOG"
 
 OUT_GEOM=$(
   rg -m1 'Output: ' "$LOG" \
@@ -201,5 +212,10 @@ if [[ -f "$MARK_DEFAULT" ]]; then
   echo "expected config-dir keys binding to override default terminal binding (MARK_DEFAULT exists: $MARK_DEFAULT)" >&2
   exit 1
 fi
+
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-smoke-client --socket "$SOCKET" --title cfgdir-tab --app-id fbwl-config-dir-tab --stay-ms 3000 >/dev/null 2>&1 &
+TAB_PID=$!
+timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Tabs: attach reason=autotab'; do sleep 0.05; done"
 
 echo "ok: config-dir smoke passed (socket=$SOCKET log=$LOG cfgdir=$CFGDIR)"

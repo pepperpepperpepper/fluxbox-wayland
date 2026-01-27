@@ -8,6 +8,7 @@
 #include <wlr/util/edges.h>
 #include <wlr/xwayland.h>
 
+#include "wayland/fbwl_tabs.h"
 #include "wayland/fbwl_view.h"
 
 void fbwl_grab_update(struct fbwl_grab *grab, struct wlr_cursor *cursor) {
@@ -35,6 +36,7 @@ void fbwl_grab_update(struct fbwl_grab *grab, struct wlr_cursor *cursor) {
                     (uint16_t)w, (uint16_t)h);
             }
         }
+        fbwl_tabs_sync_geometry_from_view(view, false, 0, 0, "move");
         return;
     }
 
@@ -88,7 +90,7 @@ void fbwl_grab_update(struct fbwl_grab *grab, struct wlr_cursor *cursor) {
             wlr_xwayland_surface_configure(view->xwayland_surface, view->x, view->y,
                 (uint16_t)w, (uint16_t)h);
         }
+        fbwl_tabs_sync_geometry_from_view(view, true, w, h, "resize");
         return;
     }
 }
-

@@ -10,6 +10,7 @@
 #include <wlr/xwayland.h>
 
 #include "wayland/fbwl_apps_rules.h"
+#include "wayland/fbwl_tabs.h"
 #include "wayland/fbwl_util.h"
 #include "wayland/fbwl_view.h"
 #include "wayland/fbwl_view_foreign_toplevel.h"
@@ -51,6 +52,7 @@ void fbwl_xwayland_handle_new_surface(struct fbwl_server *server, struct wlr_xwa
     view->server = server;
     view->type = FBWL_VIEW_XWAYLAND;
     view->xwayland_surface = xsurface;
+    wl_list_init(&view->tab_link);
     xsurface->data = view;
 
     fbwm_view_init(&view->wm_view, wm_view_ops, view);
@@ -90,6 +92,17 @@ void fbwl_xwayland_handle_surface_map(struct fbwl_view *view,
         return;
     }
 
+    struct fbwl_view *autotab_anchor = NULL;
+    if (!view->placed && fbwm_core_window_placement(wm) == FBWM_PLACE_AUTOTAB) {
+        struct fbwm_view *focused = wm->focused;
+        struct fbwl_view *anchor = focused != NULL ? focused->userdata : NULL;
+        if (anchor != NULL && anchor->mapped && !anchor->minimized) {
+            if (fbwl_tabs_attach(view, anchor, "autotab")) {
+                autotab_anchor = anchor;
+            }
+        }
+    }
+
     if (!view->placed) {
         fbwl_view_place_initial(view, wm, output_layout, outputs, cursor_x, cursor_y);
         view->placed = true;
@@ -107,7 +120,12 @@ void fbwl_xwayland_handle_surface_map(struct fbwl_view *view,
     if (view->foreign_toplevel != NULL) {
         wlr_foreign_toplevel_handle_v1_set_minimized(view->foreign_toplevel, false);
     }
-    view->wm_view.workspace = fbwm_core_workspace_current(wm);
+    if (autotab_anchor != NULL) {
+        view->wm_view.workspace = autotab_anchor->wm_view.workspace;
+        view->wm_view.sticky = autotab_anchor->wm_view.sticky;
+    } else {
+        view->wm_view.workspace = fbwm_core_workspace_current(wm);
+    }
 
     const struct fbwl_apps_rule *apps_rule = NULL;
     size_t apps_rule_idx = 0;
@@ -144,6 +162,11 @@ void fbwl_xwayland_handle_surface_map(struct fbwl_view *view,
                 apps_rule->set_maximized ? (apps_rule->maximized ? 1 : 0) : -1,
                 apps_rule->set_fullscreen ? (apps_rule->fullscreen ? 1 : 0) : -1);
         }
+    }
+
+    if (autotab_anchor != NULL) {
+        view->wm_view.workspace = autotab_anchor->wm_view.workspace;
+        view->wm_view.sticky = autotab_anchor->wm_view.sticky;
     }
 
     fbwm_core_view_map(wm, &view->wm_view);
@@ -338,6 +361,8 @@ void fbwl_xwayland_handle_surface_destroy(struct fbwl_view *view,
     if (view == NULL || wm == NULL) {
         return;
     }
+
+    fbwl_tabs_detach(view, "destroy");
 
     fbwl_cleanup_listener(&view->map);
     fbwl_cleanup_listener(&view->unmap);

@@ -31,6 +31,7 @@
 #include "wayland/fbwl_menu.h"
 #include "wayland/fbwl_ui_menu.h"
 #include "wayland/fbwl_ui_toolbar.h"
+#include "wayland/fbwl_tabs.h"
 #include "wayland/fbwl_ui_cmd_dialog.h"
 #include "wayland/fbwl_ui_decor_theme.h"
 #include "wayland/fbwl_ui_osd.h"
@@ -148,6 +149,8 @@ struct fbwl_server {
     struct fbwl_toolbar_ui toolbar_ui;
     struct fbwl_cmd_dialog_ui cmd_dialog_ui;
     struct fbwl_osd_ui osd_ui;
+    struct fbwl_tabs_config tabs;
+    struct wl_list tab_groups;
 
     struct wlr_output_layout *output_layout;
     struct wlr_output_manager_v1 *output_manager;

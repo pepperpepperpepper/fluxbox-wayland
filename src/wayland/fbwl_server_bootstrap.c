@@ -165,6 +165,52 @@ static enum fbwl_toolbar_placement parse_toolbar_placement(const char *s) {
     return FBWL_TOOLBAR_PLACEMENT_BOTTOM_CENTER;
 }
 
+static enum fbwl_tab_focus_model parse_tab_focus_model(const char *s) {
+    if (s == NULL) {
+        return FBWL_TAB_FOCUS_CLICK;
+    }
+    if (strcasecmp(s, "MouseTabFocus") == 0) {
+        return FBWL_TAB_FOCUS_MOUSE;
+    }
+    if (strcasecmp(s, "ClickTabFocus") == 0) {
+        return FBWL_TAB_FOCUS_CLICK;
+    }
+    return FBWL_TAB_FOCUS_CLICK;
+}
+
+static const char *tab_focus_model_str(enum fbwl_tab_focus_model model) {
+    switch (model) {
+    case FBWL_TAB_FOCUS_MOUSE:
+        return "MouseTabFocus";
+    case FBWL_TAB_FOCUS_CLICK:
+    default:
+        return "ClickTabFocus";
+    }
+}
+
+static enum fbwl_tabs_attach_area parse_tabs_attach_area(const char *s) {
+    if (s == NULL) {
+        return FBWL_TABS_ATTACH_WINDOW;
+    }
+    if (strcasecmp(s, "Titlebar") == 0) {
+        return FBWL_TABS_ATTACH_TITLEBAR;
+    }
+    if (strcasecmp(s, "Window") == 0) {
+        return FBWL_TABS_ATTACH_WINDOW;
+    }
+    return FBWL_TABS_ATTACH_WINDOW;
+}
+
+static const char *tabs_attach_area_str(enum fbwl_tabs_attach_area area) {
+    switch (area) {
+    case FBWL_TABS_ATTACH_TITLEBAR:
+        return "Titlebar";
+    case FBWL_TABS_ATTACH_WINDOW:
+    default:
+        return "Window";
+    }
+}
+
 static const char *toolbar_placement_str(enum fbwl_toolbar_placement placement) {
     switch (placement) {
     case FBWL_TOOLBAR_PLACEMENT_BOTTOM_LEFT:
@@ -383,6 +429,7 @@ bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_
 #ifdef HAVE_SYSTEMD
     wl_list_init(&server->sni.items);
 #endif
+    wl_list_init(&server->tab_groups);
     server->focus = (struct fbwl_focus_config){
         .model = FBWL_FOCUS_MODEL_CLICK_TO_FOCUS,
         .auto_raise = true,
@@ -410,6 +457,8 @@ bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_
     server->menu_ui.submenu_timer = NULL;
     server->menu_ui.hovered_idx = -1;
     server->menu_ui.submenu_pending_idx = 0;
+
+    fbwl_tabs_init_defaults(&server->tabs);
 
     server->wl_display = wl_display_create();
     if (server->wl_display == NULL) {
@@ -644,6 +693,34 @@ bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_
             server->menu_ui.menu_delay_ms = int_val;
         }
 
+        if (fbwl_resource_db_get_bool(&init, "session.screen0.tabs.intitlebar", &bool_val)) {
+            server->tabs.intitlebar = bool_val;
+        }
+        if (fbwl_resource_db_get_bool(&init, "session.screen0.tabs.maxOver", &bool_val)) {
+            server->tabs.max_over = bool_val;
+        }
+        if (fbwl_resource_db_get_bool(&init, "session.screen0.tabs.usePixmap", &bool_val)) {
+            server->tabs.use_pixmap = bool_val;
+        }
+        const char *tab_place = fbwl_resource_db_get(&init, "session.screen0.tab.placement");
+        if (tab_place != NULL) {
+            server->tabs.placement = parse_toolbar_placement(tab_place);
+        }
+        if (fbwl_resource_db_get_int(&init, "session.screen0.tab.width", &int_val) && int_val >= 0) {
+            server->tabs.width_px = int_val;
+        }
+        if (fbwl_resource_db_get_int(&init, "session.tabPadding", &int_val) && int_val >= 0) {
+            server->tabs.padding_px = int_val;
+        }
+        const char *attach_area = fbwl_resource_db_get(&init, "session.tabsAttachArea");
+        if (attach_area != NULL) {
+            server->tabs.attach_area = parse_tabs_attach_area(attach_area);
+        }
+        const char *tab_focus = fbwl_resource_db_get(&init, "session.screen0.tabFocusModel");
+        if (tab_focus != NULL) {
+            server->tabs.focus_model = parse_tab_focus_model(tab_focus);
+        }
+
         wlr_log(WLR_INFO,
             "Init: focusModel=%s autoRaise=%d autoRaiseDelay=%d clickRaises=%d focusNewWindows=%d windowPlacement=%s rowDir=%s colDir=%s",
             focus_model_str(server->focus.model),
@@ -666,6 +743,17 @@ bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_
             server->toolbar_ui.tools);
 
         wlr_log(WLR_INFO, "Init: menuDelay=%d", server->menu_ui.menu_delay_ms);
+
+        wlr_log(WLR_INFO,
+            "Init: tabs intitlebar=%d maxOver=%d usePixmap=%d placement=%s width=%d padding=%d attachArea=%s tabFocusModel=%s",
+            server->tabs.intitlebar ? 1 : 0,
+            server->tabs.max_over ? 1 : 0,
+            server->tabs.use_pixmap ? 1 : 0,
+            toolbar_placement_str(server->tabs.placement),
+            server->tabs.width_px,
+            server->tabs.padding_px,
+            tabs_attach_area_str(server->tabs.attach_area),
+            tab_focus_model_str(server->tabs.focus_model));
 
         if (!workspaces_set) {
             int ws = 0;

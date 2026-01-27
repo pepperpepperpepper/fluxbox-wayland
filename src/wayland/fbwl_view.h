@@ -10,6 +10,7 @@
 
 struct fbwl_decor_theme;
 struct fbwl_server;
+struct fbwl_tab_group;
 
 struct wlr_foreign_toplevel_handle_v1;
 struct wlr_output;
@@ -86,6 +87,9 @@ struct fbwl_view {
 
     bool apps_rules_applied;
     struct fbwm_view wm_view;
+
+    struct fbwl_tab_group *tab_group;
+    struct wl_list tab_link;
 };
 
 enum fbwl_decor_hit_kind {

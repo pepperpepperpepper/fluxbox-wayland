@@ -331,13 +331,15 @@ fluxbox_wayland_SOURCES = \
 		src/wayland/fbwl_ui_cmd_dialog.h \
 		src/wayland/fbwl_ui_menu.c \
 		src/wayland/fbwl_ui_menu.h \
-		src/wayland/fbwl_ui_osd.c \
-		src/wayland/fbwl_ui_osd.h \
-		src/wayland/fbwl_ui_toolbar.c \
-		src/wayland/fbwl_ui_toolbar.h \
-		src/wayland/fbwl_ui_text.c \
-		src/wayland/fbwl_ui_text.h \
-	src/wayland/fbwl_keys_parse.c \
+			src/wayland/fbwl_ui_osd.c \
+			src/wayland/fbwl_ui_osd.h \
+			src/wayland/fbwl_ui_toolbar.c \
+			src/wayland/fbwl_ui_toolbar.h \
+			src/wayland/fbwl_tabs.c \
+			src/wayland/fbwl_tabs.h \
+			src/wayland/fbwl_ui_text.c \
+			src/wayland/fbwl_ui_text.h \
+		src/wayland/fbwl_keys_parse.c \
 	src/wayland/fbwl_keys_parse.h \
 	src/wayland/fbwl_menu.c \
 	src/wayland/fbwl_menu.h \
