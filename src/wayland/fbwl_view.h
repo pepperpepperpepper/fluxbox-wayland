@@ -34,6 +34,7 @@ struct fbwl_view {
     struct wlr_xdg_toplevel *xdg_toplevel;
     struct wlr_xwayland_surface *xwayland_surface;
     struct wlr_scene_tree *scene_tree;
+    struct wlr_scene_tree *base_layer;
     bool decor_enabled;
     bool decor_active;
     struct wlr_scene_tree *decor_tree;
@@ -86,6 +87,7 @@ struct fbwl_view {
     int saved_w, saved_h;
 
     bool apps_rules_applied;
+    int apps_group_id;
     struct fbwm_view wm_view;
 
     struct fbwl_tab_group *tab_group;

@@ -103,23 +103,6 @@ void fbwl_xwayland_handle_surface_map(struct fbwl_view *view,
         }
     }
 
-    if (!view->placed) {
-        fbwl_view_place_initial(view, wm, output_layout, outputs, cursor_x, cursor_y);
-        view->placed = true;
-    }
-
-    const int w = fbwl_view_current_width(view);
-    const int h = fbwl_view_current_height(view);
-    if (w > 0 && h > 0) {
-        wlr_xwayland_surface_configure(view->xwayland_surface, view->x, view->y,
-            (uint16_t)w, (uint16_t)h);
-    }
-
-    view->mapped = true;
-    view->minimized = false;
-    if (view->foreign_toplevel != NULL) {
-        wlr_foreign_toplevel_handle_v1_set_minimized(view->foreign_toplevel, false);
-    }
     if (autotab_anchor != NULL) {
         view->wm_view.workspace = autotab_anchor->wm_view.workspace;
         view->wm_view.sticky = autotab_anchor->wm_view.sticky;
@@ -152,7 +135,7 @@ void fbwl_xwayland_handle_surface_map(struct fbwl_view *view,
             view->apps_rules_applied = true;
 
             wlr_log(WLR_INFO,
-                "Apps: applied title=%s app_id=%s workspace_id=%d sticky=%d jump=%d minimized=%d maximized=%d fullscreen=%d",
+                "Apps: applied title=%s app_id=%s workspace_id=%d sticky=%d jump=%d minimized=%d maximized=%d fullscreen=%d group_id=%d deco=%d layer=%d",
                 fbwl_view_display_title(view),
                 fbwl_view_app_id(view) != NULL ? fbwl_view_app_id(view) : "(no-app-id)",
                 apps_rule->set_workspace ? apps_rule->workspace : -1,
@@ -160,13 +143,34 @@ void fbwl_xwayland_handle_surface_map(struct fbwl_view *view,
                 apps_rule->set_jump ? (apps_rule->jump ? 1 : 0) : -1,
                 apps_rule->set_minimized ? (apps_rule->minimized ? 1 : 0) : -1,
                 apps_rule->set_maximized ? (apps_rule->maximized ? 1 : 0) : -1,
-                apps_rule->set_fullscreen ? (apps_rule->fullscreen ? 1 : 0) : -1);
+                apps_rule->set_fullscreen ? (apps_rule->fullscreen ? 1 : 0) : -1,
+                apps_rule->group_id,
+                apps_rule->set_decor ? (apps_rule->decor_enabled ? 1 : 0) : -1,
+                apps_rule->set_layer ? apps_rule->layer : -1);
         }
     }
 
     if (autotab_anchor != NULL) {
         view->wm_view.workspace = autotab_anchor->wm_view.workspace;
         view->wm_view.sticky = autotab_anchor->wm_view.sticky;
+    }
+
+    if (!view->placed) {
+        fbwl_view_place_initial(view, wm, output_layout, outputs, cursor_x, cursor_y);
+        view->placed = true;
+    }
+
+    const int w = fbwl_view_current_width(view);
+    const int h = fbwl_view_current_height(view);
+    if (w > 0 && h > 0) {
+        wlr_xwayland_surface_configure(view->xwayland_surface, view->x, view->y,
+            (uint16_t)w, (uint16_t)h);
+    }
+
+    view->mapped = true;
+    view->minimized = false;
+    if (view->foreign_toplevel != NULL) {
+        wlr_foreign_toplevel_handle_v1_set_minimized(view->foreign_toplevel, false);
     }
 
     fbwm_core_view_map(wm, &view->wm_view);
@@ -232,6 +236,7 @@ void fbwl_xwayland_handle_surface_associate(struct fbwl_view *view,
     if (view->scene_tree == NULL) {
         return;
     }
+    view->base_layer = parent;
     (void)wlr_scene_surface_create(view->scene_tree, xsurface->surface);
     view->scene_tree->node.data = view;
     fbwl_view_decor_create(view, view->server != NULL ? decor_theme : NULL);

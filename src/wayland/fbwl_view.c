@@ -812,8 +812,9 @@ void fbwl_view_set_fullscreen(struct fbwl_view *view, bool fullscreen, struct wl
     } else {
         view->fullscreen = false;
         fbwl_view_decor_apply_enabled(view);
-        if (layer_normal != NULL && view->scene_tree != NULL) {
-            wlr_scene_node_reparent(&view->scene_tree->node, layer_normal);
+        struct wlr_scene_tree *restore_layer = view->base_layer != NULL ? view->base_layer : layer_normal;
+        if (restore_layer != NULL && view->scene_tree != NULL) {
+            wlr_scene_node_reparent(&view->scene_tree->node, restore_layer);
         }
         if (view->type == FBWL_VIEW_XDG) {
             wlr_xdg_toplevel_set_fullscreen(view->xdg_toplevel, false);

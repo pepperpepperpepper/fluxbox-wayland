@@ -83,6 +83,7 @@ void fbwl_xdg_shell_handle_new_toplevel(struct fbwl_server *server, struct wlr_x
     view->scene_tree = wlr_scene_xdg_surface_create(toplevel_parent, xdg_toplevel->base);
     view->scene_tree->node.data = view;
     xdg_toplevel->base->data = view->scene_tree;
+    view->base_layer = toplevel_parent;
     fbwl_view_decor_create(view, decor_theme);
 
     fbwm_view_init(&view->wm_view, wm_view_ops, view);
@@ -139,15 +140,6 @@ void fbwl_xdg_shell_handle_toplevel_map(struct fbwl_view *view,
         }
     }
 
-    if (!view->placed) {
-        fbwl_view_place_initial(view, wm, output_layout, outputs, cursor_x, cursor_y);
-        view->placed = true;
-    }
-    view->mapped = true;
-    view->minimized = false;
-    if (view->foreign_toplevel != NULL) {
-        wlr_foreign_toplevel_handle_v1_set_minimized(view->foreign_toplevel, false);
-    }
     if (autotab_anchor != NULL) {
         view->wm_view.workspace = autotab_anchor->wm_view.workspace;
         view->wm_view.sticky = autotab_anchor->wm_view.sticky;
@@ -180,7 +172,7 @@ void fbwl_xdg_shell_handle_toplevel_map(struct fbwl_view *view,
             view->apps_rules_applied = true;
 
             wlr_log(WLR_INFO,
-                "Apps: applied title=%s app_id=%s workspace_id=%d sticky=%d jump=%d minimized=%d maximized=%d fullscreen=%d",
+                "Apps: applied title=%s app_id=%s workspace_id=%d sticky=%d jump=%d minimized=%d maximized=%d fullscreen=%d group_id=%d deco=%d layer=%d",
                 fbwl_view_display_title(view),
                 fbwl_view_app_id(view) != NULL ? fbwl_view_app_id(view) : "(no-app-id)",
                 apps_rule->set_workspace ? apps_rule->workspace : -1,
@@ -188,13 +180,26 @@ void fbwl_xdg_shell_handle_toplevel_map(struct fbwl_view *view,
                 apps_rule->set_jump ? (apps_rule->jump ? 1 : 0) : -1,
                 apps_rule->set_minimized ? (apps_rule->minimized ? 1 : 0) : -1,
                 apps_rule->set_maximized ? (apps_rule->maximized ? 1 : 0) : -1,
-                apps_rule->set_fullscreen ? (apps_rule->fullscreen ? 1 : 0) : -1);
+                apps_rule->set_fullscreen ? (apps_rule->fullscreen ? 1 : 0) : -1,
+                apps_rule->group_id,
+                apps_rule->set_decor ? (apps_rule->decor_enabled ? 1 : 0) : -1,
+                apps_rule->set_layer ? apps_rule->layer : -1);
         }
     }
 
     if (autotab_anchor != NULL) {
         view->wm_view.workspace = autotab_anchor->wm_view.workspace;
         view->wm_view.sticky = autotab_anchor->wm_view.sticky;
+    }
+
+    if (!view->placed) {
+        fbwl_view_place_initial(view, wm, output_layout, outputs, cursor_x, cursor_y);
+        view->placed = true;
+    }
+    view->mapped = true;
+    view->minimized = false;
+    if (view->foreign_toplevel != NULL) {
+        wlr_foreign_toplevel_handle_v1_set_minimized(view->foreign_toplevel, false);
     }
 
     fbwm_core_view_map(wm, &view->wm_view);

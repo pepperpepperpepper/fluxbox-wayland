@@ -57,7 +57,18 @@ static bool apps_rule_match_set_regex(struct fbwl_apps_rule_match *match, const 
         return false;
     }
 
-    int rc = regcomp(&match->regex, match->pattern, REG_EXTENDED | REG_NOSUB);
+    const size_t pat_len = strlen(pattern);
+    char *anchored = malloc(pat_len + 5);
+    if (anchored == NULL) {
+        free(match->pattern);
+        match->pattern = NULL;
+        match->set = false;
+        return false;
+    }
+    snprintf(anchored, pat_len + 5, "^(%s)$", pattern);
+
+    int rc = regcomp(&match->regex, anchored, REG_EXTENDED | REG_NOSUB);
+    free(anchored);
     if (rc != 0) {
         char errbuf[256];
         errbuf[0] = '\0';
@@ -71,6 +82,97 @@ static bool apps_rule_match_set_regex(struct fbwl_apps_rule_match *match, const 
 
     match->regex_valid = true;
     return true;
+}
+
+static bool parse_layer(const char *s, int *out) {
+    if (s == NULL || out == NULL) {
+        return false;
+    }
+
+    char *endptr = NULL;
+    long n = strtol(s, &endptr, 10);
+    if (endptr != s && endptr != NULL && *endptr == '\0') {
+        *out = (int)n;
+        return true;
+    }
+
+    const char *v = s;
+    if (strcasecmp(v, "menu") == 0) {
+        *out = 0;
+        return true;
+    }
+    if (strcasecmp(v, "abovedock") == 0) {
+        *out = 2;
+        return true;
+    }
+    if (strcasecmp(v, "dock") == 0) {
+        *out = 4;
+        return true;
+    }
+    if (strcasecmp(v, "top") == 0) {
+        *out = 6;
+        return true;
+    }
+    if (strcasecmp(v, "normal") == 0) {
+        *out = 8;
+        return true;
+    }
+    if (strcasecmp(v, "bottom") == 0) {
+        *out = 10;
+        return true;
+    }
+    if (strcasecmp(v, "desktop") == 0) {
+        *out = 12;
+        return true;
+    }
+    if (strcasecmp(v, "overlay") == 0) {
+        *out = 0;
+        return true;
+    }
+    if (strcasecmp(v, "background") == 0) {
+        *out = 12;
+        return true;
+    }
+    return false;
+}
+
+static void apps_rule_apply_attrs(struct fbwl_apps_rule *rule, const struct fbwl_apps_rule *attrs) {
+    if (rule == NULL || attrs == NULL) {
+        return;
+    }
+
+    if (attrs->set_workspace) {
+        rule->set_workspace = true;
+        rule->workspace = attrs->workspace;
+    }
+    if (attrs->set_sticky) {
+        rule->set_sticky = true;
+        rule->sticky = attrs->sticky;
+    }
+    if (attrs->set_jump) {
+        rule->set_jump = true;
+        rule->jump = attrs->jump;
+    }
+    if (attrs->set_minimized) {
+        rule->set_minimized = true;
+        rule->minimized = attrs->minimized;
+    }
+    if (attrs->set_maximized) {
+        rule->set_maximized = true;
+        rule->maximized = attrs->maximized;
+    }
+    if (attrs->set_fullscreen) {
+        rule->set_fullscreen = true;
+        rule->fullscreen = attrs->fullscreen;
+    }
+    if (attrs->set_decor) {
+        rule->set_decor = true;
+        rule->decor_enabled = attrs->decor_enabled;
+    }
+    if (attrs->set_layer) {
+        rule->set_layer = true;
+        rule->layer = attrs->layer;
+    }
 }
 
 static bool parse_yes_no(const char *s, bool *out) {
@@ -258,7 +360,12 @@ bool fbwl_apps_rules_load_file(struct fbwl_apps_rule **rules, size_t *rule_count
 
     size_t before = *rule_count;
     bool in_app = false;
+    bool in_group = false;
     struct fbwl_apps_rule cur = {0};
+    struct fbwl_apps_rule group_attrs = {0};
+    size_t group_start = 0;
+    int group_id = 0;
+    int next_group_id = 1;
 
     char *line = NULL;
     size_t cap = 0;
@@ -302,7 +409,15 @@ bool fbwl_apps_rules_load_file(struct fbwl_apps_rule **rules, size_t *rule_count
             continue;
         }
 
-        if (!in_app && (strcasecmp(key, "app") == 0 || strcasecmp(key, "transient") == 0)) {
+        if (!in_app && !in_group && strcasecmp(key, "group") == 0) {
+            in_group = true;
+            memset(&group_attrs, 0, sizeof(group_attrs));
+            group_start = *rule_count;
+            group_id = next_group_id++;
+            continue;
+        }
+
+        if (!in_app && !in_group && (strcasecmp(key, "app") == 0 || strcasecmp(key, "transient") == 0)) {
             memset(&cur, 0, sizeof(cur));
             in_app = true;
 
@@ -330,11 +445,52 @@ bool fbwl_apps_rules_load_file(struct fbwl_apps_rule **rules, size_t *rule_count
             continue;
         }
 
-        if (!in_app) {
+        if (in_group) {
+            if (strcasecmp(key, "app") == 0 || strcasecmp(key, "transient") == 0) {
+                struct fbwl_apps_rule pat = {0};
+                pat.group_id = group_id;
+
+                const char *rest = close + 1;
+                const char *p = rest;
+                while (p != NULL) {
+                    const char *open_paren = strchr(p, '(');
+                    if (open_paren == NULL) {
+                        break;
+                    }
+                    const char *close_paren = strchr(open_paren + 1, ')');
+                    if (close_paren == NULL) {
+                        break;
+                    }
+                    size_t tlen = (size_t)(close_paren - (open_paren + 1));
+                    char *term = malloc(tlen + 1);
+                    if (term != NULL) {
+                        memcpy(term, open_paren + 1, tlen);
+                        term[tlen] = '\0';
+                        apps_rule_parse_match_term(&pat, term);
+                        free(term);
+                    }
+                    p = close_paren + 1;
+                }
+                (void)apps_rules_add(rules, rule_count, &pat);
+                continue;
+            }
+
+            if (strcasecmp(key, "end") == 0) {
+                for (size_t i = group_start; i < *rule_count; i++) {
+                    if ((*rules)[i].group_id == group_id) {
+                        apps_rule_apply_attrs(&(*rules)[i], &group_attrs);
+                    }
+                }
+                in_group = false;
+                continue;
+            }
+        }
+
+        if (!in_app && !in_group) {
             continue;
         }
 
-        if (strcasecmp(key, "end") == 0) {
+        if (in_app && strcasecmp(key, "end") == 0) {
             (void)apps_rules_add(rules, rule_count, &cur);
             in_app = false;
             continue;
@@ -348,6 +504,8 @@ bool fbwl_apps_rules_load_file(struct fbwl_apps_rule **rules, size_t *rule_count
             label = trim_inplace(brace_open + 1);
         }
 
+        struct fbwl_apps_rule *target = in_group ? &group_attrs : &cur;
+
         if (strcasecmp(key, "workspace") == 0) {
             if (label == NULL || *label == '\0') {
                 continue;
@@ -357,16 +515,16 @@ bool fbwl_apps_rules_load_file(struct fbwl_apps_rule **rules, size_t *rule_count
             if (endptr == label) {
                 continue;
             }
-            cur.set_workspace = true;
-            cur.workspace = (int)ws;
+            target->set_workspace = true;
+            target->workspace = (int)ws;
             continue;
         }
 
         if (strcasecmp(key, "sticky") == 0) {
             bool v;
             if (label != NULL && parse_yes_no(label, &v)) {
-                cur.set_sticky = true;
-                cur.sticky = v;
+                target->set_sticky = true;
+                target->sticky = v;
             }
             continue;
         }
@@ -374,8 +532,8 @@ bool fbwl_apps_rules_load_file(struct fbwl_apps_rule **rules, size_t *rule_count
         if (strcasecmp(key, "jump") == 0) {
             bool v;
             if (label != NULL && parse_yes_no(label, &v)) {
-                cur.set_jump = true;
-                cur.jump = v;
+                target->set_jump = true;
+                target->jump = v;
             }
             continue;
         }
@@ -383,8 +541,8 @@ bool fbwl_apps_rules_load_file(struct fbwl_apps_rule **rules, size_t *rule_count
         if (strcasecmp(key, "minimized") == 0) {
             bool v;
             if (label != NULL && parse_yes_no(label, &v)) {
-                cur.set_minimized = true;
-                cur.minimized = v;
+                target->set_minimized = true;
+                target->minimized = v;
             }
             continue;
         }
@@ -402,16 +560,38 @@ bool fbwl_apps_rules_load_file(struct fbwl_apps_rule **rules, size_t *rule_count
             } else {
                 continue;
             }
-            cur.set_maximized = true;
-            cur.maximized = v;
+            target->set_maximized = true;
+            target->maximized = v;
             continue;
         }
 
         if (strcasecmp(key, "fullscreen") == 0) {
             bool v;
             if (label != NULL && parse_yes_no(label, &v)) {
-                cur.set_fullscreen = true;
-                cur.fullscreen = v;
+                target->set_fullscreen = true;
+                target->fullscreen = v;
+            }
+            continue;
+        }
+
+        if (strcasecmp(key, "deco") == 0) {
+            if (label == NULL || *label == '\0') {
+                continue;
+            }
+            target->set_decor = true;
+            if (strcasecmp(label, "none") == 0) {
+                target->decor_enabled = false;
+            } else {
+                target->decor_enabled = true;
+            }
+            continue;
+        }
+
+        if (strcasecmp(key, "layer") == 0) {
+            int layer = 0;
+            if (label != NULL && parse_layer(label, &layer)) {
+                target->set_layer = true;
+                target->layer = layer;
             }
             continue;
         }
@@ -421,10 +601,17 @@ bool fbwl_apps_rules_load_file(struct fbwl_apps_rule **rules, size_t *rule_count
         (void)apps_rules_add(rules, rule_count, &cur);
     }
 
+    if (in_group) {
+        for (size_t i = group_start; i < *rule_count; i++) {
+            if ((*rules)[i].group_id == group_id) {
+                apps_rule_apply_attrs(&(*rules)[i], &group_attrs);
+            }
+        }
+    }
+
     free(line);
     fclose(f);
 
     wlr_log(WLR_INFO, "Apps: loaded %zu rules from %s", *rule_count - before, path);
     return true;
 }
-

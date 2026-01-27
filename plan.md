@@ -1299,8 +1299,11 @@ Goal: users can drop in their existing `~/.fluxbox` directory and get the same b
 	  - [x] Smoke: extend `scripts/fbwl-smoke-keys-file.sh` to validate key+mouse bindings and `Reconfigure` reload.
 	  - [ ] TODO: NextTab/PrevTab/Tab N, client patterns, key modes, WorkspaceMenu, etc.
 - [ ] Extend `apps` rules toward full “Remember” parity:
-  - Expand supported settings and matching (Wayland app_id/title, XWayland WM_CLASS/WM_NAME, groups where applicable).
-  - Add tests that assert multiple attributes apply deterministically.
+  - [x] Match semantics: patterns are full-match anchored (Fluxbox-like `^(...)$` behavior).
+  - [x] Support `[group]` blocks (tab-group attach on map).
+  - [x] Support `[Deco] {none}` and `[Layer] {Menu/Top/Normal/Bottom/Desktop}` (maps to scene layers).
+  - [x] Smoke: extend `scripts/fbwl-smoke-apps-rules.sh` to validate group/deco/layer behavior.
+  - [ ] TODO: Position/Dimensions/Head/Shaded/Alpha/FocusProtection/SaveOnClose, etc.
 - [ ] Extend menu/style parity:
   - Menu: support the common Fluxbox menu tags used in real configs (includes, dynamic submenus, etc.).
   - Style/overlay: expand theme parsing until Fluxbox-like UI can be driven by real styles.

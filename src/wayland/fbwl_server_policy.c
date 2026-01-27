@@ -1122,6 +1122,53 @@ struct fbwl_keybindings_hooks keybindings_hooks(struct fbwl_server *server) {
     };
 }
 
+static struct wlr_scene_tree *apps_rule_layer_tree(struct fbwl_server *server, int layer) {
+    if (server == NULL) {
+        return NULL;
+    }
+
+    struct wlr_scene_tree *fallback = server->layer_normal != NULL ? server->layer_normal : &server->scene->tree;
+
+    if (layer <= 0) {
+        return server->layer_overlay != NULL ? server->layer_overlay : fallback;
+    }
+    if (layer <= 6) {
+        return server->layer_top != NULL ? server->layer_top : fallback;
+    }
+    if (layer <= 8) {
+        return server->layer_normal != NULL ? server->layer_normal : fallback;
+    }
+    if (layer <= 10) {
+        return server->layer_bottom != NULL ? server->layer_bottom : fallback;
+    }
+    return server->layer_background != NULL ? server->layer_background : fallback;
+}
+
+static struct fbwl_view *apps_group_find_anchor(struct fbwl_server *server, const struct fbwl_view *self,
+        int group_id) {
+    if (server == NULL || self == NULL || group_id <= 0) {
+        return NULL;
+    }
+
+    for (struct fbwm_view *wm_view = server->wm.views.next;
+            wm_view != NULL && wm_view != &server->wm.views;
+            wm_view = wm_view->next) {
+        struct fbwl_view *view = wm_view->userdata;
+        if (view == NULL || view == self) {
+            continue;
+        }
+        if (!view->mapped || view->minimized) {
+            continue;
+        }
+        if (view->apps_group_id != group_id) {
+            continue;
+        }
+        return view;
+    }
+
+    return NULL;
+}
+
 void server_apps_rules_apply_pre_map(struct fbwl_view *view,
         const struct fbwl_apps_rule *rule) {
     if (view == NULL || view->server == NULL || rule == NULL) {
@@ -1129,6 +1176,30 @@ void server_apps_rules_apply_pre_map(struct fbwl_view *view,
     }
 
     struct fbwl_server *server = view->server;
+
+    if (rule->group_id > 0) {
+        view->apps_group_id = rule->group_id;
+        if (view->tab_group == NULL) {
+            struct fbwl_view *anchor = apps_group_find_anchor(server, view, rule->group_id);
+            if (anchor != NULL) {
+                (void)fbwl_tabs_attach(view, anchor, "apps-group");
+            }
+        }
+    }
+
+    if (rule->set_decor) {
+        fbwl_view_decor_set_enabled(view, rule->decor_enabled);
+    }
+
+    if (rule->set_layer) {
+        struct wlr_scene_tree *layer = apps_rule_layer_tree(server, rule->layer);
+        if (layer != NULL) {
+            view->base_layer = layer;
+            if (!view->fullscreen && view->scene_tree != NULL) {
+                wlr_scene_node_reparent(&view->scene_tree->node, layer);
+            }
+        }
+    }
 
     if (rule->set_workspace) {
         int ws = rule->workspace;
