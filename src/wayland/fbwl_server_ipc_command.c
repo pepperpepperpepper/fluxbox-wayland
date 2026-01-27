@@ -52,6 +52,28 @@ void server_ipc_command(void *userdata, int client_fd, char *line) {
         return;
     }
 
+    if (strcasecmp(cmd, "reconfigure") == 0 || strcasecmp(cmd, "reconfig") == 0) {
+        fbwl_ipc_send_line(client_fd, "ok reconfigure");
+        server_reconfigure(server);
+        return;
+    }
+
+    if (strcasecmp(cmd, "dump-config") == 0 || strcasecmp(cmd, "dumpconfig") == 0 ||
+            strcasecmp(cmd, "dump_config") == 0 || strcasecmp(cmd, "get-config") == 0 ||
+            strcasecmp(cmd, "getconfig") == 0) {
+        char resp[1024];
+        snprintf(resp, sizeof(resp),
+            "ok keys_file=%s apps_file=%s style_file=%s menu_file=%s workspaces=%d current=%d",
+            server->keys_file != NULL ? server->keys_file : "(null)",
+            server->apps_file != NULL ? server->apps_file : "(null)",
+            server->style_file != NULL ? server->style_file : "(null)",
+            server->menu_file != NULL ? server->menu_file : "(null)",
+            fbwm_core_workspace_count(&server->wm),
+            fbwm_core_workspace_current(&server->wm) + 1);
+        fbwl_ipc_send_line(client_fd, resp);
+        return;
+    }
+
     if (strcasecmp(cmd, "quit") == 0 || strcasecmp(cmd, "exit") == 0) {
         fbwl_ipc_send_line(client_fd, "ok quitting");
         wl_display_terminate(server->wl_display);
@@ -125,4 +147,3 @@ void server_ipc_command(void *userdata, int client_fd, char *line) {
 
     fbwl_ipc_send_line(client_fd, "err unknown_command");
 }
-

@@ -802,6 +802,10 @@ bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_
     fbwl_keybindings_add_defaults(&server->keybindings, &server->keybinding_count, server->terminal_cmd);
     free(server->keys_file);
     server->keys_file = keys_file != NULL ? strdup(keys_file) : NULL;
+    free(server->apps_file);
+    server->apps_file = apps_file != NULL ? strdup(apps_file) : NULL;
+    free(server->style_file);
+    server->style_file = style_file != NULL ? strdup(style_file) : NULL;
     if (keys_file != NULL) {
         (void)fbwl_keys_parse_file(keys_file, server_keybindings_add_from_keys_file, server, NULL);
         (void)fbwl_keys_parse_file_mouse(keys_file, server_mousebindings_add_from_keys_file, server, NULL);

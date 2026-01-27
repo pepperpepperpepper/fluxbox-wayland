@@ -146,6 +146,8 @@ struct fbwl_server {
     struct fbwl_menu *root_menu;
     struct fbwl_menu *window_menu;
     char *keys_file;
+    char *apps_file;
+    char *style_file;
     char *menu_file;
     struct fbwl_menu_ui menu_ui;
     struct fbwl_toolbar_ui toolbar_ui;

@@ -73,6 +73,10 @@ void fbwl_server_finish(struct fbwl_server *server) {
     server_menu_free(server);
     free(server->keys_file);
     server->keys_file = NULL;
+    free(server->apps_file);
+    server->apps_file = NULL;
+    free(server->style_file);
+    server->style_file = NULL;
     fbwl_ui_toolbar_destroy(&server->toolbar_ui);
     fbwm_core_finish(&server->wm);
 
