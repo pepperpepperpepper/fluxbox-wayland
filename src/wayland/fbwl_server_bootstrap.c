@@ -612,6 +612,21 @@ bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_
     const char *menu_file = opts->menu_file;
     const char *config_dir = opts->config_dir;
 
+    server->workspaces_override = workspaces_set;
+    server->keys_file_override = opts->keys_file != NULL;
+    server->apps_file_override = opts->apps_file != NULL;
+    server->style_file_override = opts->style_file != NULL;
+    server->menu_file_override = opts->menu_file != NULL;
+
+    free(server->config_dir);
+    server->config_dir = config_dir != NULL ? fbwl_resolve_config_path(NULL, config_dir) : NULL;
+    if (server->config_dir == NULL && config_dir != NULL) {
+        server->config_dir = strdup(config_dir);
+    }
+    if (server->config_dir != NULL) {
+        config_dir = server->config_dir;
+    }
+
     char *keys_file_owned = NULL;
     char *apps_file_owned = NULL;
     char *style_file_owned = NULL;

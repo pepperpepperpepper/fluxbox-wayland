@@ -18,11 +18,12 @@ LOG="${LOG:-/tmp/fluxbox-wayland-config-dir-$UID-$$.log}"
 CFGDIR="$(mktemp -d "/tmp/fbwl-config-dir-$UID-XXXXXX")"
 MARK_DEFAULT="${MARK_DEFAULT:-/tmp/fbwl-config-dir-terminal-default-$UID-$$}"
 MARK_OVERRIDE="${MARK_OVERRIDE:-/tmp/fbwl-config-dir-keys-override-$UID-$$}"
+MARK_RELOAD_KEYS="${MARK_RELOAD_KEYS:-/tmp/fbwl-config-dir-keys-reload-$UID-$$}"
 MARK_MENU="${MARK_MENU:-/tmp/fbwl-config-dir-menu-$UID-$$}"
 
 cleanup() {
   rm -rf "$CFGDIR" 2>/dev/null || true
-  rm -f "$MARK_DEFAULT" "$MARK_OVERRIDE" "$MARK_MENU" 2>/dev/null || true
+  rm -f "$MARK_DEFAULT" "$MARK_OVERRIDE" "$MARK_RELOAD_KEYS" "$MARK_MENU" 2>/dev/null || true
   if [[ -n "${APP_PID:-}" ]]; then kill "$APP_PID" 2>/dev/null || true; fi
   if [[ -n "${TAB_PID:-}" ]]; then kill "$TAB_PID" 2>/dev/null || true; fi
   if [[ -n "${FBW_PID:-}" ]]; then kill "$FBW_PID" 2>/dev/null || true; fi
@@ -31,7 +32,7 @@ cleanup() {
 trap cleanup EXIT
 
 : >"$LOG"
-rm -f "$MARK_DEFAULT" "$MARK_OVERRIDE" "$MARK_MENU"
+rm -f "$MARK_DEFAULT" "$MARK_OVERRIDE" "$MARK_RELOAD_KEYS" "$MARK_MENU"
 
 cat >"$CFGDIR/init" <<EOF
 session.autoRaiseDelay: 50
@@ -210,6 +211,66 @@ timeout 5 bash -c "until ./fbwl-remote --socket \"$SOCKET\" get-workspace | rg -
 timeout 2 bash -c "until [[ -f '$MARK_OVERRIDE' ]]; do sleep 0.05; done"
 if [[ -f "$MARK_DEFAULT" ]]; then
   echo "expected config-dir keys binding to override default terminal binding (MARK_DEFAULT exists: $MARK_DEFAULT)" >&2
+  exit 1
+fi
+
+rm -f "$MARK_OVERRIDE" "$MARK_RELOAD_KEYS"
+
+cat >"$CFGDIR/mykeys2" <<EOF
+Mod1 Return :ExecCommand touch '$MARK_RELOAD_KEYS'
+EOF
+
+cat >"$CFGDIR/init" <<EOF
+session.autoRaiseDelay: 50
+session.screen0.workspaces: 3
+session.screen0.windowPlacement: AutotabPlacement
+session.keyFile: mykeys2
+session.appsFile: myapps
+session.styleFile: mystyle
+session.menuFile: mymenu
+session.screen0.toolbar.visible: true
+session.screen0.toolbar.placement: TopCenter
+session.screen0.toolbar.widthPercent: 70
+session.screen0.toolbar.height: 30
+session.screen0.toolbar.tools: workspacename,clock
+session.screen0.toolbar.autoHide: true
+session.screen0.toolbar.autoRaise: true
+session.screen0.menuDelay: 250
+session.screen0.tabs.intitlebar: false
+session.screen0.tabs.maxOver: true
+session.screen0.tabs.usePixmap: false
+session.screen0.tab.placement: TopRight
+session.screen0.tab.width: 123
+session.tabPadding: 4
+session.tabsAttachArea: Titlebar
+session.screen0.tabFocusModel: MouseTabFocus
+EOF
+
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-remote --socket "$SOCKET" reconfigure | rg -q '^ok reconfigure$'
+START=$((OFFSET + 1))
+timeout 5 bash -c "until tail -c +$START '$LOG' | rg -q 'Reconfigure: reloaded init from '; do sleep 0.05; done"
+timeout 5 bash -c "until tail -c +$START '$LOG' | rg -q 'Reconfigure: reloaded keys from '; do sleep 0.05; done"
+timeout 5 bash -c "until tail -c +$START '$LOG' | rg -q 'Toolbar: built '; do sleep 0.05; done"
+
+BUILT_LINE="$(tail -c +$START "$LOG" | rg 'Toolbar: built ' | tail -n 1)"
+if [[ "$BUILT_LINE" =~ w=([0-9]+)\ h=([0-9]+) ]]; then
+  NEW_TB_W="${BASH_REMATCH[1]}"
+else
+  echo "failed to parse Toolbar: built line after reconfigure: $BUILT_LINE" >&2
+  exit 1
+fi
+
+EXPECTED_TB_W=$((OUT_W * 70 / 100))
+if [[ "$NEW_TB_W" -ne "$EXPECTED_TB_W" ]]; then
+  echo "unexpected toolbar width after reconfigure: got $NEW_TB_W expected $EXPECTED_TB_W (out_w=$OUT_W)" >&2
+  exit 1
+fi
+
+./fbwl-input-injector --socket "$SOCKET" key alt-return
+timeout 2 bash -c "until [[ -f '$MARK_RELOAD_KEYS' ]]; do sleep 0.05; done"
+if [[ -f "$MARK_OVERRIDE" ]]; then
+  echo "expected init reload to switch keyFile to mykeys2, but old binding still triggered ($MARK_OVERRIDE exists)" >&2
   exit 1
 fi
 

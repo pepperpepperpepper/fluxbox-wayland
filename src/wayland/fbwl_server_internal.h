@@ -145,10 +145,16 @@ struct fbwl_server {
     struct fbwl_decor_theme decor_theme;
     struct fbwl_menu *root_menu;
     struct fbwl_menu *window_menu;
+    char *config_dir;
     char *keys_file;
     char *apps_file;
     char *style_file;
     char *menu_file;
+    bool workspaces_override;
+    bool keys_file_override;
+    bool apps_file_override;
+    bool style_file_override;
+    bool menu_file_override;
     struct fbwl_menu_ui menu_ui;
     struct fbwl_toolbar_ui toolbar_ui;
     struct fbwl_cmd_dialog_ui cmd_dialog_ui;

@@ -71,6 +71,8 @@ void fbwl_server_finish(struct fbwl_server *server) {
     }
     server->auto_raise_pending_view = NULL;
     server_menu_free(server);
+    free(server->config_dir);
+    server->config_dir = NULL;
     free(server->keys_file);
     server->keys_file = NULL;
     free(server->apps_file);
