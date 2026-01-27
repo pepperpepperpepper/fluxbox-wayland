@@ -608,6 +608,50 @@ static int do_click_sequence_button(struct fbwl_injector *inj, uint32_t button,
     return 0;
 }
 
+static int do_motion_sequence(struct fbwl_injector *inj, int argc, char **argv) {
+    if (inj->vptr_mgr == NULL) {
+        fprintf(stderr, "fbwl-input-injector: motion: virtual pointer manager not available\n");
+        return 1;
+    }
+    if (argc < 2 || (argc % 2) != 0) {
+        fprintf(stderr, "fbwl-input-injector: motion requires pairs of X Y coordinates\n");
+        return 1;
+    }
+
+    struct zwlr_virtual_pointer_v1 *vptr =
+        zwlr_virtual_pointer_manager_v1_create_virtual_pointer(inj->vptr_mgr, inj->seat);
+    if (vptr == NULL) {
+        fprintf(stderr, "fbwl-input-injector: motion: create_virtual_pointer failed\n");
+        return 1;
+    }
+
+    /* Normalize tests by resetting to a known location. */
+    zwlr_virtual_pointer_v1_motion_absolute(vptr, now_ms(), 0, 0, 1, 1);
+    zwlr_virtual_pointer_v1_frame(vptr);
+
+    double cur_x = 0;
+    double cur_y = 0;
+
+    for (int i = 0; i < argc; i += 2) {
+        double x = atof(argv[i]);
+        double y = atof(argv[i + 1]);
+
+        double dx = x - cur_x;
+        double dy = y - cur_y;
+        cur_x = x;
+        cur_y = y;
+
+        zwlr_virtual_pointer_v1_motion(vptr, now_ms(),
+            wl_fixed_from_double(dx), wl_fixed_from_double(dy));
+        zwlr_virtual_pointer_v1_frame(vptr);
+    }
+
+    wl_display_roundtrip(inj->display);
+
+    zwlr_virtual_pointer_v1_destroy(vptr);
+    return 0;
+}
+
 static int do_drag_sequence_button(struct fbwl_injector *inj, uint32_t button,
         int argc, char **argv) {
     if (inj->vptr_mgr == NULL) {
@@ -852,6 +896,7 @@ static void usage(const char *argv0) {
     fprintf(stderr, "  %s [--socket NAME] click X1 Y1 [X2 Y2 ...]\n", argv0);
     fprintf(stderr, "  %s [--socket NAME] click-middle X1 Y1 [X2 Y2 ...]\n", argv0);
     fprintf(stderr, "  %s [--socket NAME] click-right X1 Y1 [X2 Y2 ...]\n", argv0);
+    fprintf(stderr, "  %s [--socket NAME] motion X1 Y1 [X2 Y2 ...]\n", argv0);
     fprintf(stderr, "  %s [--socket NAME] type TEXT\n", argv0);
     fprintf(stderr, "  %s [--socket NAME] key alt-return\n", argv0);
     fprintf(stderr, "  %s [--socket NAME] key alt-f1\n", argv0);
@@ -911,6 +956,8 @@ int main(int argc, char **argv) {
         rc = do_click_sequence_button(&inj, BTN_MIDDLE, argc - optind, &argv[optind]);
     } else if (strcmp(cmd, "click-right") == 0) {
         rc = do_click_sequence_button(&inj, BTN_RIGHT, argc - optind, &argv[optind]);
+    } else if (strcmp(cmd, "motion") == 0) {
+        rc = do_motion_sequence(&inj, argc - optind, &argv[optind]);
     } else if (strcmp(cmd, "type") == 0) {
         if (optind >= argc) {
             fprintf(stderr, "fbwl-input-injector: missing text\n");

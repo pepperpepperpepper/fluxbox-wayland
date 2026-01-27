@@ -16,9 +16,21 @@
 
 #include <xkbcommon/xkbcommon-keysyms.h>
 
+#include <wayland-server-core.h>
 #include <wlr/interfaces/wlr_buffer.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/util/log.h>
+
+static void fbwl_ui_menu_cancel_submenu_timer(struct fbwl_menu_ui *ui) {
+    if (ui == NULL) {
+        return;
+    }
+    if (ui->submenu_timer != NULL) {
+        wl_event_source_remove(ui->submenu_timer);
+        ui->submenu_timer = NULL;
+    }
+    ui->submenu_pending_idx = 0;
+}
 
 static void fbwl_ui_menu_destroy_scene(struct fbwl_menu_ui *ui) {
     if (ui == NULL) {
@@ -44,11 +56,14 @@ void fbwl_ui_menu_close(struct fbwl_menu_ui *ui, const char *why) {
     }
 
     fbwl_ui_menu_destroy_scene(ui);
+    fbwl_ui_menu_cancel_submenu_timer(ui);
     ui->open = false;
     ui->current = NULL;
     ui->depth = 0;
     ui->selected = 0;
     ui->target_view = NULL;
+    ui->env = (struct fbwl_ui_menu_env){0};
+    ui->hovered_idx = -1;
 
     wlr_log(WLR_INFO, "Menu: close reason=%s", why != NULL ? why : "(null)");
 }
@@ -140,6 +155,46 @@ static void fbwl_ui_menu_rebuild(struct fbwl_menu_ui *ui, const struct fbwl_ui_m
     wlr_scene_node_raise_to_top(&ui->tree->node);
 }
 
+static void fbwl_ui_menu_enter_submenu(struct fbwl_menu_ui *ui, const struct fbwl_ui_menu_env *env, size_t idx,
+        const char *reason, int delay_ms) {
+    if (ui == NULL || env == NULL) {
+        return;
+    }
+    if (!ui->open || ui->current == NULL) {
+        return;
+    }
+    if (idx >= ui->current->item_count) {
+        return;
+    }
+
+    struct fbwl_menu_item *it = &ui->current->items[idx];
+    if (it->kind != FBWL_MENU_ITEM_SUBMENU || it->submenu == NULL) {
+        return;
+    }
+
+    if (ui->depth + 1 >= (sizeof(ui->stack) / sizeof(ui->stack[0]))) {
+        return;
+    }
+
+    fbwl_ui_menu_cancel_submenu_timer(ui);
+
+    const char *label = it->label != NULL ? it->label : "(no-label)";
+
+    ui->depth++;
+    ui->stack[ui->depth] = it->submenu;
+    ui->current = it->submenu;
+    ui->selected = 0;
+    ui->hovered_idx = -1;
+    fbwl_ui_menu_rebuild(ui, env);
+    if (delay_ms >= 0) {
+        wlr_log(WLR_INFO, "Menu: enter-submenu reason=%s delay_ms=%d label=%s items=%zu",
+            reason != NULL ? reason : "(null)", delay_ms, label, ui->current->item_count);
+    } else {
+        wlr_log(WLR_INFO, "Menu: enter-submenu reason=%s label=%s items=%zu",
+            reason != NULL ? reason : "(null)", label, ui->current->item_count);
+    }
+}
+
 void fbwl_ui_menu_open_root(struct fbwl_menu_ui *ui, const struct fbwl_ui_menu_env *env,
         struct fbwl_menu *root_menu, int x, int y) {
     if (ui == NULL || env == NULL || root_menu == NULL) {
@@ -154,6 +209,9 @@ void fbwl_ui_menu_open_root(struct fbwl_menu_ui *ui, const struct fbwl_ui_menu_e
     ui->stack[0] = root_menu;
     ui->selected = 0;
     ui->target_view = NULL;
+    ui->env = *env;
+    ui->hovered_idx = -1;
+    fbwl_ui_menu_cancel_submenu_timer(ui);
 
     ui->x = x;
     ui->y = y;
@@ -178,6 +236,9 @@ void fbwl_ui_menu_open_window(struct fbwl_menu_ui *ui, const struct fbwl_ui_menu
     ui->stack[0] = window_menu;
     ui->selected = 0;
     ui->target_view = view;
+    ui->env = *env;
+    ui->hovered_idx = -1;
+    fbwl_ui_menu_cancel_submenu_timer(ui);
 
     ui->x = x;
     ui->y = y;
@@ -227,6 +288,96 @@ void fbwl_ui_menu_set_selected(struct fbwl_menu_ui *ui, size_t idx) {
         const int item_h = ui->item_h > 0 ? ui->item_h : 1;
         wlr_scene_node_set_position(&ui->highlight->node, 0, (int)ui->selected * item_h);
     }
+}
+
+static int fbwl_ui_menu_submenu_timer(void *data) {
+    struct fbwl_menu_ui *ui = data;
+    if (ui == NULL || !ui->open || ui->current == NULL) {
+        return 0;
+    }
+
+    const size_t idx = ui->submenu_pending_idx;
+    const int delay_ms = ui->menu_delay_ms;
+
+    fbwl_ui_menu_cancel_submenu_timer(ui);
+
+    if (ui->hovered_idx < 0 || (size_t)ui->hovered_idx != idx) {
+        return 0;
+    }
+    if (idx >= ui->current->item_count) {
+        return 0;
+    }
+    if (ui->env.wl_display == NULL) {
+        return 0;
+    }
+
+    fbwl_ui_menu_enter_submenu(ui, &ui->env, idx, "delay", delay_ms);
+    return 0;
+}
+
+void fbwl_ui_menu_handle_motion(struct fbwl_menu_ui *ui, int lx, int ly) {
+    if (ui == NULL) {
+        return;
+    }
+    if (!ui->open || ui->current == NULL) {
+        return;
+    }
+
+    const ssize_t idx = fbwl_ui_menu_index_at(ui, lx, ly);
+    if (idx < 0) {
+        ui->hovered_idx = -1;
+        fbwl_ui_menu_cancel_submenu_timer(ui);
+        return;
+    }
+
+    if (ui->hovered_idx != idx) {
+        ui->hovered_idx = idx;
+        fbwl_ui_menu_set_selected(ui, (size_t)idx);
+    }
+
+    if (ui->env.wl_display == NULL) {
+        return;
+    }
+
+    const size_t hovered = (size_t)idx;
+    if (hovered >= ui->current->item_count) {
+        return;
+    }
+
+    const struct fbwl_menu_item *it = &ui->current->items[hovered];
+    if (it->kind != FBWL_MENU_ITEM_SUBMENU || it->submenu == NULL) {
+        fbwl_ui_menu_cancel_submenu_timer(ui);
+        return;
+    }
+
+    if (ui->submenu_timer != NULL && ui->submenu_pending_idx == hovered) {
+        return;
+    }
+
+    fbwl_ui_menu_cancel_submenu_timer(ui);
+
+    int delay_ms = ui->menu_delay_ms;
+    if (delay_ms < 0) {
+        delay_ms = 0;
+    }
+    if (delay_ms == 0) {
+        fbwl_ui_menu_enter_submenu(ui, &ui->env, hovered, "hover", delay_ms);
+        return;
+    }
+
+    struct wl_event_loop *loop = wl_display_get_event_loop(ui->env.wl_display);
+    if (loop == NULL) {
+        return;
+    }
+
+    ui->submenu_pending_idx = hovered;
+    ui->submenu_timer = wl_event_loop_add_timer(loop, fbwl_ui_menu_submenu_timer, ui);
+    if (ui->submenu_timer == NULL) {
+        ui->submenu_pending_idx = 0;
+        return;
+    }
+
+    wl_event_source_timer_update(ui->submenu_timer, delay_ms);
 }
 
 static void fbwl_ui_menu_activate_selected(struct fbwl_menu_ui *ui,
@@ -302,14 +453,7 @@ static void fbwl_ui_menu_activate_selected(struct fbwl_menu_ui *ui,
         }
     }
     if (it->kind == FBWL_MENU_ITEM_SUBMENU && it->submenu != NULL) {
-        if (ui->depth + 1 < (sizeof(ui->stack) / sizeof(ui->stack[0]))) {
-            ui->depth++;
-            ui->stack[ui->depth] = it->submenu;
-            ui->current = it->submenu;
-            ui->selected = 0;
-            fbwl_ui_menu_rebuild(ui, env);
-            wlr_log(WLR_INFO, "Menu: enter-submenu label=%s items=%zu", label, ui->current->item_count);
-        }
+        fbwl_ui_menu_enter_submenu(ui, env, ui->selected, "activate", -1);
         return;
     }
 }
@@ -382,4 +526,3 @@ bool fbwl_ui_menu_handle_click(struct fbwl_menu_ui *ui, const struct fbwl_ui_men
     }
     return true;
 }
-

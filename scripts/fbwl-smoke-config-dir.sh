@@ -46,6 +46,7 @@ session.screen0.toolbar.height: 30
 session.screen0.toolbar.tools: workspacename,clock
 session.screen0.toolbar.autoHide: true
 session.screen0.toolbar.autoRaise: true
+session.screen0.menuDelay: 250
 EOF
 
 cat >"$CFGDIR/mykeys" <<EOF
@@ -66,7 +67,9 @@ EOF
 
 cat >"$CFGDIR/mymenu" <<EOF
 [begin] (Fluxbox)
-[exec] (TouchMenuMarker) {touch '$MARK_MENU'}
+[submenu] (Sub) {Sub}
+  [exec] (TouchMenuMarker) {touch '$MARK_MENU'}
+[end]
 [end]
 EOF
 
@@ -172,6 +175,12 @@ else
   echo "failed to parse menu open line: $open_line" >&2
   exit 1
 fi
+
+./fbwl-input-injector --socket "$SOCKET" motion 0 0 >/dev/null 2>&1 || true
+
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-input-injector --socket "$SOCKET" motion "$((MENU_X + 10))" "$((MENU_Y + 10))" >/dev/null 2>&1 || true
+timeout 2 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Menu: enter-submenu reason=delay'; do sleep 0.05; done"
 
 ./fbwl-input-injector --socket "$SOCKET" click "$((MENU_X + 10))" "$((MENU_Y + 10))"
 timeout 2 bash -c "until [[ -f '$MARK_MENU' ]]; do sleep 0.05; done"

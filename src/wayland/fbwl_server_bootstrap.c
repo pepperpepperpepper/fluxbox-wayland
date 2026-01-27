@@ -405,6 +405,12 @@ bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_
     server->toolbar_ui.hovered = false;
     server->toolbar_ui.auto_pending = 0;
 
+    server->menu_ui.env = (struct fbwl_ui_menu_env){0};
+    server->menu_ui.menu_delay_ms = 200;
+    server->menu_ui.submenu_timer = NULL;
+    server->menu_ui.hovered_idx = -1;
+    server->menu_ui.submenu_pending_idx = 0;
+
     server->wl_display = wl_display_create();
     if (server->wl_display == NULL) {
         wlr_log(WLR_ERROR, "failed to create wl_display");
@@ -634,6 +640,10 @@ bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_
         }
         server->toolbar_ui.hidden = false;
 
+        if (fbwl_resource_db_get_int(&init, "session.screen0.menuDelay", &int_val) && int_val >= 0) {
+            server->menu_ui.menu_delay_ms = int_val;
+        }
+
         wlr_log(WLR_INFO,
             "Init: focusModel=%s autoRaise=%d autoRaiseDelay=%d clickRaises=%d focusNewWindows=%d windowPlacement=%s rowDir=%s colDir=%s",
             focus_model_str(server->focus.model),
@@ -654,6 +664,8 @@ bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_
             server->toolbar_ui.width_percent,
             server->toolbar_ui.height_override,
             server->toolbar_ui.tools);
+
+        wlr_log(WLR_INFO, "Init: menuDelay=%d", server->menu_ui.menu_delay_ms);
 
         if (!workspaces_set) {
             int ws = 0;

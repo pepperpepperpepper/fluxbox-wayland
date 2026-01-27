@@ -365,6 +365,10 @@ void server_cursor_motion(struct wl_listener *listener, void *data) {
         fbwl_ui_toolbar_handle_motion(&server->toolbar_ui, &env,
             (int)server->cursor->x, (int)server->cursor->y, server->focus.auto_raise_delay_ms);
     }
+
+    if (server->menu_ui.open) {
+        fbwl_ui_menu_handle_motion(&server->menu_ui, (int)server->cursor->x, (int)server->cursor->y);
+    }
 }
 
 void server_cursor_motion_absolute(struct wl_listener *listener, void *data) {
@@ -399,6 +403,10 @@ void server_cursor_motion_absolute(struct wl_listener *listener, void *data) {
         const struct fbwl_ui_toolbar_env env = toolbar_ui_env(server);
         fbwl_ui_toolbar_handle_motion(&server->toolbar_ui, &env,
             (int)server->cursor->x, (int)server->cursor->y, server->focus.auto_raise_delay_ms);
+    }
+
+    if (server->menu_ui.open) {
+        fbwl_ui_menu_handle_motion(&server->menu_ui, (int)server->cursor->x, (int)server->cursor->y);
     }
 }
 
@@ -810,6 +818,7 @@ static struct fbwl_ui_menu_env menu_ui_env(struct fbwl_server *server) {
         .scene = server != NULL ? server->scene : NULL,
         .layer_overlay = server != NULL ? server->layer_overlay : NULL,
         .decor_theme = server != NULL ? &server->decor_theme : NULL,
+        .wl_display = server != NULL ? server->wl_display : NULL,
     };
 }
 
