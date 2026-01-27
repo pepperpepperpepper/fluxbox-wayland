@@ -347,6 +347,8 @@ fluxbox_wayland_SOURCES = \
 	src/wayland/fbwl_menu_parse.h \
 	src/wayland/fbwl_output.c \
 	src/wayland/fbwl_output.h \
+	src/wayland/fbwl_screen_map.c \
+	src/wayland/fbwl_screen_map.h \
 	src/wayland/fbwl_output_management.c \
 	src/wayland/fbwl_output_management.h \
 	src/wayland/fbwl_output_power.c \

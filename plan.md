@@ -1287,7 +1287,10 @@ Goal: users can drop in their existing `~/.fluxbox` directory and get the same b
 		      - Implemented: AutotabPlacement attaches new windows to the currently focused one and keeps the group together (workspace/sticky + move/resize/maximize sync).
 		      - Init parsing/logging: `tabs.intitlebar/maxOver/usePixmap`, `tab.placement/width`, `tabFocusModel`, `tabsAttachArea`, `tabPadding`.
 		      - Smoke: extended `scripts/fbwl-smoke-config-dir.sh` to assert init parsing + `Tabs: attach reason=autotab`.
-	  - Output mapping strategy for `screenN` resources (define how multiple Wayland outputs map to classic `screen0` semantics).
+    - [x] Output mapping strategy for `screenN` resources (Wayland outputs → Fluxbox screens).
+      - Map outputs to screen indices by sorting output layout boxes by `(x, y, name)`.
+      - Use screen0 output for `session.screen0.toolbar.*` placement/size; log `ScreenMap:` whenever outputs/layout change.
+      - Smoke: extended `scripts/fbwl-smoke-multi-output.sh` to assert toolbar centers on screen0 with 2 outputs.
 	- [ ] Extend `keys` support to full classic syntax and command set:
   - Include mouse bindings and the commonly used commands beyond the current subset.
   - Add smoke coverage for representative bindings and “reload config” behavior.

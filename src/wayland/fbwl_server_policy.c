@@ -643,6 +643,7 @@ static struct fbwl_ui_toolbar_env toolbar_ui_env(struct fbwl_server *server) {
         .scene = server != NULL ? server->scene : NULL,
         .layer_top = server != NULL ? server->layer_top : NULL,
         .output_layout = server != NULL ? server->output_layout : NULL,
+        .outputs = server != NULL ? &server->outputs : NULL,
         .wl_display = server != NULL ? server->wl_display : NULL,
         .wm = server != NULL ? &server->wm : NULL,
         .decor_theme = server != NULL ? &server->decor_theme : NULL,

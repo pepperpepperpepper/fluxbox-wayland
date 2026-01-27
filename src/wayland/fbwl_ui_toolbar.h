@@ -6,6 +6,7 @@
 
 struct wl_display;
 struct wl_event_source;
+struct wl_list;
 
 struct fbwm_core;
 struct fbwl_decor_theme;
@@ -102,6 +103,7 @@ struct fbwl_ui_toolbar_env {
     struct wlr_scene *scene;
     struct wlr_scene_tree *layer_top;
     struct wlr_output_layout *output_layout;
+    const struct wl_list *outputs;
     struct wl_display *wl_display;
     struct fbwm_core *wm;
     const struct fbwl_decor_theme *decor_theme;

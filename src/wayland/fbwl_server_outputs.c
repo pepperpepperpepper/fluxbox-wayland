@@ -4,6 +4,7 @@
 #include "wayland/fbwl_output_management.h"
 #include "wayland/fbwl_output_power.h"
 #include "wayland/fbwl_scene_layers.h"
+#include "wayland/fbwl_screen_map.h"
 #include "wayland/fbwl_view.h"
 
 #include <stdbool.h>
@@ -122,6 +123,7 @@ static void server_output_manager_apply(struct wl_listener *listener, void *data
         wlr_output_configuration_v1_send_succeeded(config);
         fbwl_output_manager_update(server->output_manager, &server->outputs, server->output_layout);
         server_background_update_all(server);
+        fbwl_screen_map_log(server->output_layout, &server->outputs, "output-management-apply");
         server_toolbar_ui_update_position(server);
         server_cmd_dialog_ui_update_position(server);
         server_osd_ui_update_position(server);
@@ -156,6 +158,7 @@ static void server_output_destroyed(void *userdata, struct wlr_output *wlr_outpu
     }
 
     fbwl_output_manager_update(server->output_manager, &server->outputs, server->output_layout);
+    fbwl_screen_map_log(server->output_layout, &server->outputs, "output-destroy");
     server_toolbar_ui_update_position(server);
     server_cmd_dialog_ui_update_position(server);
     server_osd_ui_update_position(server);
@@ -178,6 +181,7 @@ static void server_new_output(struct wl_listener *listener, void *data) {
     fbwl_scene_layers_arrange_layer_surfaces_on_output(server->output_layout, &server->outputs, &server->layer_surfaces,
         wlr_output);
     fbwl_output_manager_update(server->output_manager, &server->outputs, server->output_layout);
+    fbwl_screen_map_log(server->output_layout, &server->outputs, "new-output");
     server_toolbar_ui_update_position(server);
     server_cmd_dialog_ui_update_position(server);
     server_osd_ui_update_position(server);

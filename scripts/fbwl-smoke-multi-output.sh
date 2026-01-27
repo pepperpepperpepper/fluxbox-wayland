@@ -5,6 +5,7 @@ need_cmd() {
   command -v "$1" >/dev/null 2>&1 || { echo "missing required command: $1" >&2; exit 1; }
 }
 
+need_cmd mktemp
 need_cmd rg
 need_cmd timeout
 
@@ -14,8 +15,10 @@ chmod 0700 "$XDG_RUNTIME_DIR"
 
 SOCKET="${SOCKET:-wayland-fbwl-test-$UID-$$}"
 LOG="${LOG:-/tmp/fluxbox-wayland-multi-output-$UID-$$.log}"
+CFGDIR="$(mktemp -d "/tmp/fbwl-multi-output-$UID-XXXXXX")"
 
 cleanup() {
+  rm -rf "$CFGDIR" 2>/dev/null || true
   if [[ -n "${A_PID:-}" ]]; then kill "$A_PID" 2>/dev/null || true; fi
   if [[ -n "${B_PID:-}" ]]; then kill "$B_PID" 2>/dev/null || true; fi
   if [[ -n "${FBW_PID:-}" ]]; then kill "$FBW_PID" 2>/dev/null || true; fi
@@ -24,6 +27,14 @@ cleanup() {
 trap cleanup EXIT
 
 : >"$LOG"
+
+cat >"$CFGDIR/init" <<EOF
+session.screen0.toolbar.visible: true
+session.screen0.toolbar.placement: TopCenter
+session.screen0.toolbar.widthPercent: 50
+session.screen0.toolbar.height: 30
+session.screen0.toolbar.tools: workspacename,clock
+EOF
 
 BACKENDS="${WLR_BACKENDS:-headless}"
 RENDERER="${WLR_RENDERER:-pixman}"
@@ -40,11 +51,31 @@ else
 fi
 
 env WLR_BACKENDS="$BACKENDS" WLR_RENDERER="$RENDERER" "$OUTPUTS_ENV" \
-  ./fluxbox-wayland --no-xwayland --socket "$SOCKET" >"$LOG" 2>&1 &
+  ./fluxbox-wayland --no-xwayland --socket "$SOCKET" --config-dir "$CFGDIR" >"$LOG" 2>&1 &
 FBW_PID=$!
 
 timeout 5 bash -c "until rg -q 'Running fluxbox-wayland' '$LOG'; do sleep 0.05; done"
 timeout 5 bash -c "until [[ \$(rg -c 'OutputLayout:' '$LOG') -ge 2 ]]; do sleep 0.05; done"
+timeout 5 bash -c "until rg -q 'Toolbar: built ' '$LOG'; do sleep 0.05; done"
+timeout 5 bash -c "until rg -q 'Toolbar: position ' '$LOG'; do sleep 0.05; done"
+
+SCREEN0=$(rg 'ScreenMap: screen0 ' "$LOG" | tail -n 1)
+S0_X=$(echo "$SCREEN0" | rg -o 'x=-?[0-9]+' | head -n 1 | cut -d= -f2)
+S0_Y=$(echo "$SCREEN0" | rg -o 'y=-?[0-9]+' | head -n 1 | cut -d= -f2)
+S0_W=$(echo "$SCREEN0" | rg -o 'w=[0-9]+' | head -n 1 | cut -d= -f2)
+
+TB_BUILT=$(rg 'Toolbar: built ' "$LOG" | tail -n 1)
+TB_W=$(echo "$TB_BUILT" | rg -o 'w=[0-9]+' | head -n 1 | cut -d= -f2)
+
+TB_POS=$(rg 'Toolbar: position ' "$LOG" | tail -n 1)
+TB_X=$(echo "$TB_POS" | rg -o 'x=-?[0-9]+' | head -n 1 | cut -d= -f2)
+TB_Y=$(echo "$TB_POS" | rg -o 'y=-?[0-9]+' | head -n 1 | cut -d= -f2)
+
+EXPECTED_TB_X=$((S0_X + (S0_W - TB_W) / 2))
+if [[ "$TB_X" -ne "$EXPECTED_TB_X" || "$TB_Y" -ne "$S0_Y" ]]; then
+  echo "unexpected toolbar position: got $TB_POS expected x=$EXPECTED_TB_X y=$S0_Y (screen0=$SCREEN0 built=$TB_BUILT)" >&2
+  exit 1
+fi
 
 LINE1=$(rg 'OutputLayout:' "$LOG" | head -n 1)
 LINE2=$(rg 'OutputLayout:' "$LOG" | head -n 2 | tail -n 1)

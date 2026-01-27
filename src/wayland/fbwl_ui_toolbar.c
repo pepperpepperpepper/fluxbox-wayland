@@ -4,6 +4,7 @@
 #ifdef HAVE_SYSTEMD
 #include "wayland/fbwl_sni_tray.h"
 #endif
+#include "wayland/fbwl_screen_map.h"
 #include "wayland/fbwl_ui_decor_theme.h"
 #include "wayland/fbwl_ui_text.h"
 #include "wayland/fbwl_view.h"
@@ -364,7 +365,7 @@ void fbwl_ui_toolbar_rebuild(struct fbwl_toolbar_ui *ui, const struct fbwl_ui_to
 
     int output_w = 0;
     if (env->output_layout != NULL) {
-        struct wlr_output *out = wlr_output_layout_get_center_output(env->output_layout);
+        struct wlr_output *out = fbwl_screen_map_output_for_screen(env->output_layout, env->outputs, 0);
         if (out != NULL) {
             struct wlr_box box = {0};
             wlr_output_layout_get_box(env->output_layout, out, &box);
@@ -731,7 +732,7 @@ void fbwl_ui_toolbar_update_position(struct fbwl_toolbar_ui *ui, const struct fb
         return;
     }
 
-    struct wlr_output *out = wlr_output_layout_get_center_output(env->output_layout);
+    struct wlr_output *out = fbwl_screen_map_output_for_screen(env->output_layout, env->outputs, 0);
     if (out == NULL) {
         return;
     }
