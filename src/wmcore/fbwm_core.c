@@ -199,6 +199,26 @@ void fbwm_core_focus_next(struct fbwm_core *core) {
     fbwm_core_focus_view(core, candidate);
 }
 
+void fbwm_core_focus_prev(struct fbwm_core *core) {
+    if (core == NULL) {
+        return;
+    }
+
+    struct fbwm_view *candidate = NULL;
+    for (struct fbwm_view *walk = core->views.next; walk != &core->views; walk = walk->next) {
+        if (view_is_visible(core, walk) && walk != core->focused) {
+            candidate = walk;
+            break;
+        }
+    }
+    if (candidate == NULL) {
+        return;
+    }
+
+    log_focus(candidate, "cycle-rev");
+    fbwm_core_focus_view(core, candidate);
+}
+
 void fbwm_core_set_workspace_count(struct fbwm_core *core, int count) {
     if (core == NULL) {
         return;

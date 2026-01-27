@@ -419,6 +419,76 @@ void server_cursor_motion_absolute(struct wl_listener *listener, void *data) {
 static void server_menu_ui_open_root(struct fbwl_server *server, int x, int y);
 static void server_menu_ui_open_window(struct fbwl_server *server, struct fbwl_view *view, int x, int y);
 
+static int fluxbox_mouse_button_from_event(uint32_t button) {
+    switch (button) {
+    case BTN_LEFT:
+        return 1;
+    case BTN_MIDDLE:
+        return 2;
+    case BTN_RIGHT:
+        return 3;
+    default:
+        return 0;
+    }
+}
+
+static enum fbwl_mousebinding_context mousebinding_context_at(struct fbwl_server *server,
+        struct fbwl_view *view, struct wlr_surface *surface) {
+    if (server != NULL && server->toolbar_ui.enabled && !server->toolbar_ui.hidden) {
+        const int x = server->toolbar_ui.x;
+        const int y = server->toolbar_ui.y;
+        const int w = server->toolbar_ui.width;
+        const int h = server->toolbar_ui.height;
+        const int cx = (int)server->cursor->x;
+        const int cy = (int)server->cursor->y;
+        if (cx >= x && cy >= y && cx < x + w && cy < y + h) {
+            return FBWL_MOUSEBIND_TOOLBAR;
+        }
+    }
+
+    if (view == NULL && surface == NULL) {
+        return FBWL_MOUSEBIND_DESKTOP;
+    }
+    if (view == NULL) {
+        return FBWL_MOUSEBIND_ANY;
+    }
+    if (surface != NULL) {
+        return FBWL_MOUSEBIND_WINDOW;
+    }
+
+    const struct fbwl_decor_hit hit =
+        fbwl_view_decor_hit_test(view, server != NULL ? &server->decor_theme : NULL, server->cursor->x, server->cursor->y);
+    if (hit.kind == FBWL_DECOR_HIT_TITLEBAR) {
+        return FBWL_MOUSEBIND_TITLEBAR;
+    }
+    if (hit.kind == FBWL_DECOR_HIT_RESIZE) {
+        return FBWL_MOUSEBIND_WINDOW_BORDER;
+    }
+    return FBWL_MOUSEBIND_WINDOW;
+}
+
+static int fluxbox_mouse_button_from_axis(const struct wlr_pointer_axis_event *event) {
+    if (event == NULL) {
+        return 0;
+    }
+    if (event->orientation != WL_POINTER_AXIS_VERTICAL_SCROLL) {
+        return 0;
+    }
+
+    double delta = event->delta;
+    if (event->delta_discrete != 0) {
+        delta = (double)event->delta_discrete;
+    }
+
+    if (delta < 0) {
+        return 4;
+    }
+    if (delta > 0) {
+        return 5;
+    }
+    return 0;
+}
+
 void server_cursor_button(struct wl_listener *listener, void *data) {
     struct fbwl_server *server = wl_container_of(listener, server, cursor_button);
     struct wlr_pointer_button_event *event = data;
@@ -437,14 +507,8 @@ void server_cursor_button(struct wl_listener *listener, void *data) {
                 wlr_log(WLR_INFO, "Resize: %s w=%d h=%d",
                     fbwl_view_display_title(view),
                     server->grab.last_w, server->grab.last_h);
-                if (view->type == FBWL_VIEW_XDG) {
-                    wlr_xdg_toplevel_set_resizing(view->xdg_toplevel, false);
-                }
             }
-            server->grab.mode = FBWL_CURSOR_PASSTHROUGH;
-            server->grab.view = NULL;
-            server->grab.button = 0;
-            server->grab.resize_edges = WLR_EDGE_NONE;
+            fbwl_grab_end(&server->grab);
         }
         return;
     }
@@ -477,6 +541,22 @@ void server_cursor_button(struct wl_listener *listener, void *data) {
         const uint32_t modifiers = server_keyboard_modifiers(server);
         const bool alt = (modifiers & WLR_MODIFIER_ALT) != 0;
 
+        const int fb_button = fluxbox_mouse_button_from_event(event->button);
+        if (fb_button != 0) {
+            struct fbwl_keybindings_hooks hooks = keybindings_hooks(server);
+            hooks.button = event->button;
+            hooks.cursor_x = (int)server->cursor->x;
+            hooks.cursor_y = (int)server->cursor->y;
+
+            const enum fbwl_mousebinding_context ctx = mousebinding_context_at(server, view, surface);
+            struct fbwl_view *target = (ctx == FBWL_MOUSEBIND_DESKTOP || ctx == FBWL_MOUSEBIND_TOOLBAR) ? NULL : view;
+
+            if (fbwl_mousebindings_handle(server->mousebindings, server->mousebinding_count, ctx,
+                    fb_button, modifiers, target, &hooks)) {
+                return;
+            }
+        }
+
         if (view == NULL && surface == NULL && event->button == BTN_RIGHT) {
             server_menu_ui_open_root(server, (int)server->cursor->x, (int)server->cursor->y);
             return;
@@ -490,26 +570,11 @@ void server_cursor_button(struct wl_listener *listener, void *data) {
             raise_view(view, "alt-grab");
 
             server->grab.view = view;
-            server->grab.button = event->button;
-            server->grab.resize_edges = (event->button == BTN_RIGHT) ? (WLR_EDGE_RIGHT | WLR_EDGE_BOTTOM) : WLR_EDGE_NONE;
-            server->grab.grab_x = server->cursor->x;
-            server->grab.grab_y = server->cursor->y;
-            server->grab.view_x = view->x;
-            server->grab.view_y = view->y;
-            server->grab.view_w =
-                fbwl_view_current_width(view);
-            server->grab.view_h =
-                fbwl_view_current_height(view);
-            server->grab.last_w = server->grab.view_w;
-            server->grab.last_h = server->grab.view_h;
-
             if (event->button == BTN_LEFT) {
-                server->grab.mode = FBWL_CURSOR_MOVE;
+                fbwl_grab_begin_move(&server->grab, view, server->cursor, event->button);
             } else {
-                server->grab.mode = FBWL_CURSOR_RESIZE;
-                if (view->type == FBWL_VIEW_XDG) {
-                    wlr_xdg_toplevel_set_resizing(view->xdg_toplevel, true);
-                }
+                fbwl_grab_begin_resize(&server->grab, view, server->cursor, event->button,
+                    WLR_EDGE_RIGHT | WLR_EDGE_BOTTOM);
             }
             return;
         }
@@ -539,36 +604,11 @@ void server_cursor_button(struct wl_listener *listener, void *data) {
                 raise_view(view, "decor");
 
                 if (hit.kind == FBWL_DECOR_HIT_TITLEBAR) {
-                    server->grab.view = view;
-                    server->grab.button = event->button;
-                    server->grab.resize_edges = WLR_EDGE_NONE;
-                    server->grab.grab_x = server->cursor->x;
-                    server->grab.grab_y = server->cursor->y;
-                    server->grab.view_x = view->x;
-                    server->grab.view_y = view->y;
-                    server->grab.view_w = fbwl_view_current_width(view);
-                    server->grab.view_h = fbwl_view_current_height(view);
-                    server->grab.last_w = server->grab.view_w;
-                    server->grab.last_h = server->grab.view_h;
-                    server->grab.mode = FBWL_CURSOR_MOVE;
+                    fbwl_grab_begin_move(&server->grab, view, server->cursor, event->button);
                     return;
                 }
                 if (hit.kind == FBWL_DECOR_HIT_RESIZE) {
-                    server->grab.view = view;
-                    server->grab.button = event->button;
-                    server->grab.resize_edges = hit.edges;
-                    server->grab.grab_x = server->cursor->x;
-                    server->grab.grab_y = server->cursor->y;
-                    server->grab.view_x = view->x;
-                    server->grab.view_y = view->y;
-                    server->grab.view_w = fbwl_view_current_width(view);
-                    server->grab.view_h = fbwl_view_current_height(view);
-                    server->grab.last_w = server->grab.view_w;
-                    server->grab.last_h = server->grab.view_h;
-                    server->grab.mode = FBWL_CURSOR_RESIZE;
-                    if (view->type == FBWL_VIEW_XDG) {
-                        wlr_xdg_toplevel_set_resizing(view->xdg_toplevel, true);
-                    }
+                    fbwl_grab_begin_resize(&server->grab, view, server->cursor, event->button, hit.edges);
                     return;
                 }
                 if (hit.kind == FBWL_DECOR_HIT_BTN_CLOSE) {
@@ -617,6 +657,32 @@ void server_cursor_axis(struct wl_listener *listener, void *data) {
     struct fbwl_server *server = wl_container_of(listener, server, cursor_axis);
     struct wlr_pointer_axis_event *event = data;
     fbwl_idle_notify_activity(&server->idle);
+
+    if (server->grab.mode == FBWL_CURSOR_PASSTHROUGH &&
+            !server->cmd_dialog_ui.open) {
+        const int fb_button = fluxbox_mouse_button_from_axis(event);
+        if (fb_button != 0) {
+            double sx = 0, sy = 0;
+            struct wlr_surface *surface = NULL;
+            struct fbwl_view *view =
+                fbwl_view_at(server->scene, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
+
+            struct fbwl_keybindings_hooks hooks = keybindings_hooks(server);
+            hooks.button = 0;
+            hooks.cursor_x = (int)server->cursor->x;
+            hooks.cursor_y = (int)server->cursor->y;
+
+            const uint32_t modifiers = server_keyboard_modifiers(server);
+            const enum fbwl_mousebinding_context ctx = mousebinding_context_at(server, view, surface);
+            struct fbwl_view *target = (ctx == FBWL_MOUSEBIND_DESKTOP || ctx == FBWL_MOUSEBIND_TOOLBAR) ? NULL : view;
+
+            if (fbwl_mousebindings_handle(server->mousebindings, server->mousebinding_count, ctx,
+                    fb_button, modifiers, target, &hooks)) {
+                return;
+            }
+        }
+    }
+
     wlr_seat_pointer_notify_axis(server->seat, event->time_msec,
         event->orientation, event->delta, event->delta_discrete, event->source,
         event->relative_direction);
@@ -938,9 +1004,74 @@ static void keybindings_command_dialog_open(void *userdata) {
     server_cmd_dialog_ui_open(server);
 }
 
+static void keybindings_reconfigure(void *userdata) {
+    struct fbwl_server *server = userdata;
+    server_reconfigure(server);
+}
+
+static void keybindings_menu_open_root(void *userdata, int x, int y) {
+    struct fbwl_server *server = userdata;
+    server_menu_ui_open_root(server, x, y);
+}
+
+static void keybindings_menu_open_window(void *userdata, struct fbwl_view *view, int x, int y) {
+    struct fbwl_server *server = userdata;
+    server_menu_ui_open_window(server, view, x, y);
+}
+
+static void keybindings_menu_close(void *userdata, const char *why) {
+    struct fbwl_server *server = userdata;
+    server_menu_ui_close(server, why);
+}
+
 static void keybindings_apply_workspace_visibility(void *userdata, const char *why) {
     struct fbwl_server *server = userdata;
     apply_workspace_visibility(server, why);
+}
+
+static void keybindings_view_close(void *userdata, struct fbwl_view *view, bool force) {
+    (void)userdata;
+    (void)force;
+    if (view == NULL) {
+        return;
+    }
+    if (view->type == FBWL_VIEW_XDG && view->xdg_toplevel != NULL) {
+        wlr_xdg_toplevel_send_close(view->xdg_toplevel);
+    } else if (view->type == FBWL_VIEW_XWAYLAND && view->xwayland_surface != NULL) {
+        wlr_xwayland_surface_close(view->xwayland_surface);
+    }
+}
+
+static void keybindings_view_raise(void *userdata, struct fbwl_view *view, const char *why) {
+    (void)userdata;
+    raise_view(view, why);
+}
+
+static void keybindings_view_lower(void *userdata, struct fbwl_view *view, const char *why) {
+    (void)userdata;
+    if (view == NULL || view->scene_tree == NULL) {
+        return;
+    }
+    wlr_scene_node_lower_to_bottom(&view->scene_tree->node);
+    wlr_log(WLR_INFO, "Lower: %s reason=%s",
+        fbwl_view_display_title(view),
+        why != NULL ? why : "(null)");
+}
+
+static void keybindings_grab_begin_move(void *userdata, struct fbwl_view *view, uint32_t button) {
+    struct fbwl_server *server = userdata;
+    if (server == NULL || server->cursor == NULL || view == NULL) {
+        return;
+    }
+    fbwl_grab_begin_move(&server->grab, view, server->cursor, button);
+}
+
+static void keybindings_grab_begin_resize(void *userdata, struct fbwl_view *view, uint32_t button, uint32_t edges) {
+    struct fbwl_server *server = userdata;
+    if (server == NULL || server->cursor == NULL || view == NULL) {
+        return;
+    }
+    fbwl_grab_begin_resize(&server->grab, view, server->cursor, button, edges);
 }
 
 static void keybindings_view_set_maximized(void *userdata, struct fbwl_view *view, bool maximized) {
@@ -972,10 +1103,22 @@ struct fbwl_keybindings_hooks keybindings_hooks(struct fbwl_server *server) {
         .terminate = keybindings_terminate,
         .spawn = keybindings_spawn,
         .command_dialog_open = keybindings_command_dialog_open,
+        .reconfigure = keybindings_reconfigure,
         .apply_workspace_visibility = keybindings_apply_workspace_visibility,
+        .view_close = keybindings_view_close,
         .view_set_maximized = keybindings_view_set_maximized,
         .view_set_fullscreen = keybindings_view_set_fullscreen,
         .view_set_minimized = keybindings_view_set_minimized,
+        .view_raise = keybindings_view_raise,
+        .view_lower = keybindings_view_lower,
+        .menu_open_root = keybindings_menu_open_root,
+        .menu_open_window = keybindings_menu_open_window,
+        .menu_close = keybindings_menu_close,
+        .grab_begin_move = keybindings_grab_begin_move,
+        .grab_begin_resize = keybindings_grab_begin_resize,
+        .cursor_x = server != NULL && server->cursor != NULL ? (int)server->cursor->x : 0,
+        .cursor_y = server != NULL && server->cursor != NULL ? (int)server->cursor->y : 0,
+        .button = 0,
     };
 }
 

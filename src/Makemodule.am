@@ -318,9 +318,13 @@ fluxbox_wayland_SOURCES = \
 		src/wayland/fbwl_apps_rules.h \
 			src/wayland/fbwl_ipc.c \
 			src/wayland/fbwl_ipc.h \
-			src/wayland/fbwl_keybindings.c \
-			src/wayland/fbwl_keybindings.h \
-			src/wayland/fbwl_sni_icon.c \
+				src/wayland/fbwl_keybindings.c \
+				src/wayland/fbwl_keybindings.h \
+				src/wayland/fbwl_fluxbox_cmd.c \
+				src/wayland/fbwl_fluxbox_cmd.h \
+				src/wayland/fbwl_mousebindings.c \
+				src/wayland/fbwl_mousebindings.h \
+				src/wayland/fbwl_sni_icon.c \
 			src/wayland/fbwl_sni_item.c \
 			src/wayland/fbwl_sni_tray.c \
 		src/wayland/fbwl_sni_tray.h \
@@ -375,9 +379,10 @@ fluxbox_wayland_SOURCES = \
 		src/wayland/fbwl_export_dmabuf.h \
 		src/wayland/fbwl_ext_image_capture.c \
 		src/wayland/fbwl_ext_image_capture.h \
-		src/wayland/fbwl_server_internal.h \
-		src/wayland/fbwl_server_config.c \
-		src/wayland/fbwl_server_policy.c \
+			src/wayland/fbwl_server_internal.h \
+			src/wayland/fbwl_server_config.c \
+			src/wayland/fbwl_server_reconfigure.c \
+			src/wayland/fbwl_server_policy.c \
 		src/wayland/fbwl_server_menu.c \
 		src/wayland/fbwl_server_ipc_command.c \
 		src/wayland/fbwl_server_bootstrap.c \

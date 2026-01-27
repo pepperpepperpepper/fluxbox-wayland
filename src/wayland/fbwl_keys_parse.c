@@ -10,6 +10,8 @@
 #include <wlr/types/wlr_keyboard.h>
 #include <wlr/util/log.h>
 
+#include "wayland/fbwl_fluxbox_cmd.h"
+
 static char *trim_inplace(char *s) {
     if (s == NULL) {
         return NULL;
@@ -28,6 +30,14 @@ static char *trim_inplace(char *s) {
     return s;
 }
 
+static bool starts_with_token(const char *s, const char *prefix) {
+    if (s == NULL || prefix == NULL) {
+        return false;
+    }
+    size_t n = strlen(prefix);
+    return strncasecmp(s, prefix, n) == 0;
+}
+
 static bool parse_keys_modifier(const char *token, uint32_t *mods) {
     if (token == NULL || mods == NULL) {
         return false;
@@ -40,9 +50,21 @@ static bool parse_keys_modifier(const char *token, uint32_t *mods) {
         *mods |= WLR_MODIFIER_ALT;
         return true;
     }
+    if (strcasecmp(token, "mod2") == 0) {
+        *mods |= WLR_MODIFIER_MOD2;
+        return true;
+    }
+    if (strcasecmp(token, "mod3") == 0) {
+        *mods |= WLR_MODIFIER_MOD3;
+        return true;
+    }
     if (strcasecmp(token, "mod4") == 0 || strcasecmp(token, "super") == 0 ||
             strcasecmp(token, "logo") == 0 || strcasecmp(token, "win") == 0) {
         *mods |= WLR_MODIFIER_LOGO;
+        return true;
+    }
+    if (strcasecmp(token, "mod5") == 0) {
+        *mods |= WLR_MODIFIER_MOD5;
         return true;
     }
     if (strcasecmp(token, "control") == 0 || strcasecmp(token, "ctrl") == 0) {
@@ -152,8 +174,224 @@ bool fbwl_keys_parse_file(const char *path, fbwl_keys_add_binding_fn add_binding
         if (key_name == NULL || *key_name == '\0') {
             continue;
         }
+
+        enum fbwl_keybinding_key_kind key_kind = FBWL_KEYBIND_KEYSYM;
+        uint32_t keycode = 0;
         xkb_keysym_t sym = xkb_keysym_from_name(key_name, XKB_KEYSYM_CASE_INSENSITIVE);
-        if (sym == XKB_KEY_NoSymbol) {
+        if (sym != XKB_KEY_NoSymbol) {
+            key_kind = FBWL_KEYBIND_KEYSYM;
+        } else {
+            bool is_keycode = true;
+            for (const char *p = key_name; *p != '\0'; p++) {
+                if (!isdigit((unsigned char)*p)) {
+                    is_keycode = false;
+                    break;
+                }
+            }
+            if (!is_keycode) {
+                continue;
+            }
+
+            char *end = NULL;
+            long code = strtol(key_name, &end, 10);
+            if (end == key_name || *end != '\0') {
+                continue;
+            }
+            if (code < 0 || code > 100000) {
+                continue;
+            }
+            key_kind = FBWL_KEYBIND_KEYCODE;
+            keycode = (uint32_t)code;
+        }
+
+        char *cmd = rhs;
+        char *sp = cmd;
+        while (*sp != '\0' && !isspace((unsigned char)*sp)) {
+            sp++;
+        }
+        char *cmd_args = sp;
+        if (*sp != '\0') {
+            *sp = '\0';
+            cmd_args = sp + 1;
+        }
+        const char *cmd_name = cmd;
+        cmd_args = trim_inplace(cmd_args);
+
+        enum fbwl_keybinding_action action;
+        int action_arg = 0;
+        const char *action_cmd = NULL;
+        if (!fbwl_fluxbox_cmd_resolve(cmd_name, cmd_args, &action, &action_arg, &action_cmd)) {
+            continue;
+        }
+
+        if (add_binding(userdata, key_kind, keycode, sym, mods, action, action_arg, action_cmd)) {
+            added++;
+        }
+    }
+
+    free(line);
+    fclose(f);
+
+    wlr_log(WLR_INFO, "Keys: loaded %zu bindings from %s", added, path);
+    if (out_added != NULL) {
+        *out_added = added;
+    }
+    return true;
+}
+
+static enum fbwl_mousebinding_context parse_mouse_context(const char *token) {
+    if (token == NULL) {
+        return FBWL_MOUSEBIND_ANY;
+    }
+    if (strcasecmp(token, "ondesktop") == 0) {
+        return FBWL_MOUSEBIND_DESKTOP;
+    }
+    if (strcasecmp(token, "onwindow") == 0) {
+        return FBWL_MOUSEBIND_WINDOW;
+    }
+    if (strcasecmp(token, "ontitlebar") == 0) {
+        return FBWL_MOUSEBIND_TITLEBAR;
+    }
+    if (strcasecmp(token, "ontoolbar") == 0) {
+        return FBWL_MOUSEBIND_TOOLBAR;
+    }
+    if (strcasecmp(token, "onwindowborder") == 0 ||
+            strcasecmp(token, "onleftgrip") == 0 ||
+            strcasecmp(token, "onrightgrip") == 0) {
+        return FBWL_MOUSEBIND_WINDOW_BORDER;
+    }
+    return FBWL_MOUSEBIND_ANY;
+}
+
+static int parse_mouse_button(const char *token) {
+    if (token == NULL) {
+        return 0;
+    }
+    if (!starts_with_token(token, "mouse") && !starts_with_token(token, "button") && !starts_with_token(token, "move")) {
+        return 0;
+    }
+
+    const char *p = token;
+    while (*p != '\0' && !isdigit((unsigned char)*p)) {
+        p++;
+    }
+    if (*p == '\0') {
+        return 0;
+    }
+    char *end = NULL;
+    long v = strtol(p, &end, 10);
+    if (end == p) {
+        return 0;
+    }
+    if (v < 1 || v > 32) {
+        return 0;
+    }
+    return (int)v;
+}
+
+bool fbwl_keys_parse_file_mouse(const char *path, fbwl_keys_add_mouse_binding_fn add_binding, void *userdata,
+        size_t *out_added) {
+    if (path == NULL || *path == '\0' || add_binding == NULL) {
+        return false;
+    }
+    if (out_added != NULL) {
+        *out_added = 0;
+    }
+
+    FILE *f = fopen(path, "r");
+    if (f == NULL) {
+        wlr_log(WLR_ERROR, "Keys: failed to open %s: %s", path, strerror(errno));
+        return false;
+    }
+
+    size_t added = 0;
+    char *line = NULL;
+    size_t cap = 0;
+    ssize_t n;
+    while ((n = getline(&line, &cap, f)) != -1) {
+        if (n <= 0) {
+            continue;
+        }
+
+        while (n > 0 && (line[n - 1] == '\n' || line[n - 1] == '\r')) {
+            line[n - 1] = '\0';
+            n--;
+        }
+
+        char *s = trim_inplace(line);
+        if (s == NULL || *s == '\0') {
+            continue;
+        }
+        if (*s == '#' || *s == '!') {
+            continue;
+        }
+
+        char *colon = strchr(s, ':');
+        if (colon == NULL) {
+            continue;
+        }
+        *colon = '\0';
+        char *lhs = trim_inplace(s);
+        char *rhs = trim_inplace(colon + 1);
+        if (lhs == NULL || rhs == NULL || *lhs == '\0' || *rhs == '\0') {
+            continue;
+        }
+
+        for (char *p = lhs; *p != '\0'; p++) {
+            if (*p == '+') {
+                *p = ' ';
+            }
+        }
+
+        char *save = NULL;
+        char *tok = NULL;
+        const char *tokens[64];
+        size_t ntok = 0;
+        for (tok = strtok_r(lhs, " \t", &save);
+                tok != NULL;
+                tok = strtok_r(NULL, " \t", &save)) {
+            if (ntok < (sizeof(tokens) / sizeof(tokens[0]))) {
+                tokens[ntok++] = tok;
+            } else {
+                ntok++;
+            }
+        }
+        if (ntok == 0 || ntok > (sizeof(tokens) / sizeof(tokens[0]))) {
+            continue;
+        }
+
+        enum fbwl_mousebinding_context context = FBWL_MOUSEBIND_ANY;
+        int button = 0;
+        uint32_t mods = 0;
+
+        bool ok = true;
+        for (size_t i = 0; i < ntok; i++) {
+            const char *t = tokens[i];
+            if (t == NULL || *t == '\0') {
+                continue;
+            }
+            enum fbwl_mousebinding_context c = parse_mouse_context(t);
+            if (c != FBWL_MOUSEBIND_ANY) {
+                context = c;
+                continue;
+            }
+            int b = parse_mouse_button(t);
+            if (b != 0) {
+                button = b;
+                continue;
+            }
+            if (strcasecmp(t, "double") == 0) {
+                continue;
+            }
+            if (starts_with_token(t, "on")) {
+                continue;
+            }
+            if (!parse_keys_modifier(t, &mods)) {
+                ok = false;
+                break;
+            }
+        }
+        if (!ok || button == 0) {
             continue;
         }
 
@@ -170,108 +408,22 @@ bool fbwl_keys_parse_file(const char *path, fbwl_keys_add_binding_fn add_binding
         const char *cmd_name = cmd;
         cmd_args = trim_inplace(cmd_args);
 
-        if (strcasecmp(cmd_name, "execcommand") == 0 || strcasecmp(cmd_name, "exec") == 0) {
-            if (cmd_args == NULL || *cmd_args == '\0') {
-                continue;
-            }
-            if (add_binding(userdata, sym, mods, FBWL_KEYBIND_EXEC, 0, cmd_args)) {
-                added++;
-            }
+        enum fbwl_keybinding_action action;
+        int action_arg = 0;
+        const char *action_cmd = NULL;
+        if (!fbwl_fluxbox_cmd_resolve(cmd_name, cmd_args, &action, &action_arg, &action_cmd)) {
             continue;
         }
-        if (strcasecmp(cmd_name, "commanddialog") == 0 || strcasecmp(cmd_name, "rundialog") == 0) {
-            if (add_binding(userdata, sym, mods, FBWL_KEYBIND_COMMAND_DIALOG, 0, NULL)) {
-                added++;
-            }
-            continue;
-        }
-        if (strcasecmp(cmd_name, "exit") == 0) {
-            if (add_binding(userdata, sym, mods, FBWL_KEYBIND_EXIT, 0, NULL)) {
-                added++;
-            }
-            continue;
-        }
-        if (strcasecmp(cmd_name, "nextwindow") == 0) {
-            if (add_binding(userdata, sym, mods, FBWL_KEYBIND_FOCUS_NEXT, 0, NULL)) {
-                added++;
-            }
-            continue;
-        }
-        if (strcasecmp(cmd_name, "maximize") == 0) {
-            if (add_binding(userdata, sym, mods, FBWL_KEYBIND_TOGGLE_MAXIMIZE, 0, NULL)) {
-                added++;
-            }
-            continue;
-        }
-        if (strcasecmp(cmd_name, "fullscreen") == 0) {
-            if (add_binding(userdata, sym, mods, FBWL_KEYBIND_TOGGLE_FULLSCREEN, 0, NULL)) {
-                added++;
-            }
-            continue;
-        }
-        if (strcasecmp(cmd_name, "minimize") == 0 || strcasecmp(cmd_name, "iconify") == 0) {
-            if (add_binding(userdata, sym, mods, FBWL_KEYBIND_TOGGLE_MINIMIZE, 0, NULL)) {
-                added++;
-            }
-            continue;
-        }
-        if (strcasecmp(cmd_name, "workspace") == 0) {
-            if (cmd_args == NULL || *cmd_args == '\0') {
-                continue;
-            }
-            char *end = NULL;
-            long ws = strtol(cmd_args, &end, 10);
-            if (end == cmd_args) {
-                continue;
-            }
-            if (ws > 0) {
-                ws -= 1;
-            }
-            if (add_binding(userdata, sym, mods, FBWL_KEYBIND_WORKSPACE_SWITCH, (int)ws, NULL)) {
-                added++;
-            }
-            continue;
-        }
-        if (strcasecmp(cmd_name, "sendtoworkspace") == 0) {
-            if (cmd_args == NULL || *cmd_args == '\0') {
-                continue;
-            }
-            char *end = NULL;
-            long ws = strtol(cmd_args, &end, 10);
-            if (end == cmd_args) {
-                continue;
-            }
-            if (ws > 0) {
-                ws -= 1;
-            }
-            if (add_binding(userdata, sym, mods, FBWL_KEYBIND_SEND_TO_WORKSPACE, (int)ws, NULL)) {
-                added++;
-            }
-            continue;
-        }
-        if (strcasecmp(cmd_name, "taketoworkspace") == 0) {
-            if (cmd_args == NULL || *cmd_args == '\0') {
-                continue;
-            }
-            char *end = NULL;
-            long ws = strtol(cmd_args, &end, 10);
-            if (end == cmd_args) {
-                continue;
-            }
-            if (ws > 0) {
-                ws -= 1;
-            }
-            if (add_binding(userdata, sym, mods, FBWL_KEYBIND_TAKE_TO_WORKSPACE, (int)ws, NULL)) {
-                added++;
-            }
-            continue;
+
+        if (add_binding(userdata, context, button, mods, action, action_arg, action_cmd)) {
+            added++;
         }
     }
 
     free(line);
     fclose(f);
 
-    wlr_log(WLR_INFO, "Keys: loaded %zu bindings from %s", added, path);
+    wlr_log(WLR_INFO, "Keys: loaded %zu mouse bindings from %s", added, path);
     if (out_added != NULL) {
         *out_added = added;
     }

@@ -26,7 +26,7 @@ struct fbwl_seat_keyboard_hooks {
     bool (*cmd_dialog_handle_key)(void *userdata, xkb_keysym_t sym, uint32_t modifiers);
 
     bool (*shortcuts_inhibited)(void *userdata);
-    bool (*keybindings_handle)(void *userdata, xkb_keysym_t sym, uint32_t modifiers);
+    bool (*keybindings_handle)(void *userdata, uint32_t keycode, xkb_keysym_t sym, uint32_t modifiers);
 };
 
 void fbwl_seat_add_input_device(struct wlr_seat *seat, struct wlr_cursor *cursor,
@@ -45,4 +45,3 @@ void fbwl_seat_handle_request_set_primary_selection(struct wlr_seat *seat,
 
 void fbwl_seat_handle_request_start_drag(struct wlr_seat *seat,
         struct wlr_seat_request_start_drag_event *event);
-

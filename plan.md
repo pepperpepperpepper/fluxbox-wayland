@@ -1291,9 +1291,13 @@ Goal: users can drop in their existing `~/.fluxbox` directory and get the same b
       - Map outputs to screen indices by sorting output layout boxes by `(x, y, name)`.
       - Use screen0 output for `session.screen0.toolbar.*` placement/size; log `ScreenMap:` whenever outputs/layout change.
       - Smoke: extended `scripts/fbwl-smoke-multi-output.sh` to assert toolbar centers on screen0 with 2 outputs.
-	- [ ] Extend `keys` support to full classic syntax and command set:
-  - Include mouse bindings and the commonly used commands beyond the current subset.
-  - Add smoke coverage for representative bindings and “reload config” behavior.
+		- [ ] Extend `keys` support to full classic syntax and command set:
+	  - [x] Expand command set: Close/Kill, WindowMenu/RootMenu/HideMenus, Prev/NextWindow, Prev/NextWorkspace, Send/Take to (prev|next|N), Reconfigure.
+	  - [x] Support numeric keycodes (X-style) in `keys`.
+	  - [x] Support mouse bindings: OnDesktop/OnWindow/OnTitlebar/OnToolbar + Mouse1-5 (Mouse4/5 via scroll axis).
+	  - [x] Support `MacroCmd {..}` execution for common subcommands (Raise/Focus/StartMoving/StartResizing).
+	  - [x] Smoke: extend `scripts/fbwl-smoke-keys-file.sh` to validate key+mouse bindings and `Reconfigure` reload.
+	  - [ ] TODO: NextTab/PrevTab/Tab N, client patterns, key modes, WorkspaceMenu, etc.
 - [ ] Extend `apps` rules toward full “Remember” parity:
   - Expand supported settings and matching (Wayland app_id/title, XWayland WM_CLASS/WM_NAME, groups where applicable).
   - Add tests that assert multiple attributes apply deterministically.

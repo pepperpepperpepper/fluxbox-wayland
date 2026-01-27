@@ -15,6 +15,7 @@
 #include "wayland/fbwl_grabs.h"
 #include "wayland/fbwl_ipc.h"
 #include "wayland/fbwl_keybindings.h"
+#include "wayland/fbwl_mousebindings.h"
 #include "wayland/fbwl_shortcuts_inhibit.h"
 #include "wayland/fbwl_session_lock.h"
 #include "wayland/fbwl_text_input.h"
@@ -144,6 +145,7 @@ struct fbwl_server {
     struct fbwl_decor_theme decor_theme;
     struct fbwl_menu *root_menu;
     struct fbwl_menu *window_menu;
+    char *keys_file;
     char *menu_file;
     struct fbwl_menu_ui menu_ui;
     struct fbwl_toolbar_ui toolbar_ui;
@@ -233,6 +235,9 @@ struct fbwl_server {
 
     struct fbwl_keybinding *keybindings;
     size_t keybinding_count;
+
+    struct fbwl_mousebinding *mousebindings;
+    size_t mousebinding_count;
 
     struct fbwl_apps_rule *apps_rules;
     size_t apps_rule_count;
@@ -339,6 +344,7 @@ void server_menu_ui_set_selected(struct fbwl_server *server, size_t idx);
 void server_menu_free(struct fbwl_server *server);
 
 struct fbwl_keybindings_hooks keybindings_hooks(struct fbwl_server *server);
+void server_reconfigure(struct fbwl_server *server);
 void server_apps_rules_apply_pre_map(struct fbwl_view *view, const struct fbwl_apps_rule *rule);
 void server_apps_rules_apply_post_map(struct fbwl_view *view, const struct fbwl_apps_rule *rule);
 

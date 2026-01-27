@@ -42,10 +42,10 @@ static bool seat_shortcuts_inhibited(void *userdata) {
     return server_keyboard_shortcuts_inhibited(server);
 }
 
-static bool seat_keybindings_handle(void *userdata, xkb_keysym_t sym, uint32_t modifiers) {
+static bool seat_keybindings_handle(void *userdata, uint32_t keycode, xkb_keysym_t sym, uint32_t modifiers) {
     struct fbwl_server *server = userdata;
     const struct fbwl_keybindings_hooks hooks = keybindings_hooks(server);
-    return fbwl_keybindings_handle(server->keybindings, server->keybinding_count, sym, modifiers, &hooks);
+    return fbwl_keybindings_handle(server->keybindings, server->keybinding_count, keycode, sym, modifiers, &hooks);
 }
 
 static struct fbwl_seat_keyboard_hooks seat_keyboard_hooks(struct fbwl_server *server) {
@@ -113,4 +113,3 @@ void server_new_virtual_pointer(struct wl_listener *listener, void *data) {
     fbwl_seat_add_input_device(server->seat, server->cursor, &server->keyboards, &server->has_pointer,
         &event->new_pointer->pointer.base, &hooks);
 }
-

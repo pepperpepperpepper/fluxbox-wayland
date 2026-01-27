@@ -91,7 +91,7 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data) {
             event->state == WL_KEYBOARD_KEY_STATE_PRESSED &&
             keyboard->hooks.keybindings_handle != NULL) {
         for (int i = 0; i < nsyms; i++) {
-            if (keyboard->hooks.keybindings_handle(keyboard->hooks.userdata, syms[i], modifiers)) {
+            if (keyboard->hooks.keybindings_handle(keyboard->hooks.userdata, keycode, syms[i], modifiers)) {
                 handled = true;
                 break;
             }

@@ -74,6 +74,7 @@ void fbwm_core_view_destroy(struct fbwm_core *core, struct fbwm_view *view);
 
 void fbwm_core_focus_view(struct fbwm_core *core, struct fbwm_view *view);
 void fbwm_core_focus_next(struct fbwm_core *core);
+void fbwm_core_focus_prev(struct fbwm_core *core);
 void fbwm_core_refocus(struct fbwm_core *core);
 
 void fbwm_core_set_workspace_count(struct fbwm_core *core, int count);

@@ -11,6 +11,66 @@
 #include "wayland/fbwl_tabs.h"
 #include "wayland/fbwl_view.h"
 
+void fbwl_grab_begin_move(struct fbwl_grab *grab, struct fbwl_view *view, struct wlr_cursor *cursor,
+        uint32_t button) {
+    if (grab == NULL || view == NULL || cursor == NULL) {
+        return;
+    }
+
+    grab->view = view;
+    grab->button = button;
+    grab->resize_edges = WLR_EDGE_NONE;
+    grab->grab_x = cursor->x;
+    grab->grab_y = cursor->y;
+    grab->view_x = view->x;
+    grab->view_y = view->y;
+    grab->view_w = fbwl_view_current_width(view);
+    grab->view_h = fbwl_view_current_height(view);
+    grab->last_w = grab->view_w;
+    grab->last_h = grab->view_h;
+    grab->mode = FBWL_CURSOR_MOVE;
+}
+
+void fbwl_grab_begin_resize(struct fbwl_grab *grab, struct fbwl_view *view, struct wlr_cursor *cursor,
+        uint32_t button, uint32_t edges) {
+    if (grab == NULL || view == NULL || cursor == NULL) {
+        return;
+    }
+
+    grab->view = view;
+    grab->button = button;
+    grab->resize_edges = edges;
+    grab->grab_x = cursor->x;
+    grab->grab_y = cursor->y;
+    grab->view_x = view->x;
+    grab->view_y = view->y;
+    grab->view_w = fbwl_view_current_width(view);
+    grab->view_h = fbwl_view_current_height(view);
+    grab->last_w = grab->view_w;
+    grab->last_h = grab->view_h;
+    grab->mode = FBWL_CURSOR_RESIZE;
+
+    if (view->type == FBWL_VIEW_XDG && view->xdg_toplevel != NULL) {
+        wlr_xdg_toplevel_set_resizing(view->xdg_toplevel, true);
+    }
+}
+
+void fbwl_grab_end(struct fbwl_grab *grab) {
+    if (grab == NULL) {
+        return;
+    }
+
+    struct fbwl_view *view = grab->view;
+    if (view != NULL && grab->mode == FBWL_CURSOR_RESIZE && view->type == FBWL_VIEW_XDG && view->xdg_toplevel != NULL) {
+        wlr_xdg_toplevel_set_resizing(view->xdg_toplevel, false);
+    }
+
+    grab->mode = FBWL_CURSOR_PASSTHROUGH;
+    grab->view = NULL;
+    grab->button = 0;
+    grab->resize_edges = WLR_EDGE_NONE;
+}
+
 void fbwl_grab_update(struct fbwl_grab *grab, struct wlr_cursor *cursor) {
     if (grab == NULL || cursor == NULL) {
         return;

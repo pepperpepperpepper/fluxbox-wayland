@@ -22,5 +22,9 @@ struct fbwl_grab {
     int last_w, last_h;
 };
 
+void fbwl_grab_begin_move(struct fbwl_grab *grab, struct fbwl_view *view, struct wlr_cursor *cursor,
+    uint32_t button);
+void fbwl_grab_begin_resize(struct fbwl_grab *grab, struct fbwl_view *view, struct wlr_cursor *cursor,
+    uint32_t button, uint32_t edges);
+void fbwl_grab_end(struct fbwl_grab *grab);
 void fbwl_grab_update(struct fbwl_grab *grab, struct wlr_cursor *cursor);
-

@@ -67,10 +67,12 @@ void fbwl_server_finish(struct fbwl_server *server) {
     server_osd_ui_destroy(server);
     if (server->auto_raise_timer != NULL) {
         wl_event_source_remove(server->auto_raise_timer);
-        server->auto_raise_timer = NULL;
+    server->auto_raise_timer = NULL;
     }
     server->auto_raise_pending_view = NULL;
     server_menu_free(server);
+    free(server->keys_file);
+    server->keys_file = NULL;
     fbwl_ui_toolbar_destroy(&server->toolbar_ui);
     fbwm_core_finish(&server->wm);
 
@@ -109,6 +111,7 @@ void fbwl_server_finish(struct fbwl_server *server) {
     }
     fbwl_apps_rules_free(&server->apps_rules, &server->apps_rule_count);
     fbwl_keybindings_free(&server->keybindings, &server->keybinding_count);
+    fbwl_mousebindings_free(&server->mousebindings, &server->mousebinding_count);
     if (server->protocol_logger != NULL) {
         wl_protocol_logger_destroy(server->protocol_logger);
         server->protocol_logger = NULL;
