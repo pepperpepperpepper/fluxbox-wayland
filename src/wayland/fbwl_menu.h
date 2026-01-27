@@ -8,6 +8,8 @@ enum fbwl_menu_item_kind {
     FBWL_MENU_ITEM_EXIT,
     FBWL_MENU_ITEM_SUBMENU,
     FBWL_MENU_ITEM_VIEW_ACTION,
+    FBWL_MENU_ITEM_SEPARATOR,
+    FBWL_MENU_ITEM_NOP,
 };
 
 enum fbwl_menu_view_action {
@@ -42,3 +44,5 @@ bool fbwl_menu_add_exit(struct fbwl_menu *menu, const char *label);
 bool fbwl_menu_add_view_action(struct fbwl_menu *menu, const char *label,
     enum fbwl_menu_view_action action);
 bool fbwl_menu_add_submenu(struct fbwl_menu *menu, const char *label, struct fbwl_menu *submenu);
+bool fbwl_menu_add_separator(struct fbwl_menu *menu);
+bool fbwl_menu_add_nop(struct fbwl_menu *menu, const char *label);

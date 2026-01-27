@@ -133,6 +133,14 @@ static void fbwl_ui_menu_rebuild(struct fbwl_menu_ui *ui, const struct fbwl_ui_m
     const float fg[4] = {1.0f, 1.0f, 1.0f, 1.0f};
     for (size_t i = 0; i < ui->current->item_count; i++) {
         const struct fbwl_menu_item *it = &ui->current->items[i];
+        if (it->kind == FBWL_MENU_ITEM_SEPARATOR) {
+            float sep[4] = {1.0f, 1.0f, 1.0f, 0.30f};
+            struct wlr_scene_rect *line = wlr_scene_rect_create(ui->tree, w, 1, sep);
+            if (line != NULL) {
+                wlr_scene_node_set_position(&line->node, 0, (int)i * item_h + item_h / 2);
+            }
+            continue;
+        }
         const char *label = it->label != NULL ? it->label : "(no-label)";
         char render_label[512];
         const char *render = label;
@@ -395,6 +403,9 @@ static void fbwl_ui_menu_activate_selected(struct fbwl_menu_ui *ui,
     struct fbwl_menu_item *it = &ui->current->items[ui->selected];
     const char *label = it->label != NULL ? it->label : "(no-label)";
 
+    if (it->kind == FBWL_MENU_ITEM_SEPARATOR || it->kind == FBWL_MENU_ITEM_NOP) {
+        return;
+    }
     if (it->kind == FBWL_MENU_ITEM_EXEC) {
         wlr_log(WLR_INFO, "Menu: exec label=%s cmd=%s", label, it->cmd != NULL ? it->cmd : "(null)");
         if (hooks != NULL && hooks->spawn != NULL) {

@@ -1305,8 +1305,10 @@ Goal: users can drop in their existing `~/.fluxbox` directory and get the same b
   - [x] Smoke: extend `scripts/fbwl-smoke-apps-rules.sh` to validate group/deco/layer behavior.
   - [ ] TODO: Position/Dimensions/Head/Shaded/Alpha/FocusProtection/SaveOnClose, etc.
 - [ ] Extend menu/style parity:
-  - Menu: support the common Fluxbox menu tags used in real configs (includes, dynamic submenus, etc.).
-  - Style/overlay: expand theme parsing until Fluxbox-like UI can be driven by real styles.
+  - [x] Menu: support `[include]` (file/dir), `[separator]`, `[nop]`.
+  - [ ] TODO: dynamic submenus/tags: `[config]`, `[workspaces]`, `[stylesmenu]`, `[stylesdir]`, `[wallpapers]`, etc.
+  - [ ] TODO: menu icons + `[encoding]` blocks.
+  - [ ] Style/overlay: expand theme parsing until Fluxbox-like UI can be driven by real styles.
 - [ ] Add introspection + reload:
   - Provide an IPC/CLI hook to dump effective config and a `reconfigure` command to reload `init`/keys/apps/menu/style at runtime.
   - Add smoke tests that change config on disk and assert the compositor reacts (no restart required).

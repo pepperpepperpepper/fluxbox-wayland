@@ -147,3 +147,34 @@ bool fbwl_menu_add_submenu(struct fbwl_menu *menu, const char *label, struct fbw
     }
     return true;
 }
+
+bool fbwl_menu_add_separator(struct fbwl_menu *menu) {
+    if (menu == NULL) {
+        return false;
+    }
+    if (!fbwl_menu_reserve_items(menu, 1)) {
+        return false;
+    }
+    struct fbwl_menu_item *it = &menu->items[menu->item_count++];
+    memset(it, 0, sizeof(*it));
+    it->kind = FBWL_MENU_ITEM_SEPARATOR;
+    return true;
+}
+
+bool fbwl_menu_add_nop(struct fbwl_menu *menu, const char *label) {
+    if (menu == NULL) {
+        return false;
+    }
+    if (!fbwl_menu_reserve_items(menu, 1)) {
+        return false;
+    }
+    struct fbwl_menu_item *it = &menu->items[menu->item_count++];
+    memset(it, 0, sizeof(*it));
+    it->kind = FBWL_MENU_ITEM_NOP;
+    it->label = label != NULL && *label != '\0' ? strdup(label) : strdup("");
+    if (it->label == NULL) {
+        menu->item_count--;
+        return false;
+    }
+    return true;
+}

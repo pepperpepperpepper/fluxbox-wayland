@@ -15,10 +15,11 @@ chmod 0700 "$XDG_RUNTIME_DIR"
 SOCKET="${SOCKET:-wayland-fbwl-test-$UID-$$}"
 LOG="${LOG:-/tmp/fluxbox-wayland-menu-$UID-$$.log}"
 MENU_FILE="${MENU_FILE:-/tmp/fbwl-menu-$UID-$$.menu}"
+MENU_INCLUDE_FILE="${MENU_INCLUDE_FILE:-/tmp/fbwl-menu-include-$UID-$$.menu}"
 MARKER="${MARKER:-/tmp/fbwl-menu-marker-$UID-$$}"
 
 cleanup() {
-  rm -f "$MENU_FILE" "$MARKER" 2>/dev/null || true
+  rm -f "$MENU_FILE" "$MENU_INCLUDE_FILE" "$MARKER" 2>/dev/null || true
   if [[ -n "${FBW_PID:-}" ]]; then kill "$FBW_PID" 2>/dev/null || true; fi
   wait 2>/dev/null || true
 }
@@ -27,9 +28,15 @@ trap cleanup EXIT
 : >"$LOG"
 rm -f "$MARKER"
 
+cat >"$MENU_INCLUDE_FILE" <<EOF
+[exec] (TouchMarker) {sh -c 'echo ok >"$MARKER"'}
+[nop] (NoOp)
+[separator]
+EOF
+
 cat >"$MENU_FILE" <<EOF
 [begin] (Fluxbox)
-[exec] (TouchMarker) {sh -c 'echo ok >"$MARKER"'}
+[include] ($MENU_INCLUDE_FILE)
 [exit] (Exit)
 [end]
 EOF
@@ -52,11 +59,17 @@ if [[ -z "$open_line" ]]; then
   exit 1
 fi
 
-if [[ "$open_line" =~ x=([-0-9]+)\ y=([-0-9]+) ]]; then
+if [[ "$open_line" =~ x=([-0-9]+)\ y=([-0-9]+)\ items=([0-9]+) ]]; then
   MENU_X="${BASH_REMATCH[1]}"
   MENU_Y="${BASH_REMATCH[2]}"
+  MENU_ITEMS="${BASH_REMATCH[3]}"
 else
   echo "failed to parse menu open line: $open_line" >&2
+  exit 1
+fi
+
+if [[ "$MENU_ITEMS" != "4" ]]; then
+  echo "expected 4 menu items (include + nop + separator + exit), got $MENU_ITEMS" >&2
   exit 1
 fi
 
