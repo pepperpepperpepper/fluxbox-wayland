@@ -122,6 +122,13 @@ struct wlr_output *fbwl_screen_map_output_for_screen(struct wlr_output_layout *o
     return out;
 }
 
+size_t fbwl_screen_map_count(struct wlr_output_layout *output_layout, const struct wl_list *outputs) {
+    struct screen_entry *entries = NULL;
+    const size_t n = build_entries(output_layout, outputs, &entries);
+    free(entries);
+    return n;
+}
+
 size_t fbwl_screen_map_screen_for_output(struct wlr_output_layout *output_layout,
         const struct wl_list *outputs, const struct wlr_output *output, bool *found) {
     if (found != NULL) {

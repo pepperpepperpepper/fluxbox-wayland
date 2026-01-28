@@ -136,6 +136,138 @@ static bool parse_layer(const char *s, int *out) {
     return false;
 }
 
+static bool parse_int_with_percent(const char *token, int *out_value, bool *out_percent) {
+    if (token == NULL || out_value == NULL || out_percent == NULL) {
+        return false;
+    }
+
+    *out_value = 0;
+    *out_percent = false;
+
+    char buf[64];
+    size_t n = strlen(token);
+    if (n == 0) {
+        return false;
+    }
+    if (n >= sizeof(buf)) {
+        n = sizeof(buf) - 1;
+    }
+    memcpy(buf, token, n);
+    buf[n] = '\0';
+
+    if (buf[n - 1] == '%') {
+        buf[n - 1] = '\0';
+        *out_percent = true;
+    }
+
+    char *endptr = NULL;
+    long v = strtol(buf, &endptr, 10);
+    if (endptr == buf || endptr == NULL || *endptr != '\0') {
+        return false;
+    }
+
+    *out_value = (int)v;
+    return true;
+}
+
+static bool parse_two_ints_with_percent(const char *s, int *out_a, bool *out_a_pct, int *out_b, bool *out_b_pct) {
+    if (s == NULL || out_a == NULL || out_a_pct == NULL || out_b == NULL || out_b_pct == NULL) {
+        return false;
+    }
+
+    char tmp[128];
+    size_t n = strlen(s);
+    if (n == 0) {
+        return false;
+    }
+    if (n >= sizeof(tmp)) {
+        n = sizeof(tmp) - 1;
+    }
+    memcpy(tmp, s, n);
+    tmp[n] = '\0';
+
+    char *saveptr = NULL;
+    char *a = strtok_r(tmp, " \t", &saveptr);
+    char *b = strtok_r(NULL, " \t", &saveptr);
+    if (a == NULL || b == NULL) {
+        return false;
+    }
+    if (!parse_int_with_percent(a, out_a, out_a_pct)) {
+        return false;
+    }
+    if (!parse_int_with_percent(b, out_b, out_b_pct)) {
+        return false;
+    }
+    return true;
+}
+
+static enum fbwl_apps_rule_anchor parse_anchor(const char *s, bool *out_ok) {
+    if (out_ok != NULL) {
+        *out_ok = false;
+    }
+    if (s == NULL || *s == '\0') {
+        return FBWL_APPS_ANCHOR_TOPLEFT;
+    }
+
+    if (strcasecmp(s, "topleft") == 0) {
+        if (out_ok != NULL) {
+            *out_ok = true;
+        }
+        return FBWL_APPS_ANCHOR_TOPLEFT;
+    }
+    if (strcasecmp(s, "left") == 0) {
+        if (out_ok != NULL) {
+            *out_ok = true;
+        }
+        return FBWL_APPS_ANCHOR_LEFT;
+    }
+    if (strcasecmp(s, "bottomleft") == 0) {
+        if (out_ok != NULL) {
+            *out_ok = true;
+        }
+        return FBWL_APPS_ANCHOR_BOTTOMLEFT;
+    }
+    if (strcasecmp(s, "top") == 0) {
+        if (out_ok != NULL) {
+            *out_ok = true;
+        }
+        return FBWL_APPS_ANCHOR_TOP;
+    }
+    if (strcasecmp(s, "center") == 0 || strcasecmp(s, "wincen") == 0 ||
+            strcasecmp(s, "wincenter") == 0) {
+        if (out_ok != NULL) {
+            *out_ok = true;
+        }
+        return FBWL_APPS_ANCHOR_CENTER;
+    }
+    if (strcasecmp(s, "bottom") == 0) {
+        if (out_ok != NULL) {
+            *out_ok = true;
+        }
+        return FBWL_APPS_ANCHOR_BOTTOM;
+    }
+    if (strcasecmp(s, "topright") == 0) {
+        if (out_ok != NULL) {
+            *out_ok = true;
+        }
+        return FBWL_APPS_ANCHOR_TOPRIGHT;
+    }
+    if (strcasecmp(s, "right") == 0) {
+        if (out_ok != NULL) {
+            *out_ok = true;
+        }
+        return FBWL_APPS_ANCHOR_RIGHT;
+    }
+    if (strcasecmp(s, "bottomright") == 0) {
+        if (out_ok != NULL) {
+            *out_ok = true;
+        }
+        return FBWL_APPS_ANCHOR_BOTTOMRIGHT;
+    }
+
+    return FBWL_APPS_ANCHOR_TOPLEFT;
+}
+
 static void apps_rule_apply_attrs(struct fbwl_apps_rule *rule, const struct fbwl_apps_rule *attrs) {
     if (rule == NULL || attrs == NULL) {
         return;
@@ -152,6 +284,25 @@ static void apps_rule_apply_attrs(struct fbwl_apps_rule *rule, const struct fbwl
     if (attrs->set_jump) {
         rule->set_jump = true;
         rule->jump = attrs->jump;
+    }
+    if (attrs->set_head) {
+        rule->set_head = true;
+        rule->head = attrs->head;
+    }
+    if (attrs->set_dimensions) {
+        rule->set_dimensions = true;
+        rule->width = attrs->width;
+        rule->width_percent = attrs->width_percent;
+        rule->height = attrs->height;
+        rule->height_percent = attrs->height_percent;
+    }
+    if (attrs->set_position) {
+        rule->set_position = true;
+        rule->position_anchor = attrs->position_anchor;
+        rule->x = attrs->x;
+        rule->x_percent = attrs->x_percent;
+        rule->y = attrs->y;
+        rule->y_percent = attrs->y_percent;
     }
     if (attrs->set_minimized) {
         rule->set_minimized = true;
@@ -498,6 +649,16 @@ bool fbwl_apps_rules_load_file(struct fbwl_apps_rule **rules, size_t *rule_count
 
         char *brace_open = strchr(close + 1, '{');
         char *brace_close = strrchr(close + 1, '}');
+        char *paren_open = strchr(close + 1, '(');
+        char *paren_close = NULL;
+        char *anchor = NULL;
+        if (paren_open != NULL) {
+            paren_close = strchr(paren_open + 1, ')');
+        }
+        if (paren_open != NULL && paren_close != NULL && (brace_open == NULL || paren_close < brace_open)) {
+            *paren_close = '\0';
+            anchor = trim_inplace(paren_open + 1);
+        }
         char *label = NULL;
         if (brace_open != NULL && brace_close != NULL && brace_close > brace_open) {
             *brace_close = '\0';
@@ -517,6 +678,57 @@ bool fbwl_apps_rules_load_file(struct fbwl_apps_rule **rules, size_t *rule_count
             }
             target->set_workspace = true;
             target->workspace = (int)ws;
+            continue;
+        }
+
+        if (strcasecmp(key, "head") == 0) {
+            if (label == NULL || *label == '\0') {
+                continue;
+            }
+            char *endptr = NULL;
+            long head = strtol(label, &endptr, 10);
+            if (endptr == label) {
+                continue;
+            }
+            target->set_head = true;
+            target->head = (int)head;
+            continue;
+        }
+
+        if (strcasecmp(key, "dimensions") == 0) {
+            int w = 0;
+            int h = 0;
+            bool wp = false;
+            bool hp = false;
+            if (label != NULL && parse_two_ints_with_percent(label, &w, &wp, &h, &hp)) {
+                target->set_dimensions = true;
+                target->width = w;
+                target->width_percent = wp;
+                target->height = h;
+                target->height_percent = hp;
+            }
+            continue;
+        }
+
+        if (strcasecmp(key, "position") == 0) {
+            int x = 0;
+            int y = 0;
+            bool xp = false;
+            bool yp = false;
+            if (label != NULL && parse_two_ints_with_percent(label, &x, &xp, &y, &yp)) {
+                bool ok = false;
+                enum fbwl_apps_rule_anchor a = FBWL_APPS_ANCHOR_TOPLEFT;
+                if (anchor != NULL && *anchor != '\0') {
+                    a = parse_anchor(anchor, &ok);
+                    (void)ok;
+                }
+                target->set_position = true;
+                target->position_anchor = a;
+                target->x = x;
+                target->x_percent = xp;
+                target->y = y;
+                target->y_percent = yp;
+            }
             continue;
         }
 

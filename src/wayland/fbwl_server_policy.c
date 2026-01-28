@@ -20,6 +20,7 @@
 #include <wlr/util/log.h>
 #include <wlr/xwayland.h>
 
+#include "wayland/fbwl_apps_remember.h"
 #include "wayland/fbwl_cursor.h"
 #include "wayland/fbwl_server_internal.h"
 #include "wayland/fbwl_tabs.h"
@@ -1222,6 +1223,8 @@ void server_apps_rules_apply_pre_map(struct fbwl_view *view,
             fbwm_core_workspace_switch(&server->wm, rule->workspace);
         }
     }
+
+    fbwl_apps_remember_apply_pre_map(view, rule);
 }
 
 void server_apps_rules_apply_post_map(struct fbwl_view *view,

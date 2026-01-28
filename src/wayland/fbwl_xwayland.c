@@ -135,7 +135,7 @@ void fbwl_xwayland_handle_surface_map(struct fbwl_view *view,
             view->apps_rules_applied = true;
 
             wlr_log(WLR_INFO,
-                "Apps: applied title=%s app_id=%s workspace_id=%d sticky=%d jump=%d minimized=%d maximized=%d fullscreen=%d group_id=%d deco=%d layer=%d",
+                "Apps: applied title=%s app_id=%s workspace_id=%d sticky=%d jump=%d minimized=%d maximized=%d fullscreen=%d group_id=%d deco=%d layer=%d head=%d dims=%d%sx%d%s pos=%d%s,%d%s anchor=%d",
                 fbwl_view_display_title(view),
                 fbwl_view_app_id(view) != NULL ? fbwl_view_app_id(view) : "(no-app-id)",
                 apps_rule->set_workspace ? apps_rule->workspace : -1,
@@ -146,7 +146,17 @@ void fbwl_xwayland_handle_surface_map(struct fbwl_view *view,
                 apps_rule->set_fullscreen ? (apps_rule->fullscreen ? 1 : 0) : -1,
                 apps_rule->group_id,
                 apps_rule->set_decor ? (apps_rule->decor_enabled ? 1 : 0) : -1,
-                apps_rule->set_layer ? apps_rule->layer : -1);
+                apps_rule->set_layer ? apps_rule->layer : -1,
+                apps_rule->set_head ? apps_rule->head : -1,
+                apps_rule->set_dimensions ? apps_rule->width : -1,
+                apps_rule->set_dimensions && apps_rule->width_percent ? "%" : "",
+                apps_rule->set_dimensions ? apps_rule->height : -1,
+                apps_rule->set_dimensions && apps_rule->height_percent ? "%" : "",
+                apps_rule->set_position ? apps_rule->x : -1,
+                apps_rule->set_position && apps_rule->x_percent ? "%" : "",
+                apps_rule->set_position ? apps_rule->y : -1,
+                apps_rule->set_position && apps_rule->y_percent ? "%" : "",
+                apps_rule->set_position ? (int)apps_rule->position_anchor : -1);
         }
     }
 

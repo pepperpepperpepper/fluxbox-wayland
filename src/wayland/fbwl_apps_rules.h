@@ -12,6 +12,18 @@ struct fbwl_apps_rule_match {
     bool regex_valid;
 };
 
+enum fbwl_apps_rule_anchor {
+    FBWL_APPS_ANCHOR_TOPLEFT = 0,
+    FBWL_APPS_ANCHOR_LEFT,
+    FBWL_APPS_ANCHOR_BOTTOMLEFT,
+    FBWL_APPS_ANCHOR_TOP,
+    FBWL_APPS_ANCHOR_CENTER,
+    FBWL_APPS_ANCHOR_BOTTOM,
+    FBWL_APPS_ANCHOR_TOPRIGHT,
+    FBWL_APPS_ANCHOR_RIGHT,
+    FBWL_APPS_ANCHOR_BOTTOMRIGHT,
+};
+
 struct fbwl_apps_rule {
     struct fbwl_apps_rule_match app_id;
     struct fbwl_apps_rule_match instance;
@@ -27,6 +39,22 @@ struct fbwl_apps_rule {
 
     bool set_jump;
     bool jump;
+
+    bool set_head;
+    int head;
+
+    bool set_dimensions;
+    int width;
+    bool width_percent;
+    int height;
+    bool height_percent;
+
+    bool set_position;
+    enum fbwl_apps_rule_anchor position_anchor;
+    int x;
+    bool x_percent;
+    int y;
+    bool y_percent;
 
     bool set_minimized;
     bool minimized;

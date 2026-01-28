@@ -1303,7 +1303,14 @@ Goal: users can drop in their existing `~/.fluxbox` directory and get the same b
   - [x] Support `[group]` blocks (tab-group attach on map).
   - [x] Support `[Deco] {none}` and `[Layer] {Menu/Top/Normal/Bottom/Desktop}` (maps to scene layers).
   - [x] Smoke: extend `scripts/fbwl-smoke-apps-rules.sh` to validate group/deco/layer behavior.
-  - [ ] TODO: Position/Dimensions/Head/Shaded/Alpha/FocusProtection/SaveOnClose, etc.
+  - [ ] TODO: Fill out “Remember” surface area:
+    - [x] Position: `[Position] (anchor) {X[%] Y[%]}` (best-effort compositor placement).
+    - [x] Dimensions: `[Dimensions] {width[%] height[%]}` (best-effort size request).
+    - [x] Head: `[Head] {number}` (Wayland outputs via ScreenMap).
+    - [ ] Shaded
+    - [ ] Alpha
+    - [ ] FocusProtection
+    - [ ] SaveOnClose (write-back)
 - [ ] Extend menu/style parity:
   - [x] Menu: support `[include]` (file/dir), `[separator]`, `[nop]`.
   - [ ] TODO: dynamic submenus/tags: `[config]`, `[workspaces]`, `[stylesmenu]`, `[stylesdir]`, `[wallpapers]`, etc.
