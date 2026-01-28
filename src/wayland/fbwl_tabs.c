@@ -204,7 +204,7 @@ static void tabs_add_to_group(struct fbwl_tab_group *group, struct fbwl_view *vi
         return;
     }
     view->tab_group = group;
-    wl_list_insert(&group->views, &view->tab_link);
+    wl_list_insert(group->views.prev, &view->tab_link);
     if (group->active == NULL) {
         group->active = view;
     }
@@ -306,6 +306,100 @@ void fbwl_tabs_activate(struct fbwl_view *view, const char *reason) {
     }
     tab_group_set_active(view->tab_group, view, reason);
     tab_group_apply_visibility(view->tab_group);
+}
+
+static struct fbwl_view *tab_group_pick_next_mapped(struct fbwl_tab_group *group, struct fbwl_view *start) {
+    if (group == NULL || start == NULL) {
+        return NULL;
+    }
+
+    struct wl_list *pos = start->tab_link.next;
+    for (;;) {
+        if (pos == &group->views) {
+            pos = group->views.next;
+            continue;
+        }
+        if (pos == &start->tab_link) {
+            break;
+        }
+        struct fbwl_view *v = wl_container_of(pos, v, tab_link);
+        if (view_is_mapped_not_minimized(v)) {
+            return v;
+        }
+        pos = pos->next;
+    }
+    return NULL;
+}
+
+static struct fbwl_view *tab_group_pick_prev_mapped(struct fbwl_tab_group *group, struct fbwl_view *start) {
+    if (group == NULL || start == NULL) {
+        return NULL;
+    }
+
+    struct wl_list *pos = start->tab_link.prev;
+    for (;;) {
+        if (pos == &group->views) {
+            pos = group->views.prev;
+            continue;
+        }
+        if (pos == &start->tab_link) {
+            break;
+        }
+        struct fbwl_view *v = wl_container_of(pos, v, tab_link);
+        if (view_is_mapped_not_minimized(v)) {
+            return v;
+        }
+        pos = pos->prev;
+    }
+    return NULL;
+}
+
+struct fbwl_view *fbwl_tabs_pick_next(const struct fbwl_view *view) {
+    struct fbwl_tab_group *group = view != NULL ? view->tab_group : NULL;
+    if (group == NULL) {
+        return NULL;
+    }
+
+    struct fbwl_view *start = tab_group_pick_active_fallback(group);
+    if (start == NULL) {
+        return NULL;
+    }
+
+    return tab_group_pick_next_mapped(group, start);
+}
+
+struct fbwl_view *fbwl_tabs_pick_prev(const struct fbwl_view *view) {
+    struct fbwl_tab_group *group = view != NULL ? view->tab_group : NULL;
+    if (group == NULL) {
+        return NULL;
+    }
+
+    struct fbwl_view *start = tab_group_pick_active_fallback(group);
+    if (start == NULL) {
+        return NULL;
+    }
+
+    return tab_group_pick_prev_mapped(group, start);
+}
+
+struct fbwl_view *fbwl_tabs_pick_index0(const struct fbwl_view *view, int tab_index0) {
+    struct fbwl_tab_group *group = view != NULL ? view->tab_group : NULL;
+    if (group == NULL || tab_index0 < 0) {
+        return NULL;
+    }
+
+    int idx = 0;
+    struct fbwl_view *v;
+    wl_list_for_each(v, &group->views, tab_link) {
+        if (!view_is_mapped_not_minimized(v)) {
+            continue;
+        }
+        if (idx == tab_index0) {
+            return v;
+        }
+        idx++;
+    }
+    return NULL;
 }
 
 void fbwl_tabs_sync_geometry_from_view(struct fbwl_view *view, bool include_size, int width, int height,

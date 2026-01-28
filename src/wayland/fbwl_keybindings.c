@@ -9,6 +9,7 @@
 #include <wlr/util/edges.h>
 
 #include "wayland/fbwl_fluxbox_cmd.h"
+#include "wayland/fbwl_tabs.h"
 #include "wayland/fbwl_view.h"
 
 #define FBWL_KEYMOD_MASK (WLR_MODIFIER_SHIFT | WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT | WLR_MODIFIER_LOGO | \
@@ -253,6 +254,42 @@ static bool execute_action_depth(enum fbwl_keybinding_action action, int arg, co
     case FBWL_KEYBIND_FOCUS_PREV:
         fbwm_core_focus_prev(hooks->wm);
         return true;
+    case FBWL_KEYBIND_TAB_NEXT: {
+        if (view == NULL || view->tab_group == NULL) {
+            return true;
+        }
+        struct fbwl_view *next = fbwl_tabs_pick_next(view);
+        if (next == NULL) {
+            return true;
+        }
+        fbwl_tabs_activate(next, "keybinding-nexttab");
+        fbwm_core_focus_view(hooks->wm, &next->wm_view);
+        return true;
+    }
+    case FBWL_KEYBIND_TAB_PREV: {
+        if (view == NULL || view->tab_group == NULL) {
+            return true;
+        }
+        struct fbwl_view *prev = fbwl_tabs_pick_prev(view);
+        if (prev == NULL) {
+            return true;
+        }
+        fbwl_tabs_activate(prev, "keybinding-prevtab");
+        fbwm_core_focus_view(hooks->wm, &prev->wm_view);
+        return true;
+    }
+    case FBWL_KEYBIND_TAB_GOTO: {
+        if (view == NULL || view->tab_group == NULL) {
+            return true;
+        }
+        struct fbwl_view *pick = fbwl_tabs_pick_index0(view, arg);
+        if (pick == NULL) {
+            return true;
+        }
+        fbwl_tabs_activate(pick, "keybinding-tab");
+        fbwm_core_focus_view(hooks->wm, &pick->wm_view);
+        return true;
+    }
     case FBWL_KEYBIND_TOGGLE_MAXIMIZE: {
         if (hooks->view_set_maximized == NULL) {
             return false;

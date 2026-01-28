@@ -1297,7 +1297,11 @@ Goal: users can drop in their existing `~/.fluxbox` directory and get the same b
 	  - [x] Support mouse bindings: OnDesktop/OnWindow/OnTitlebar/OnToolbar + Mouse1-5 (Mouse4/5 via scroll axis).
 	  - [x] Support `MacroCmd {..}` execution for common subcommands (Raise/Focus/StartMoving/StartResizing).
 	  - [x] Smoke: extend `scripts/fbwl-smoke-keys-file.sh` to validate key+mouse bindings and `Reconfigure` reload.
-	  - [ ] TODO: NextTab/PrevTab/Tab N, client patterns, key modes, WorkspaceMenu, etc.
+	  - [ ] TODO:
+	    - [x] NextTab/PrevTab/Tab N.
+	    - [ ] Client patterns (workspace=[current], etc).
+	    - [ ] Key modes.
+	    - [ ] WorkspaceMenu.
 - [ ] Extend `apps` rules toward full “Remember” parity:
   - [x] Match semantics: patterns are full-match anchored (Fluxbox-like `^(...)$` behavior).
   - [x] Support `[group]` blocks (tab-group attach on map).

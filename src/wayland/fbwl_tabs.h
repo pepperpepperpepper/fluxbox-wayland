@@ -37,6 +37,10 @@ bool fbwl_tabs_attach(struct fbwl_view *view, struct fbwl_view *anchor, const ch
 void fbwl_tabs_detach(struct fbwl_view *view, const char *reason);
 void fbwl_tabs_activate(struct fbwl_view *view, const char *reason);
 
+struct fbwl_view *fbwl_tabs_pick_next(const struct fbwl_view *view);
+struct fbwl_view *fbwl_tabs_pick_prev(const struct fbwl_view *view);
+struct fbwl_view *fbwl_tabs_pick_index0(const struct fbwl_view *view, int tab_index0);
+
 void fbwl_tabs_repair(struct fbwl_server *server);
 
 void fbwl_tabs_sync_geometry_from_view(struct fbwl_view *view, bool include_size, int width, int height,

@@ -82,6 +82,43 @@ bool fbwl_fluxbox_cmd_resolve(const char *cmd_name, const char *cmd_args,
         *out_action = FBWL_KEYBIND_FOCUS_PREV;
         return true;
     }
+    if (strcasecmp(cmd_name, "nexttab") == 0) {
+        *out_action = FBWL_KEYBIND_TAB_NEXT;
+        return true;
+    }
+    if (strcasecmp(cmd_name, "prevtab") == 0) {
+        *out_action = FBWL_KEYBIND_TAB_PREV;
+        return true;
+    }
+    if (strcasecmp(cmd_name, "tab") == 0) {
+        int tab0 = 0;
+        if (cmd_args != NULL && *cmd_args != '\0') {
+            while (*cmd_args != '\0' && isspace((unsigned char)*cmd_args)) {
+                cmd_args++;
+            }
+            if (*cmd_args == '\0') {
+                return false;
+            }
+            char *end = NULL;
+            long tab = strtol(cmd_args, &end, 10);
+            if (end == cmd_args) {
+                return false;
+            }
+            while (*end != '\0' && isspace((unsigned char)*end)) {
+                end++;
+            }
+            if (*end != '\0') {
+                return false;
+            }
+            if (tab < 1 || tab > 100000) {
+                return false;
+            }
+            tab0 = (int)(tab - 1);
+        }
+        *out_action = FBWL_KEYBIND_TAB_GOTO;
+        *out_arg = tab0;
+        return true;
+    }
 
     if (strcasecmp(cmd_name, "maximize") == 0) {
         *out_action = FBWL_KEYBIND_TOGGLE_MAXIMIZE;
@@ -224,4 +261,3 @@ bool fbwl_fluxbox_cmd_resolve(const char *cmd_name, const char *cmd_args,
 
     return false;
 }
-
