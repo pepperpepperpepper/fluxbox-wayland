@@ -316,6 +316,10 @@ static void apps_rule_apply_attrs(struct fbwl_apps_rule *rule, const struct fbwl
         rule->set_fullscreen = true;
         rule->fullscreen = attrs->fullscreen;
     }
+    if (attrs->set_shaded) {
+        rule->set_shaded = true;
+        rule->shaded = attrs->shaded;
+    }
     if (attrs->set_decor) {
         rule->set_decor = true;
         rule->decor_enabled = attrs->decor_enabled;
@@ -782,6 +786,15 @@ bool fbwl_apps_rules_load_file(struct fbwl_apps_rule **rules, size_t *rule_count
             if (label != NULL && parse_yes_no(label, &v)) {
                 target->set_fullscreen = true;
                 target->fullscreen = v;
+            }
+            continue;
+        }
+
+        if (strcasecmp(key, "shaded") == 0) {
+            bool v;
+            if (label != NULL && parse_yes_no(label, &v)) {
+                target->set_shaded = true;
+                target->shaded = v;
             }
             continue;
         }

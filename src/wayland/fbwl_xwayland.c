@@ -135,7 +135,7 @@ void fbwl_xwayland_handle_surface_map(struct fbwl_view *view,
             view->apps_rules_applied = true;
 
             wlr_log(WLR_INFO,
-                "Apps: applied title=%s app_id=%s workspace_id=%d sticky=%d jump=%d minimized=%d maximized=%d fullscreen=%d group_id=%d deco=%d layer=%d head=%d dims=%d%sx%d%s pos=%d%s,%d%s anchor=%d",
+                "Apps: applied title=%s app_id=%s workspace_id=%d sticky=%d jump=%d minimized=%d maximized=%d fullscreen=%d shaded=%d group_id=%d deco=%d layer=%d head=%d dims=%d%sx%d%s pos=%d%s,%d%s anchor=%d",
                 fbwl_view_display_title(view),
                 fbwl_view_app_id(view) != NULL ? fbwl_view_app_id(view) : "(no-app-id)",
                 apps_rule->set_workspace ? apps_rule->workspace : -1,
@@ -144,6 +144,7 @@ void fbwl_xwayland_handle_surface_map(struct fbwl_view *view,
                 apps_rule->set_minimized ? (apps_rule->minimized ? 1 : 0) : -1,
                 apps_rule->set_maximized ? (apps_rule->maximized ? 1 : 0) : -1,
                 apps_rule->set_fullscreen ? (apps_rule->fullscreen ? 1 : 0) : -1,
+                apps_rule->set_shaded ? (apps_rule->shaded ? 1 : 0) : -1,
                 apps_rule->group_id,
                 apps_rule->set_decor ? (apps_rule->decor_enabled ? 1 : 0) : -1,
                 apps_rule->set_layer ? apps_rule->layer : -1,
@@ -246,9 +247,11 @@ void fbwl_xwayland_handle_surface_associate(struct fbwl_view *view,
     if (view->scene_tree == NULL) {
         return;
     }
+    view->content_tree = wlr_scene_tree_create(view->scene_tree);
     view->base_layer = parent;
-    (void)wlr_scene_surface_create(view->scene_tree, xsurface->surface);
     view->scene_tree->node.data = view;
+    struct wlr_scene_tree *content_parent = view->content_tree != NULL ? view->content_tree : view->scene_tree;
+    (void)wlr_scene_surface_create(content_parent, xsurface->surface);
     fbwl_view_decor_create(view, view->server != NULL ? decor_theme : NULL);
     fbwl_view_decor_set_enabled(view, true);
 
@@ -290,6 +293,7 @@ void fbwl_xwayland_handle_surface_dissociate(struct fbwl_view *view,
     if (view->scene_tree != NULL) {
         wlr_scene_node_destroy(&view->scene_tree->node);
         view->scene_tree = NULL;
+        view->content_tree = NULL;
     }
 }
 
@@ -407,6 +411,7 @@ void fbwl_xwayland_handle_surface_destroy(struct fbwl_view *view,
     if (view->scene_tree != NULL) {
         wlr_scene_node_destroy(&view->scene_tree->node);
         view->scene_tree = NULL;
+        view->content_tree = NULL;
     }
 
     fbwl_view_foreign_toplevel_destroy(view);

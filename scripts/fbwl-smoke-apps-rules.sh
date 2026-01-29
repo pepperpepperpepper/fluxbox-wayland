@@ -25,6 +25,7 @@ cleanup() {
   if [[ -n "${G2_PID:-}" ]]; then kill "$G2_PID" 2>/dev/null || true; fi
   if [[ -n "${NODECO_PID:-}" ]]; then kill "$NODECO_PID" 2>/dev/null || true; fi
   if [[ -n "${PLACED_PID:-}" ]]; then kill "$PLACED_PID" 2>/dev/null || true; fi
+  if [[ -n "${SHADED_PID:-}" ]]; then kill "$SHADED_PID" 2>/dev/null || true; fi
   if [[ -n "${FBW_PID:-}" ]]; then kill "$FBW_PID" 2>/dev/null || true; fi
   wait 2>/dev/null || true
 }
@@ -59,6 +60,10 @@ cat >"$APPS_FILE" <<'EOF'
   [Head]       {0}
   [Dimensions] {200 120}
   [Position]   (TopLeft) {0 0}
+[end]
+
+[app] (app_id=fbwl-apps-shaded)
+  [Shaded] {yes}
 [end]
 EOF
 
@@ -123,5 +128,13 @@ PLACED_PID=$!
 START=$((OFFSET + 1))
 timeout 5 bash -c "until tail -c +$START '$LOG' | rg -q 'Apps: applied .*app_id=fbwl-apps-placed .*head=0 .*dims=200x120 .*pos=0,0 .*anchor=0'; do sleep 0.05; done"
 timeout 5 bash -c "until tail -c +$START '$LOG' | rg -q 'Apps: remember position .*app_id=fbwl-apps-placed .*anchor=TopLeft'; do sleep 0.05; done"
+
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-smoke-client --socket "$SOCKET" --app-id fbwl-apps-shaded --title apps-shaded --stay-ms 10000 >/dev/null 2>&1 &
+SHADED_PID=$!
+
+START=$((OFFSET + 1))
+timeout 5 bash -c "until tail -c +$START '$LOG' | rg -q 'Apps: applied .*app_id=fbwl-apps-shaded .*shaded=1'; do sleep 0.05; done"
+timeout 5 bash -c "until tail -c +$START '$LOG' | rg -q 'Shade: .* on reason=apps'; do sleep 0.05; done"
 
 echo "ok: apps rules smoke passed (socket=$SOCKET log=$LOG apps=$APPS_FILE)"

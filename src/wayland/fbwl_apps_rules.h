@@ -65,6 +65,9 @@ struct fbwl_apps_rule {
     bool set_fullscreen;
     bool fullscreen;
 
+    bool set_shaded;
+    bool shaded;
+
     bool set_decor;
     bool decor_enabled;
 

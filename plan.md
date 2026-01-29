@@ -1320,7 +1320,7 @@ Goal: users can drop in their existing `~/.fluxbox` directory and get the same b
     - [x] Position: `[Position] (anchor) {X[%] Y[%]}` (best-effort compositor placement).
     - [x] Dimensions: `[Dimensions] {width[%] height[%]}` (best-effort size request).
     - [x] Head: `[Head] {number}` (Wayland outputs via ScreenMap).
-    - [ ] Shaded
+	    - [x] Shaded
     - [ ] Alpha
     - [ ] FocusProtection
     - [ ] SaveOnClose (write-back)

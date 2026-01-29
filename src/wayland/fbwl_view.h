@@ -34,9 +34,11 @@ struct fbwl_view {
     struct wlr_xdg_toplevel *xdg_toplevel;
     struct wlr_xwayland_surface *xwayland_surface;
     struct wlr_scene_tree *scene_tree;
+    struct wlr_scene_tree *content_tree;
     struct wlr_scene_tree *base_layer;
     bool decor_enabled;
     bool decor_active;
+    bool shaded;
     struct wlr_scene_tree *decor_tree;
     struct wlr_scene_rect *decor_titlebar;
     struct wlr_scene_buffer *decor_title_text;
@@ -128,6 +130,8 @@ void fbwl_view_decor_create(struct fbwl_view *view, const struct fbwl_decor_them
 void fbwl_view_decor_set_enabled(struct fbwl_view *view, bool enabled);
 struct fbwl_decor_hit fbwl_view_decor_hit_test(const struct fbwl_view *view, const struct fbwl_decor_theme *theme,
         double lx, double ly);
+
+void fbwl_view_set_shaded(struct fbwl_view *view, bool shaded, const char *why);
 
 void fbwl_view_save_geometry(struct fbwl_view *view);
 void fbwl_view_get_output_box(const struct fbwl_view *view, struct wlr_output_layout *output_layout,

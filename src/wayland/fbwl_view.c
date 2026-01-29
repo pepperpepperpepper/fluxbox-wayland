@@ -281,9 +281,12 @@ void fbwl_view_decor_update(struct fbwl_view *view, const struct fbwl_decor_them
     fbwl_view_decor_apply_enabled(view);
 
     const int w = fbwl_view_current_width(view);
-    const int h = fbwl_view_current_height(view);
-    if (w < 1 || h < 1) {
+    int h = fbwl_view_current_height(view);
+    if (w < 1 || (!view->shaded && h < 1)) {
         return;
+    }
+    if (view->shaded) {
+        h = 0;
     }
 
     const int border = theme->border_width;
@@ -380,9 +383,12 @@ struct fbwl_decor_hit fbwl_view_decor_hit_test(const struct fbwl_view *view, con
     }
 
     const int w = fbwl_view_current_width(view);
-    const int h = fbwl_view_current_height(view);
-    if (w < 1 || h < 1) {
+    int h = fbwl_view_current_height(view);
+    if (w < 1 || (!view->shaded && h < 1)) {
         return hit;
+    }
+    if (view->shaded) {
+        h = 0;
     }
 
     const int border = theme->border_width;
@@ -445,6 +451,35 @@ struct fbwl_decor_hit fbwl_view_decor_hit_test(const struct fbwl_view *view, con
         hit.edges = edges;
     }
     return hit;
+}
+
+void fbwl_view_set_shaded(struct fbwl_view *view, bool shaded, const char *why) {
+    if (view == NULL) {
+        return;
+    }
+
+    if (view->fullscreen && shaded) {
+        wlr_log(WLR_INFO, "Shade: ignoring request while fullscreen title=%s reason=%s",
+            fbwl_view_display_title(view),
+            why != NULL ? why : "(null)");
+        return;
+    }
+
+    if (shaded == view->shaded) {
+        return;
+    }
+
+    view->shaded = shaded;
+    if (view->content_tree != NULL) {
+        wlr_scene_node_set_enabled(&view->content_tree->node, !shaded);
+    }
+    if (view->server != NULL) {
+        fbwl_view_decor_update(view, &view->server->decor_theme);
+    }
+    wlr_log(WLR_INFO, "Shade: %s %s reason=%s",
+        fbwl_view_display_title(view),
+        shaded ? "on" : "off",
+        why != NULL ? why : "(null)");
 }
 
 void fbwl_view_save_geometry(struct fbwl_view *view) {

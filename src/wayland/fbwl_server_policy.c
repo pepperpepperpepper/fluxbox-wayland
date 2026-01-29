@@ -1264,6 +1264,9 @@ void server_apps_rules_apply_post_map(struct fbwl_view *view,
         fbwl_view_set_fullscreen(view, rule->fullscreen, view->server->output_layout, &view->server->outputs,
             view->server->layer_normal, view->server->layer_fullscreen, NULL);
     }
+    if (rule->set_shaded) {
+        fbwl_view_set_shaded(view, rule->shaded, "apps");
+    }
     if (rule->set_minimized) {
         view_set_minimized(view, rule->minimized, "apps");
     }
