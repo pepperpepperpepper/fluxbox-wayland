@@ -27,6 +27,8 @@ cleanup() {
   if [[ -n "${APP_PID:-}" ]]; then kill "$APP_PID" 2>/dev/null || true; fi
   if [[ -n "${TAB_A_PID:-}" ]]; then kill "$TAB_A_PID" 2>/dev/null || true; fi
   if [[ -n "${TAB_B_PID:-}" ]]; then kill "$TAB_B_PID" 2>/dev/null || true; fi
+  if [[ -n "${FOCUS_A_PID:-}" ]]; then kill "$FOCUS_A_PID" 2>/dev/null || true; fi
+  if [[ -n "${FOCUS_B_PID:-}" ]]; then kill "$FOCUS_B_PID" 2>/dev/null || true; fi
   if [[ -n "${FBW_PID:-}" ]]; then kill "$FBW_PID" 2>/dev/null || true; fi
   wait 2>/dev/null || true
 }
@@ -86,6 +88,8 @@ Mod1 F :NextTab
 Mod1 M :PrevTab
 Mod1 1 :Tab 1
 Mod1 2 :Tab 2
+Mod1 I :NextWindow {groups} (class=fbwl-keys-focus-a)
+Mod1 Escape :NextWindow {groups} (class=fbwl-keys-focus-b)
 EOF
 
 ./fbwl-input-injector --socket "$SOCKET" key alt-return
@@ -140,5 +144,23 @@ timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Tabs: activate
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" key alt-1
 timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Tabs: activate reason=keybinding-tab title=keys-tab-'; do sleep 0.05; done"
+
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-smoke-client --socket "$SOCKET" --title keys-focus-a --app-id fbwl-keys-focus-a --stay-ms 10000 >/dev/null 2>&1 &
+FOCUS_A_PID=$!
+timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Focus: keys-focus-a'; do sleep 0.05; done"
+
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-smoke-client --socket "$SOCKET" --title keys-focus-b --app-id fbwl-keys-focus-b --stay-ms 10000 >/dev/null 2>&1 &
+FOCUS_B_PID=$!
+timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Focus: keys-focus-b'; do sleep 0.05; done"
+
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-input-injector --socket "$SOCKET" key alt-i
+timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Focus: keys-focus-a'; do sleep 0.05; done"
+
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-input-injector --socket "$SOCKET" key alt-escape
+timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Focus: keys-focus-b'; do sleep 0.05; done"
 
 echo "ok: keys file smoke passed (socket=$SOCKET log=$LOG keys_file=$KEYS_FILE)"

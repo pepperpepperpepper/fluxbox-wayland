@@ -1299,7 +1299,10 @@ Goal: users can drop in their existing `~/.fluxbox` directory and get the same b
 	  - [x] Smoke: extend `scripts/fbwl-smoke-keys-file.sh` to validate key+mouse bindings and `Reconfigure` reload.
 	  - [ ] TODO:
 	    - [x] NextTab/PrevTab/Tab N.
-	    - [ ] Client patterns (workspace=[current], etc).
+	    - [x] Client patterns (workspace=[current], etc).
+	      - Parse `{static groups}` options and `(...)` client-pattern terms from `keys` for Next/PrevWindow.
+	      - Match subset: `workspace=[current]|N`, `class|app_id`, `title`, `minimized|maximized|fullscreen`, `stuck`.
+	      - Note: `static` is parsed but currently has no effect (ordering remains MRU-ish).
 	    - [ ] Key modes.
 	    - [ ] WorkspaceMenu.
 - [ ] Extend `apps` rules toward full “Remember” parity:

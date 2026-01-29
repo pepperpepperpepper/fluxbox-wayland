@@ -1,7 +1,9 @@
 #include "wayland/fbwl_keybindings.h"
 
+#include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 #include <linux/input-event-codes.h>
 
@@ -14,6 +16,37 @@
 
 #define FBWL_KEYMOD_MASK (WLR_MODIFIER_SHIFT | WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT | WLR_MODIFIER_LOGO | \
     WLR_MODIFIER_MOD2 | WLR_MODIFIER_MOD3 | WLR_MODIFIER_MOD5)
+
+struct fbwl_cycle_pattern {
+    bool workspace_set;
+    bool workspace_current;
+    int workspace0;
+    bool workspace_negate;
+
+    bool minimized_set;
+    bool minimized;
+    bool minimized_negate;
+
+    bool maximized_set;
+    bool maximized;
+    bool maximized_negate;
+
+    bool fullscreen_set;
+    bool fullscreen;
+    bool fullscreen_negate;
+
+    bool stuck_set;
+    bool stuck;
+    bool stuck_negate;
+
+    bool title_set;
+    bool title_negate;
+    char *title;
+
+    bool class_set;
+    bool class_negate;
+    char *class;
+};
 
 void fbwl_keybindings_free(struct fbwl_keybinding **bindings, size_t *count) {
     if (bindings == NULL || *bindings == NULL || count == NULL) {
@@ -110,6 +143,387 @@ static struct fbwl_view *resolve_target_view(struct fbwl_view *target_view, cons
         return NULL;
     }
     return hooks->wm->focused->userdata;
+}
+
+static char *trim_inplace(char *s) {
+    if (s == NULL) {
+        return NULL;
+    }
+    while (*s != '\0' && isspace((unsigned char)*s)) {
+        s++;
+    }
+    if (*s == '\0') {
+        return s;
+    }
+    char *end = s + strlen(s) - 1;
+    while (end > s && isspace((unsigned char)*end)) {
+        *end = '\0';
+        end--;
+    }
+    return s;
+}
+
+static bool parse_yes_no(const char *s, bool *out) {
+    if (s == NULL || out == NULL) {
+        return false;
+    }
+
+    if (strcasecmp(s, "yes") == 0 || strcasecmp(s, "true") == 0 ||
+            strcasecmp(s, "on") == 0 || strcmp(s, "1") == 0) {
+        *out = true;
+        return true;
+    }
+    if (strcasecmp(s, "no") == 0 || strcasecmp(s, "false") == 0 ||
+            strcasecmp(s, "off") == 0 || strcmp(s, "0") == 0) {
+        *out = false;
+        return true;
+    }
+    return false;
+}
+
+static void parse_cycle_options_inplace(char *s, bool *out_groups, bool *out_static, char **out_pattern) {
+    if (out_groups != NULL) {
+        *out_groups = false;
+    }
+    if (out_static != NULL) {
+        *out_static = false;
+    }
+    if (out_pattern != NULL) {
+        *out_pattern = s;
+    }
+    if (s == NULL) {
+        return;
+    }
+
+    char *open = strchr(s, '{');
+    if (open == NULL) {
+        if (out_pattern != NULL) {
+            *out_pattern = trim_inplace(s);
+        }
+        return;
+    }
+    char *close = strchr(open + 1, '}');
+    if (close == NULL) {
+        if (out_pattern != NULL) {
+            *out_pattern = trim_inplace(s);
+        }
+        return;
+    }
+
+    *open = '\0';
+    *close = '\0';
+
+    char *opts = trim_inplace(open + 1);
+    if (opts != NULL && *opts != '\0') {
+        char *save = NULL;
+        for (char *tok = strtok_r(opts, " \t", &save); tok != NULL; tok = strtok_r(NULL, " \t", &save)) {
+            if (out_groups != NULL && strcasecmp(tok, "groups") == 0) {
+                *out_groups = true;
+                continue;
+            }
+            if (out_static != NULL && strcasecmp(tok, "static") == 0) {
+                *out_static = true;
+                continue;
+            }
+        }
+    }
+
+    if (out_pattern != NULL) {
+        *out_pattern = trim_inplace(close + 1);
+    }
+}
+
+static void cycle_pattern_parse_term(struct fbwl_cycle_pattern *pat, char *term) {
+    if (pat == NULL || term == NULL) {
+        return;
+    }
+
+    char *s = trim_inplace(term);
+    if (s == NULL || *s == '\0') {
+        return;
+    }
+
+    bool negate = false;
+    char *key = NULL;
+    char *val = NULL;
+
+    char *op = strstr(s, "!=");
+    if (op != NULL) {
+        negate = true;
+        *op = '\0';
+        key = trim_inplace(s);
+        val = trim_inplace(op + 2);
+    } else {
+        op = strchr(s, '=');
+        if (op == NULL) {
+            return;
+        }
+        *op = '\0';
+        key = trim_inplace(s);
+        val = trim_inplace(op + 1);
+    }
+
+    if (key == NULL || *key == '\0' || val == NULL || *val == '\0') {
+        return;
+    }
+
+    if (strcasecmp(key, "workspace") == 0) {
+        pat->workspace_set = true;
+        pat->workspace_negate = negate;
+        if (strcasecmp(val, "[current]") == 0) {
+            pat->workspace_current = true;
+            pat->workspace0 = 0;
+            return;
+        }
+
+        char *end = NULL;
+        long ws = strtol(val, &end, 10);
+        if (end == val || *end != '\0' || ws < -100000 || ws > 100000) {
+            pat->workspace_set = false;
+            pat->workspace_negate = false;
+            return;
+        }
+        pat->workspace_current = false;
+        pat->workspace0 = (int)ws;
+        return;
+    }
+
+    if (strcasecmp(key, "minimized") == 0) {
+        bool v = false;
+        if (!parse_yes_no(val, &v)) {
+            return;
+        }
+        pat->minimized_set = true;
+        pat->minimized_negate = negate;
+        pat->minimized = v;
+        return;
+    }
+
+    if (strcasecmp(key, "maximized") == 0) {
+        bool v = false;
+        if (!parse_yes_no(val, &v)) {
+            return;
+        }
+        pat->maximized_set = true;
+        pat->maximized_negate = negate;
+        pat->maximized = v;
+        return;
+    }
+
+    if (strcasecmp(key, "fullscreen") == 0) {
+        bool v = false;
+        if (!parse_yes_no(val, &v)) {
+            return;
+        }
+        pat->fullscreen_set = true;
+        pat->fullscreen_negate = negate;
+        pat->fullscreen = v;
+        return;
+    }
+
+    if (strcasecmp(key, "stuck") == 0 || strcasecmp(key, "sticky") == 0) {
+        bool v = false;
+        if (!parse_yes_no(val, &v)) {
+            return;
+        }
+        pat->stuck_set = true;
+        pat->stuck_negate = negate;
+        pat->stuck = v;
+        return;
+    }
+
+    if (strcasecmp(key, "title") == 0) {
+        pat->title_set = true;
+        pat->title_negate = negate;
+        pat->title = val;
+        return;
+    }
+
+    if (strcasecmp(key, "class") == 0 || strcasecmp(key, "app_id") == 0 || strcasecmp(key, "appid") == 0) {
+        pat->class_set = true;
+        pat->class_negate = negate;
+        pat->class = val;
+        return;
+    }
+}
+
+static void cycle_pattern_parse_inplace(struct fbwl_cycle_pattern *pat, char *pattern) {
+    if (pat == NULL) {
+        return;
+    }
+
+    memset(pat, 0, sizeof(*pat));
+    if (pattern == NULL || *pattern == '\0') {
+        return;
+    }
+
+    for (char *p = pattern; p != NULL && *p != '\0';) {
+        char *open = strchr(p, '(');
+        if (open == NULL) {
+            break;
+        }
+        char *close = strchr(open + 1, ')');
+        if (close == NULL) {
+            break;
+        }
+
+        *close = '\0';
+        char *inside = trim_inplace(open + 1);
+        if (inside != NULL && *inside != '\0') {
+            char *save = NULL;
+            for (char *tok = strtok_r(inside, " \t", &save); tok != NULL; tok = strtok_r(NULL, " \t", &save)) {
+                cycle_pattern_parse_term(pat, tok);
+            }
+        }
+
+        p = close + 1;
+    }
+}
+
+static bool contains_substr(const char *haystack, const char *needle) {
+    if (needle == NULL || *needle == '\0') {
+        return true;
+    }
+    if (haystack == NULL) {
+        return false;
+    }
+    return strstr(haystack, needle) != NULL;
+}
+
+static bool cycle_pattern_matches(const struct fbwl_cycle_pattern *pat, const struct fbwl_view *view,
+        const struct fbwl_keybindings_hooks *hooks) {
+    if (pat == NULL || view == NULL || hooks == NULL || hooks->wm == NULL) {
+        return false;
+    }
+
+    if (pat->workspace_set) {
+        bool ok = false;
+        if (view->wm_view.sticky) {
+            ok = true;
+        } else if (pat->workspace_current) {
+            ok = view->wm_view.workspace == fbwm_core_workspace_current(hooks->wm);
+        } else {
+            ok = view->wm_view.workspace == pat->workspace0;
+        }
+        if (pat->workspace_negate) {
+            ok = !ok;
+        }
+        if (!ok) {
+            return false;
+        }
+    }
+
+    if (pat->minimized_set) {
+        bool ok = view->minimized == pat->minimized;
+        if (pat->minimized_negate) {
+            ok = !ok;
+        }
+        if (!ok) {
+            return false;
+        }
+    }
+
+    if (pat->maximized_set) {
+        bool ok = view->maximized == pat->maximized;
+        if (pat->maximized_negate) {
+            ok = !ok;
+        }
+        if (!ok) {
+            return false;
+        }
+    }
+
+    if (pat->fullscreen_set) {
+        bool ok = view->fullscreen == pat->fullscreen;
+        if (pat->fullscreen_negate) {
+            ok = !ok;
+        }
+        if (!ok) {
+            return false;
+        }
+    }
+
+    if (pat->stuck_set) {
+        bool ok = view->wm_view.sticky == pat->stuck;
+        if (pat->stuck_negate) {
+            ok = !ok;
+        }
+        if (!ok) {
+            return false;
+        }
+    }
+
+    if (pat->title_set) {
+        bool ok = contains_substr(fbwl_view_title(view), pat->title);
+        if (pat->title_negate) {
+            ok = !ok;
+        }
+        if (!ok) {
+            return false;
+        }
+    }
+
+    if (pat->class_set) {
+        bool ok = contains_substr(fbwl_view_app_id(view), pat->class);
+        if (pat->class_negate) {
+            ok = !ok;
+        }
+        if (!ok) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static struct fbwl_view *pick_cycle_candidate(const struct fbwl_keybindings_hooks *hooks, bool reverse,
+        bool groups, const struct fbwl_cycle_pattern *pat) {
+    if (hooks == NULL || hooks->wm == NULL || pat == NULL) {
+        return NULL;
+    }
+
+    const struct fbwm_view *focused = hooks->wm->focused;
+    if (reverse) {
+        for (struct fbwm_view *wm_view = hooks->wm->views.next; wm_view != &hooks->wm->views; wm_view = wm_view->next) {
+            if (!fbwm_core_view_is_visible(hooks->wm, wm_view)) {
+                continue;
+            }
+            struct fbwl_view *view = wm_view->userdata;
+            if (view == NULL) {
+                continue;
+            }
+            if (groups && !fbwl_tabs_view_is_active(view)) {
+                continue;
+            }
+            if (focused != NULL && wm_view == focused) {
+                continue;
+            }
+            if (!cycle_pattern_matches(pat, view, hooks)) {
+                continue;
+            }
+            return view;
+        }
+        return NULL;
+    }
+
+    for (struct fbwm_view *wm_view = hooks->wm->views.prev; wm_view != &hooks->wm->views; wm_view = wm_view->prev) {
+        if (!fbwm_core_view_is_visible(hooks->wm, wm_view)) {
+            continue;
+        }
+        struct fbwl_view *view = wm_view->userdata;
+        if (view == NULL) {
+            continue;
+        }
+        if (groups && !fbwl_tabs_view_is_active(view)) {
+            continue;
+        }
+        if (!cycle_pattern_matches(pat, view, hooks)) {
+            continue;
+        }
+        return view;
+    }
+
+    return NULL;
 }
 
 static uint32_t resize_edges_from_arg(const struct fbwl_view *view, int cursor_x, int cursor_y, const char *arg) {
@@ -248,12 +662,60 @@ static bool execute_action_depth(enum fbwl_keybinding_action action, int arg, co
         }
         hooks->reconfigure(hooks->userdata);
         return true;
-    case FBWL_KEYBIND_FOCUS_NEXT:
-        fbwm_core_focus_next(hooks->wm);
+    case FBWL_KEYBIND_FOCUS_NEXT: {
+        if (cmd == NULL || *cmd == '\0') {
+            fbwm_core_focus_next(hooks->wm);
+            return true;
+        }
+        char *tmp = strdup(cmd);
+        if (tmp == NULL) {
+            fbwm_core_focus_next(hooks->wm);
+            return true;
+        }
+        bool groups = false;
+        bool static_order = false;
+        char *pattern = NULL;
+        parse_cycle_options_inplace(tmp, &groups, &static_order, &pattern);
+        (void)static_order;
+        struct fbwl_cycle_pattern pat = {0};
+        cycle_pattern_parse_inplace(&pat, pattern);
+        struct fbwl_view *candidate = pick_cycle_candidate(hooks, false, groups, &pat);
+        if (candidate != NULL && hooks->wm->focused != &candidate->wm_view) {
+            if (!groups && candidate->tab_group != NULL && !fbwl_tabs_view_is_active(candidate)) {
+                fbwl_tabs_activate(candidate, "keybinding-nextwindow");
+            }
+            fbwm_core_focus_view(hooks->wm, &candidate->wm_view);
+        }
+        free(tmp);
         return true;
-    case FBWL_KEYBIND_FOCUS_PREV:
-        fbwm_core_focus_prev(hooks->wm);
+    }
+    case FBWL_KEYBIND_FOCUS_PREV: {
+        if (cmd == NULL || *cmd == '\0') {
+            fbwm_core_focus_prev(hooks->wm);
+            return true;
+        }
+        char *tmp = strdup(cmd);
+        if (tmp == NULL) {
+            fbwm_core_focus_prev(hooks->wm);
+            return true;
+        }
+        bool groups = false;
+        bool static_order = false;
+        char *pattern = NULL;
+        parse_cycle_options_inplace(tmp, &groups, &static_order, &pattern);
+        (void)static_order;
+        struct fbwl_cycle_pattern pat = {0};
+        cycle_pattern_parse_inplace(&pat, pattern);
+        struct fbwl_view *candidate = pick_cycle_candidate(hooks, true, groups, &pat);
+        if (candidate != NULL) {
+            if (!groups && candidate->tab_group != NULL && !fbwl_tabs_view_is_active(candidate)) {
+                fbwl_tabs_activate(candidate, "keybinding-prevwindow");
+            }
+            fbwm_core_focus_view(hooks->wm, &candidate->wm_view);
+        }
+        free(tmp);
         return true;
+    }
     case FBWL_KEYBIND_TAB_NEXT: {
         if (view == NULL || view->tab_group == NULL) {
             return true;
