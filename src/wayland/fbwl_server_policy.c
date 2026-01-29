@@ -887,6 +887,15 @@ static void menu_ui_view_set_fullscreen(void *userdata, struct fbwl_view *view, 
         server->layer_normal, server->layer_fullscreen, NULL);
 }
 
+static void menu_ui_workspace_switch(void *userdata, int workspace0) {
+    struct fbwl_server *server = userdata;
+    if (server == NULL) {
+        return;
+    }
+    fbwm_core_workspace_switch(&server->wm, workspace0);
+    apply_workspace_visibility(server, "menu-workspace");
+}
+
 static struct fbwl_ui_menu_env menu_ui_env(struct fbwl_server *server) {
     return (struct fbwl_ui_menu_env){
         .scene = server != NULL ? server->scene : NULL,
@@ -905,6 +914,7 @@ static struct fbwl_ui_menu_hooks menu_ui_hooks(struct fbwl_server *server) {
         .view_set_minimized = menu_ui_view_set_minimized,
         .view_set_maximized = menu_ui_view_set_maximized,
         .view_set_fullscreen = menu_ui_view_set_fullscreen,
+        .workspace_switch = menu_ui_workspace_switch,
     };
 }
 
@@ -983,6 +993,8 @@ void server_menu_free(struct fbwl_server *server) {
     server->root_menu = NULL;
     fbwl_menu_free(server->window_menu);
     server->window_menu = NULL;
+    fbwl_menu_free(server->workspace_menu);
+    server->workspace_menu = NULL;
     free(server->menu_file);
     server->menu_file = NULL;
 }
@@ -1010,9 +1022,18 @@ static void keybindings_reconfigure(void *userdata) {
     server_reconfigure(server);
 }
 
+static void keybindings_key_mode_set(void *userdata, const char *mode) {
+    fbwl_server_key_mode_set(userdata, mode);
+}
+
 static void keybindings_menu_open_root(void *userdata, int x, int y) {
     struct fbwl_server *server = userdata;
     server_menu_ui_open_root(server, x, y);
+}
+
+static void keybindings_menu_open_workspace(void *userdata, int x, int y) {
+    struct fbwl_server *server = userdata;
+    server_menu_ui_open_workspace(server, x, y);
 }
 
 static void keybindings_menu_open_window(void *userdata, struct fbwl_view *view, int x, int y) {
@@ -1101,6 +1122,8 @@ struct fbwl_keybindings_hooks keybindings_hooks(struct fbwl_server *server) {
     return (struct fbwl_keybindings_hooks){
         .userdata = server,
         .wm = server != NULL ? &server->wm : NULL,
+        .key_mode = server != NULL ? server->key_mode : NULL,
+        .key_mode_set = keybindings_key_mode_set,
         .terminate = keybindings_terminate,
         .spawn = keybindings_spawn,
         .command_dialog_open = keybindings_command_dialog_open,
@@ -1113,6 +1136,7 @@ struct fbwl_keybindings_hooks keybindings_hooks(struct fbwl_server *server) {
         .view_raise = keybindings_view_raise,
         .view_lower = keybindings_view_lower,
         .menu_open_root = keybindings_menu_open_root,
+        .menu_open_workspace = keybindings_menu_open_workspace,
         .menu_open_window = keybindings_menu_open_window,
         .menu_close = keybindings_menu_close,
         .grab_begin_move = keybindings_grab_begin_move,

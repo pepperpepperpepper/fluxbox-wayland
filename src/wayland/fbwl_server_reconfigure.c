@@ -327,20 +327,20 @@ static const char *tabs_attach_area_str(enum fbwl_tabs_attach_area area) {
 
 static bool server_keybindings_add_from_keys_file(void *userdata, enum fbwl_keybinding_key_kind key_kind,
         uint32_t keycode, xkb_keysym_t sym, uint32_t modifiers, enum fbwl_keybinding_action action, int arg,
-        const char *cmd) {
+        const char *cmd, const char *mode) {
     struct fbwl_server *server = userdata;
     if (key_kind == FBWL_KEYBIND_KEYCODE) {
         return fbwl_keybindings_add_keycode(&server->keybindings, &server->keybinding_count, keycode, modifiers,
-            action, arg, cmd);
+            action, arg, cmd, mode);
     }
-    return fbwl_keybindings_add(&server->keybindings, &server->keybinding_count, sym, modifiers, action, arg, cmd);
+    return fbwl_keybindings_add(&server->keybindings, &server->keybinding_count, sym, modifiers, action, arg, cmd, mode);
 }
 
 static bool server_mousebindings_add_from_keys_file(void *userdata, enum fbwl_mousebinding_context context,
-        int button, uint32_t modifiers, enum fbwl_keybinding_action action, int arg, const char *cmd) {
+        int button, uint32_t modifiers, enum fbwl_keybinding_action action, int arg, const char *cmd, const char *mode) {
     struct fbwl_server *server = userdata;
     return fbwl_mousebindings_add(&server->mousebindings, &server->mousebinding_count, context, button, modifiers,
-        action, arg, cmd);
+        action, arg, cmd, mode);
 }
 
 void server_reconfigure(struct fbwl_server *server) {
@@ -552,6 +552,8 @@ void server_reconfigure(struct fbwl_server *server) {
     if (keys_file != NULL && *keys_file != '\0') {
         fbwl_keybindings_free(&server->keybindings, &server->keybinding_count);
         fbwl_mousebindings_free(&server->mousebindings, &server->mousebinding_count);
+        free(server->key_mode);
+        server->key_mode = NULL;
 
         fbwl_keybindings_add_defaults(&server->keybindings, &server->keybinding_count, server->terminal_cmd);
         (void)fbwl_keys_parse_file(keys_file, server_keybindings_add_from_keys_file, server, NULL);

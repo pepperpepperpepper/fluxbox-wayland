@@ -145,6 +145,7 @@ struct fbwl_server {
     struct fbwl_decor_theme decor_theme;
     struct fbwl_menu *root_menu;
     struct fbwl_menu *window_menu;
+    struct fbwl_menu *workspace_menu;
     char *config_dir;
     char *keys_file;
     char *apps_file;
@@ -243,6 +244,7 @@ struct fbwl_server {
 
     struct fbwl_keybinding *keybindings;
     size_t keybinding_count;
+    char *key_mode;
 
     struct fbwl_mousebinding *mousebindings;
     size_t mousebinding_count;
@@ -350,6 +352,10 @@ bool server_menu_ui_handle_click(struct fbwl_server *server, int lx, int ly, uin
 ssize_t server_menu_ui_index_at(const struct fbwl_menu_ui *ui, int lx, int ly);
 void server_menu_ui_set_selected(struct fbwl_server *server, size_t idx);
 void server_menu_free(struct fbwl_server *server);
+
+void server_menu_ui_open_workspace(struct fbwl_server *server, int x, int y);
+
+void fbwl_server_key_mode_set(struct fbwl_server *server, const char *mode);
 
 struct fbwl_keybindings_hooks keybindings_hooks(struct fbwl_server *server);
 void server_reconfigure(struct fbwl_server *server);

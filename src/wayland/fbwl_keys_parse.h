@@ -11,10 +11,10 @@
 
 typedef bool (*fbwl_keys_add_binding_fn)(void *userdata, enum fbwl_keybinding_key_kind key_kind,
     uint32_t keycode, xkb_keysym_t sym, uint32_t modifiers, enum fbwl_keybinding_action action, int arg,
-    const char *cmd);
+    const char *cmd, const char *mode);
 
 typedef bool (*fbwl_keys_add_mouse_binding_fn)(void *userdata, enum fbwl_mousebinding_context context,
-    int button, uint32_t modifiers, enum fbwl_keybinding_action action, int arg, const char *cmd);
+    int button, uint32_t modifiers, enum fbwl_keybinding_action action, int arg, const char *cmd, const char *mode);
 
 bool fbwl_keys_parse_file(const char *path, fbwl_keys_add_binding_fn add_binding, void *userdata,
     size_t *out_added);

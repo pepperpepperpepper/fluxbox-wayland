@@ -59,6 +59,7 @@ struct fbwl_ui_menu_hooks {
     void (*view_set_minimized)(void *userdata, struct fbwl_view *view, bool minimized, const char *why);
     void (*view_set_maximized)(void *userdata, struct fbwl_view *view, bool maximized);
     void (*view_set_fullscreen)(void *userdata, struct fbwl_view *view, bool fullscreen);
+    void (*workspace_switch)(void *userdata, int workspace0);
 };
 
 void fbwl_ui_menu_close(struct fbwl_menu_ui *ui, const char *why);

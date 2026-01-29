@@ -414,6 +414,14 @@ static void fbwl_ui_menu_activate_selected(struct fbwl_menu_ui *ui,
         fbwl_ui_menu_close(ui, "exec");
         return;
     }
+    if (it->kind == FBWL_MENU_ITEM_WORKSPACE_SWITCH) {
+        wlr_log(WLR_INFO, "Menu: workspace-switch label=%s workspace=%d", label, it->arg + 1);
+        if (hooks != NULL && hooks->workspace_switch != NULL) {
+            hooks->workspace_switch(hooks->userdata, it->arg);
+        }
+        fbwl_ui_menu_close(ui, "workspace-switch");
+        return;
+    }
     if (it->kind == FBWL_MENU_ITEM_EXIT) {
         wlr_log(WLR_INFO, "Menu: exit label=%s", label);
         fbwl_ui_menu_close(ui, "exit");

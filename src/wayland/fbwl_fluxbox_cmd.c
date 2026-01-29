@@ -74,6 +74,21 @@ bool fbwl_fluxbox_cmd_resolve(const char *cmd_name, const char *cmd_args,
         return true;
     }
 
+    if (strcasecmp(cmd_name, "keymode") == 0) {
+        if (cmd_args == NULL || *cmd_args == '\0') {
+            return false;
+        }
+        while (*cmd_args != '\0' && isspace((unsigned char)*cmd_args)) {
+            cmd_args++;
+        }
+        if (*cmd_args == '\0') {
+            return false;
+        }
+        *out_action = FBWL_KEYBIND_KEYMODE;
+        *out_cmd = cmd_args;
+        return true;
+    }
+
     if (strcasecmp(cmd_name, "nextwindow") == 0) {
         *out_action = FBWL_KEYBIND_FOCUS_NEXT;
         if (cmd_args != NULL && *cmd_args != '\0') {
@@ -157,7 +172,7 @@ bool fbwl_fluxbox_cmd_resolve(const char *cmd_name, const char *cmd_args,
         return true;
     }
     if (strcasecmp(cmd_name, "workspacemenu") == 0) {
-        *out_action = FBWL_KEYBIND_ROOT_MENU;
+        *out_action = FBWL_KEYBIND_WORKSPACE_MENU;
         return true;
     }
     if (strcasecmp(cmd_name, "hidemenu") == 0 || strcasecmp(cmd_name, "hidemenus") == 0) {

@@ -55,6 +55,8 @@ void fbwl_keybindings_free(struct fbwl_keybinding **bindings, size_t *count) {
     for (size_t i = 0; i < *count; i++) {
         free((*bindings)[i].cmd);
         (*bindings)[i].cmd = NULL;
+        free((*bindings)[i].mode);
+        (*bindings)[i].mode = NULL;
     }
     free(*bindings);
     *bindings = NULL;
@@ -62,7 +64,7 @@ void fbwl_keybindings_free(struct fbwl_keybinding **bindings, size_t *count) {
 }
 
 bool fbwl_keybindings_add(struct fbwl_keybinding **bindings, size_t *count, xkb_keysym_t sym, uint32_t modifiers,
-        enum fbwl_keybinding_action action, int arg, const char *cmd) {
+        enum fbwl_keybinding_action action, int arg, const char *cmd, const char *mode) {
     if (bindings == NULL || count == NULL) {
         return false;
     }
@@ -81,11 +83,12 @@ bool fbwl_keybindings_add(struct fbwl_keybinding **bindings, size_t *count, xkb_
     binding->action = action;
     binding->arg = arg;
     binding->cmd = cmd != NULL ? strdup(cmd) : NULL;
+    binding->mode = mode != NULL ? strdup(mode) : NULL;
     return true;
 }
 
 bool fbwl_keybindings_add_keycode(struct fbwl_keybinding **bindings, size_t *count, uint32_t keycode, uint32_t modifiers,
-        enum fbwl_keybinding_action action, int arg, const char *cmd) {
+        enum fbwl_keybinding_action action, int arg, const char *cmd, const char *mode) {
     if (bindings == NULL || count == NULL) {
         return false;
     }
@@ -104,21 +107,22 @@ bool fbwl_keybindings_add_keycode(struct fbwl_keybinding **bindings, size_t *cou
     binding->action = action;
     binding->arg = arg;
     binding->cmd = cmd != NULL ? strdup(cmd) : NULL;
+    binding->mode = mode != NULL ? strdup(mode) : NULL;
     return true;
 }
 
 void fbwl_keybindings_add_defaults(struct fbwl_keybinding **bindings, size_t *count, const char *terminal_cmd) {
-    fbwl_keybindings_add(bindings, count, XKB_KEY_Escape, WLR_MODIFIER_ALT, FBWL_KEYBIND_EXIT, 0, NULL);
-    fbwl_keybindings_add(bindings, count, XKB_KEY_Return, WLR_MODIFIER_ALT, FBWL_KEYBIND_EXEC, 0, terminal_cmd);
-    fbwl_keybindings_add(bindings, count, XKB_KEY_F2, WLR_MODIFIER_ALT, FBWL_KEYBIND_COMMAND_DIALOG, 0, NULL);
-    fbwl_keybindings_add(bindings, count, XKB_KEY_F1, WLR_MODIFIER_ALT, FBWL_KEYBIND_FOCUS_NEXT, 0, NULL);
-    fbwl_keybindings_add(bindings, count, XKB_KEY_m, WLR_MODIFIER_ALT, FBWL_KEYBIND_TOGGLE_MAXIMIZE, 0, NULL);
-    fbwl_keybindings_add(bindings, count, XKB_KEY_f, WLR_MODIFIER_ALT, FBWL_KEYBIND_TOGGLE_FULLSCREEN, 0, NULL);
-    fbwl_keybindings_add(bindings, count, XKB_KEY_i, WLR_MODIFIER_ALT, FBWL_KEYBIND_TOGGLE_MINIMIZE, 0, NULL);
+    fbwl_keybindings_add(bindings, count, XKB_KEY_Escape, WLR_MODIFIER_ALT, FBWL_KEYBIND_EXIT, 0, NULL, NULL);
+    fbwl_keybindings_add(bindings, count, XKB_KEY_Return, WLR_MODIFIER_ALT, FBWL_KEYBIND_EXEC, 0, terminal_cmd, NULL);
+    fbwl_keybindings_add(bindings, count, XKB_KEY_F2, WLR_MODIFIER_ALT, FBWL_KEYBIND_COMMAND_DIALOG, 0, NULL, NULL);
+    fbwl_keybindings_add(bindings, count, XKB_KEY_F1, WLR_MODIFIER_ALT, FBWL_KEYBIND_FOCUS_NEXT, 0, NULL, NULL);
+    fbwl_keybindings_add(bindings, count, XKB_KEY_m, WLR_MODIFIER_ALT, FBWL_KEYBIND_TOGGLE_MAXIMIZE, 0, NULL, NULL);
+    fbwl_keybindings_add(bindings, count, XKB_KEY_f, WLR_MODIFIER_ALT, FBWL_KEYBIND_TOGGLE_FULLSCREEN, 0, NULL, NULL);
+    fbwl_keybindings_add(bindings, count, XKB_KEY_i, WLR_MODIFIER_ALT, FBWL_KEYBIND_TOGGLE_MINIMIZE, 0, NULL, NULL);
     for (int i = 0; i < 9; i++) {
-        fbwl_keybindings_add(bindings, count, XKB_KEY_1 + i, WLR_MODIFIER_ALT, FBWL_KEYBIND_WORKSPACE_SWITCH, i, NULL);
+        fbwl_keybindings_add(bindings, count, XKB_KEY_1 + i, WLR_MODIFIER_ALT, FBWL_KEYBIND_WORKSPACE_SWITCH, i, NULL, NULL);
         fbwl_keybindings_add(bindings, count, XKB_KEY_1 + i, WLR_MODIFIER_ALT | WLR_MODIFIER_CTRL,
-            FBWL_KEYBIND_SEND_TO_WORKSPACE, i, NULL);
+            FBWL_KEYBIND_SEND_TO_WORKSPACE, i, NULL, NULL);
     }
 }
 
@@ -133,6 +137,22 @@ static int wrap_workspace(int ws, int count) {
         ws -= count;
     }
     return ws;
+}
+
+static bool mode_is_default(const char *mode) {
+    return mode == NULL || *mode == '\0' || strcasecmp(mode, "default") == 0;
+}
+
+static bool mode_matches(const char *binding_mode, const char *current_mode) {
+    const bool binding_default = mode_is_default(binding_mode);
+    const bool current_default = mode_is_default(current_mode);
+    if (binding_default && current_default) {
+        return true;
+    }
+    if (binding_default || current_default) {
+        return false;
+    }
+    return strcmp(binding_mode, current_mode) == 0;
 }
 
 static struct fbwl_view *resolve_target_view(struct fbwl_view *target_view, const struct fbwl_keybindings_hooks *hooks) {
@@ -662,6 +682,12 @@ static bool execute_action_depth(enum fbwl_keybinding_action action, int arg, co
         }
         hooks->reconfigure(hooks->userdata);
         return true;
+    case FBWL_KEYBIND_KEYMODE:
+        if (hooks->key_mode_set == NULL) {
+            return false;
+        }
+        hooks->key_mode_set(hooks->userdata, cmd);
+        return true;
     case FBWL_KEYBIND_FOCUS_NEXT: {
         if (cmd == NULL || *cmd == '\0') {
             fbwm_core_focus_next(hooks->wm);
@@ -878,6 +904,12 @@ static bool execute_action_depth(enum fbwl_keybinding_action action, int arg, co
         }
         hooks->menu_open_root(hooks->userdata, hooks->cursor_x, hooks->cursor_y);
         return true;
+    case FBWL_KEYBIND_WORKSPACE_MENU:
+        if (hooks->menu_open_workspace == NULL) {
+            return false;
+        }
+        hooks->menu_open_workspace(hooks->userdata, hooks->cursor_x, hooks->cursor_y);
+        return true;
     case FBWL_KEYBIND_HIDE_MENUS:
         if (hooks->menu_close == NULL) {
             return false;
@@ -954,6 +986,9 @@ bool fbwl_keybindings_handle(const struct fbwl_keybinding *bindings, size_t coun
     modifiers &= FBWL_KEYMOD_MASK;
     for (size_t i = count; i-- > 0;) {
         const struct fbwl_keybinding *binding = &bindings[i];
+        if (!mode_matches(binding->mode, hooks->key_mode)) {
+            continue;
+        }
         if (binding->modifiers != modifiers) {
             continue;
         }

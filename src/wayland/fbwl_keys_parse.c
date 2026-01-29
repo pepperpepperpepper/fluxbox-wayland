@@ -30,12 +30,31 @@ static char *trim_inplace(char *s) {
     return s;
 }
 
+static char *find_command_colon(char *s) {
+    if (s == NULL) {
+        return NULL;
+    }
+    for (char *p = s; *p != '\0'; p++) {
+        if (*p != ':') {
+            continue;
+        }
+        if (p == s || isspace((unsigned char)p[-1])) {
+            return p;
+        }
+    }
+    return NULL;
+}
+
 static bool starts_with_token(const char *s, const char *prefix) {
     if (s == NULL || prefix == NULL) {
         return false;
     }
     size_t n = strlen(prefix);
     return strncasecmp(s, prefix, n) == 0;
+}
+
+static bool mode_is_default(const char *mode) {
+    return mode == NULL || *mode == '\0' || strcasecmp(mode, "default") == 0;
 }
 
 static bool parse_keys_modifier(const char *token, uint32_t *mods) {
@@ -116,7 +135,7 @@ bool fbwl_keys_parse_file(const char *path, fbwl_keys_add_binding_fn add_binding
             continue;
         }
 
-        char *colon = strchr(s, ':');
+        char *colon = find_command_colon(s);
         if (colon == NULL) {
             continue;
         }
@@ -153,7 +172,27 @@ bool fbwl_keys_parse_file(const char *path, fbwl_keys_add_binding_fn add_binding
             continue;
         }
 
+        const char *mode = NULL;
+        size_t start = 0;
+        if (ntok > 0) {
+            char *mode_tok = (char *)tokens[0];
+            const size_t len = mode_tok != NULL ? strlen(mode_tok) : 0;
+            if (len > 0 && mode_tok[len - 1] == ':') {
+                mode_tok[len - 1] = '\0';
+                if (!mode_is_default(mode_tok)) {
+                    mode = mode_tok;
+                }
+                start = 1;
+            }
+        }
+        if (start >= ntok) {
+            continue;
+        }
+
         for (size_t i = 0; i + 1 < ntok; i++) {
+            if (i < start) {
+                continue;
+            }
             if (strncasecmp(tokens[i], "on", 2) == 0) {
                 continue;
             }
@@ -224,7 +263,7 @@ bool fbwl_keys_parse_file(const char *path, fbwl_keys_add_binding_fn add_binding
             continue;
         }
 
-        if (add_binding(userdata, key_kind, keycode, sym, mods, action, action_arg, action_cmd)) {
+        if (add_binding(userdata, key_kind, keycode, sym, mods, action, action_arg, action_cmd, mode)) {
             added++;
         }
     }
@@ -326,7 +365,7 @@ bool fbwl_keys_parse_file_mouse(const char *path, fbwl_keys_add_mouse_binding_fn
             continue;
         }
 
-        char *colon = strchr(s, ':');
+        char *colon = find_command_colon(s);
         if (colon == NULL) {
             continue;
         }
@@ -360,12 +399,32 @@ bool fbwl_keys_parse_file_mouse(const char *path, fbwl_keys_add_mouse_binding_fn
             continue;
         }
 
+        const char *mode = NULL;
+        size_t start = 0;
+        if (ntok > 0) {
+            char *mode_tok = (char *)tokens[0];
+            const size_t len = mode_tok != NULL ? strlen(mode_tok) : 0;
+            if (len > 0 && mode_tok[len - 1] == ':') {
+                mode_tok[len - 1] = '\0';
+                if (!mode_is_default(mode_tok)) {
+                    mode = mode_tok;
+                }
+                start = 1;
+            }
+        }
+        if (start >= ntok) {
+            continue;
+        }
+
         enum fbwl_mousebinding_context context = FBWL_MOUSEBIND_ANY;
         int button = 0;
         uint32_t mods = 0;
 
         bool ok = true;
         for (size_t i = 0; i < ntok; i++) {
+            if (i < start) {
+                continue;
+            }
             const char *t = tokens[i];
             if (t == NULL || *t == '\0') {
                 continue;
@@ -415,7 +474,7 @@ bool fbwl_keys_parse_file_mouse(const char *path, fbwl_keys_add_mouse_binding_fn
             continue;
         }
 
-        if (add_binding(userdata, context, button, mods, action, action_arg, action_cmd)) {
+        if (add_binding(userdata, context, button, mods, action, action_arg, action_cmd, mode)) {
             added++;
         }
     }

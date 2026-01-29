@@ -33,12 +33,14 @@ enum fbwl_keybinding_action {
     FBWL_KEYBIND_KILL,
     FBWL_KEYBIND_WINDOW_MENU,
     FBWL_KEYBIND_ROOT_MENU,
+    FBWL_KEYBIND_WORKSPACE_MENU,
     FBWL_KEYBIND_HIDE_MENUS,
     FBWL_KEYBIND_RAISE,
     FBWL_KEYBIND_LOWER,
     FBWL_KEYBIND_FOCUS,
     FBWL_KEYBIND_START_MOVING,
     FBWL_KEYBIND_START_RESIZING,
+    FBWL_KEYBIND_KEYMODE,
     FBWL_KEYBIND_MACRO,
 };
 
@@ -55,11 +57,14 @@ struct fbwl_keybinding {
     enum fbwl_keybinding_action action;
     int arg;
     char *cmd;
+    char *mode;
 };
 
 struct fbwl_keybindings_hooks {
     void *userdata;
     struct fbwm_core *wm;
+    const char *key_mode;
+    void (*key_mode_set)(void *userdata, const char *mode);
     void (*terminate)(void *userdata);
     void (*spawn)(void *userdata, const char *cmd);
     void (*command_dialog_open)(void *userdata);
@@ -72,6 +77,7 @@ struct fbwl_keybindings_hooks {
     void (*view_raise)(void *userdata, struct fbwl_view *view, const char *why);
     void (*view_lower)(void *userdata, struct fbwl_view *view, const char *why);
     void (*menu_open_root)(void *userdata, int x, int y);
+    void (*menu_open_workspace)(void *userdata, int x, int y);
     void (*menu_open_window)(void *userdata, struct fbwl_view *view, int x, int y);
     void (*menu_close)(void *userdata, const char *why);
     void (*grab_begin_move)(void *userdata, struct fbwl_view *view, uint32_t button);
@@ -84,10 +90,10 @@ struct fbwl_keybindings_hooks {
 void fbwl_keybindings_free(struct fbwl_keybinding **bindings, size_t *count);
 
 bool fbwl_keybindings_add(struct fbwl_keybinding **bindings, size_t *count, xkb_keysym_t sym, uint32_t modifiers,
-        enum fbwl_keybinding_action action, int arg, const char *cmd);
+        enum fbwl_keybinding_action action, int arg, const char *cmd, const char *mode);
 
 bool fbwl_keybindings_add_keycode(struct fbwl_keybinding **bindings, size_t *count, uint32_t keycode, uint32_t modifiers,
-        enum fbwl_keybinding_action action, int arg, const char *cmd);
+        enum fbwl_keybinding_action action, int arg, const char *cmd, const char *mode);
 
 void fbwl_keybindings_add_defaults(struct fbwl_keybinding **bindings, size_t *count, const char *terminal_cmd);
 

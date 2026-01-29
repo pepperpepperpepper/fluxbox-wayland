@@ -129,6 +129,28 @@ bool fbwl_menu_add_view_action(struct fbwl_menu *menu, const char *label,
     return true;
 }
 
+bool fbwl_menu_add_workspace_switch(struct fbwl_menu *menu, const char *label, int workspace0) {
+    if (menu == NULL) {
+        return false;
+    }
+    if (workspace0 < 0) {
+        return false;
+    }
+    if (!fbwl_menu_reserve_items(menu, 1)) {
+        return false;
+    }
+    struct fbwl_menu_item *it = &menu->items[menu->item_count++];
+    memset(it, 0, sizeof(*it));
+    it->kind = FBWL_MENU_ITEM_WORKSPACE_SWITCH;
+    it->arg = workspace0;
+    it->label = label != NULL && *label != '\0' ? strdup(label) : strdup("Workspace");
+    if (it->label == NULL) {
+        menu->item_count--;
+        return false;
+    }
+    return true;
+}
+
 bool fbwl_menu_add_submenu(struct fbwl_menu *menu, const char *label, struct fbwl_menu *submenu) {
     if (menu == NULL || submenu == NULL) {
         return false;

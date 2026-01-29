@@ -22,13 +22,13 @@ struct fbwl_mousebinding {
     enum fbwl_keybinding_action action;
     int arg;
     char *cmd;
+    char *mode;
 };
 
 void fbwl_mousebindings_free(struct fbwl_mousebinding **bindings, size_t *count);
 
 bool fbwl_mousebindings_add(struct fbwl_mousebinding **bindings, size_t *count, enum fbwl_mousebinding_context context,
-    int button, uint32_t modifiers, enum fbwl_keybinding_action action, int arg, const char *cmd);
+    int button, uint32_t modifiers, enum fbwl_keybinding_action action, int arg, const char *cmd, const char *mode);
 
 bool fbwl_mousebindings_handle(const struct fbwl_mousebinding *bindings, size_t count, enum fbwl_mousebinding_context context,
     int button, uint32_t modifiers, struct fbwl_view *target_view, const struct fbwl_keybindings_hooks *hooks);
-

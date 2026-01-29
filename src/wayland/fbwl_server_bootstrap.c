@@ -365,20 +365,20 @@ static void apply_workspace_names_from_init(struct fbwm_core *wm, const char *cs
 
 static bool server_keybindings_add_from_keys_file(void *userdata, enum fbwl_keybinding_key_kind key_kind,
         uint32_t keycode, xkb_keysym_t sym, uint32_t modifiers, enum fbwl_keybinding_action action, int arg,
-        const char *cmd) {
+        const char *cmd, const char *mode) {
     struct fbwl_server *server = userdata;
     if (key_kind == FBWL_KEYBIND_KEYCODE) {
         return fbwl_keybindings_add_keycode(&server->keybindings, &server->keybinding_count, keycode, modifiers,
-            action, arg, cmd);
+            action, arg, cmd, mode);
     }
-    return fbwl_keybindings_add(&server->keybindings, &server->keybinding_count, sym, modifiers, action, arg, cmd);
+    return fbwl_keybindings_add(&server->keybindings, &server->keybinding_count, sym, modifiers, action, arg, cmd, mode);
 }
 
 static bool server_mousebindings_add_from_keys_file(void *userdata, enum fbwl_mousebinding_context context,
-        int button, uint32_t modifiers, enum fbwl_keybinding_action action, int arg, const char *cmd) {
+        int button, uint32_t modifiers, enum fbwl_keybinding_action action, int arg, const char *cmd, const char *mode) {
     struct fbwl_server *server = userdata;
     return fbwl_mousebindings_add(&server->mousebindings, &server->mousebinding_count, context, button, modifiers,
-        action, arg, cmd);
+        action, arg, cmd, mode);
 }
 
 static void server_new_layer_surface(struct wl_listener *listener, void *data) {
@@ -437,6 +437,8 @@ bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_
     server->startup_cmd = opts->startup_cmd;
     server->terminal_cmd = opts->terminal_cmd;
     server->has_pointer = false;
+    free(server->key_mode);
+    server->key_mode = NULL;
     fbwl_ipc_init(&server->ipc);
 #ifdef HAVE_SYSTEMD
     wl_list_init(&server->sni.items);

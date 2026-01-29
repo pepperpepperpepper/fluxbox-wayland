@@ -1303,8 +1303,14 @@ Goal: users can drop in their existing `~/.fluxbox` directory and get the same b
 	      - Parse `{static groups}` options and `(...)` client-pattern terms from `keys` for Next/PrevWindow.
 	      - Match subset: `workspace=[current]|N`, `class|app_id`, `title`, `minimized|maximized|fullscreen`, `stuck`.
 	      - Note: `static` is parsed but currently has no effect (ordering remains MRU-ish).
-	    - [ ] Key modes.
-	    - [ ] WorkspaceMenu.
+	    - [x] Key modes.
+	      - Parse `ModeName:` prefix and scope bindings (keys + mouse) to the active KeyMode.
+	      - Implement `:KeyMode <mode> [...]` command (only the first token is used as mode name; additional args are currently ignored).
+	      - Reconfigure resets active KeyMode back to `default`.
+	    - [x] WorkspaceMenu.
+	      - Implement `:WorkspaceMenu` as a real workspace switcher menu (not RootMenu) with workspace-name labels.
+	      - Selecting a workspace switches + reapplies workspace visibility.
+	      - Smoke: extended `scripts/fbwl-smoke-keys-file.sh` to open WorkspaceMenu via `OnDesktop Mouse2` and click workspace 2.
 - [ ] Extend `apps` rules toward full “Remember” parity:
   - [x] Match semantics: patterns are full-match anchored (Fluxbox-like `^(...)$` behavior).
   - [x] Support `[group]` blocks (tab-group attach on map).

@@ -118,6 +118,8 @@ void fbwl_server_finish(struct fbwl_server *server) {
     fbwl_apps_rules_free(&server->apps_rules, &server->apps_rule_count);
     fbwl_keybindings_free(&server->keybindings, &server->keybinding_count);
     fbwl_mousebindings_free(&server->mousebindings, &server->mousebinding_count);
+    free(server->key_mode);
+    server->key_mode = NULL;
     if (server->protocol_logger != NULL) {
         wl_protocol_logger_destroy(server->protocol_logger);
         server->protocol_logger = NULL;
