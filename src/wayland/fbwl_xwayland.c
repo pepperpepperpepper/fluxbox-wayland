@@ -10,6 +10,7 @@
 #include <wlr/xwayland.h>
 
 #include "wayland/fbwl_apps_rules.h"
+#include "wayland/fbwl_server_internal.h"
 #include "wayland/fbwl_tabs.h"
 #include "wayland/fbwl_util.h"
 #include "wayland/fbwl_view.h"
@@ -135,7 +136,7 @@ void fbwl_xwayland_handle_surface_map(struct fbwl_view *view,
             view->apps_rules_applied = true;
 
             wlr_log(WLR_INFO,
-                "Apps: applied title=%s app_id=%s workspace_id=%d sticky=%d jump=%d minimized=%d maximized=%d fullscreen=%d shaded=%d alpha=%d,%d group_id=%d deco=%d layer=%d head=%d dims=%d%sx%d%s pos=%d%s,%d%s anchor=%d",
+                "Apps: applied title=%s app_id=%s workspace_id=%d sticky=%d jump=%d minimized=%d maximized=%d fullscreen=%d shaded=%d alpha=%d,%d focus_protect=0x%x group_id=%d deco=%d layer=%d head=%d dims=%d%sx%d%s pos=%d%s,%d%s anchor=%d",
                 fbwl_view_display_title(view),
                 fbwl_view_app_id(view) != NULL ? fbwl_view_app_id(view) : "(no-app-id)",
                 apps_rule->set_workspace ? apps_rule->workspace : -1,
@@ -147,6 +148,7 @@ void fbwl_xwayland_handle_surface_map(struct fbwl_view *view,
                 apps_rule->set_shaded ? (apps_rule->shaded ? 1 : 0) : -1,
                 apps_rule->set_alpha ? apps_rule->alpha_focused : -1,
                 apps_rule->set_alpha ? apps_rule->alpha_unfocused : -1,
+                apps_rule->set_focus_protection ? (unsigned int)apps_rule->focus_protection : 0u,
                 apps_rule->group_id,
                 apps_rule->set_decor ? (apps_rule->decor_enabled ? 1 : 0) : -1,
                 apps_rule->set_layer ? apps_rule->layer : -1,
@@ -340,7 +342,15 @@ void fbwl_xwayland_handle_surface_request_activate(struct fbwl_view *view,
             hooks->apply_workspace_visibility(hooks->userdata, "xwayland-request-activate-switch");
         }
     }
+    struct fbwl_server *server = view->server;
+    const enum fbwl_focus_reason prev_reason = server != NULL ? server->focus_reason : FBWL_FOCUS_REASON_NONE;
+    if (server != NULL) {
+        server->focus_reason = FBWL_FOCUS_REASON_ACTIVATE;
+    }
     fbwm_core_focus_view(wm, &view->wm_view);
+    if (server != NULL) {
+        server->focus_reason = prev_reason;
+    }
 }
 
 void fbwl_xwayland_handle_surface_request_close(struct fbwl_view *view) {

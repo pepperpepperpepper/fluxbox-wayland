@@ -1,6 +1,7 @@
 #include "wayland/fbwl_xdg_activation.h"
 
 #include "wayland/fbwl_util.h"
+#include "wayland/fbwl_server_internal.h"
 #include "wayland/fbwl_view.h"
 
 #include "wmcore/fbwm_core.h"
@@ -27,15 +28,26 @@ static void fbwl_xdg_activation_request_activate(struct wl_listener *listener, v
     if (view->minimized) {
         state->view_set_minimized(view, false, "xdg-activation");
     }
+
+    struct fbwl_server *server = state->server;
+    const enum fbwl_focus_reason prev_reason = server != NULL ? server->focus_reason : FBWL_FOCUS_REASON_NONE;
+    if (server != NULL) {
+        server->focus_reason = FBWL_FOCUS_REASON_ACTIVATE;
+    }
     fbwm_core_focus_view(state->wm, &view->wm_view);
+    if (server != NULL) {
+        server->focus_reason = prev_reason;
+    }
 }
 
 bool fbwl_xdg_activation_init(struct fbwl_xdg_activation_state *state, struct wl_display *display,
-        struct fbwm_core *wm, void (*view_set_minimized)(struct fbwl_view *view, bool minimized, const char *why)) {
+        struct fbwl_server *server, struct fbwm_core *wm,
+        void (*view_set_minimized)(struct fbwl_view *view, bool minimized, const char *why)) {
     if (state == NULL || display == NULL || wm == NULL || view_set_minimized == NULL) {
         return false;
     }
 
+    state->server = server;
     state->wm = wm;
     state->view_set_minimized = view_set_minimized;
 
@@ -55,4 +67,3 @@ void fbwl_xdg_activation_finish(struct fbwl_xdg_activation_state *state) {
     }
     fbwl_cleanup_listener(&state->request_activate);
 }
-

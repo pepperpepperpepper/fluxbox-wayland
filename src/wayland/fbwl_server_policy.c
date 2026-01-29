@@ -91,6 +91,7 @@ void focus_view(struct fbwl_view *view) {
     if (server != NULL && fbwl_session_lock_is_locked(&server->session_lock)) {
         return;
     }
+    if (server != NULL && (server->focus_reason == FBWL_FOCUS_REASON_MAP || server->focus_reason == FBWL_FOCUS_REASON_ACTIVATE)) { const struct fbwl_view *cur = server->focused_view; if (cur != NULL && cur != view && (cur->focus_protection & FBWL_APPS_FOCUS_PROTECT_LOCK)) { wlr_log(WLR_INFO, "Focus: blocked by lock target=%s", fbwl_view_display_title(view)); return; } if (view->focus_protection & FBWL_APPS_FOCUS_PROTECT_DENY) { wlr_log(WLR_INFO, "Focus: blocked by deny target=%s", fbwl_view_display_title(view)); return; } }
 
     fbwl_tabs_activate(view, "focus");
     struct wlr_seat *seat = server->seat;
@@ -1217,6 +1218,7 @@ void server_apps_rules_apply_pre_map(struct fbwl_view *view,
     }
 
     if (rule->set_alpha) { fbwl_view_set_alpha(view, (uint8_t)rule->alpha_focused, (uint8_t)rule->alpha_unfocused, "apps"); }
+    if (rule->set_focus_protection) { view->focus_protection = rule->focus_protection; }
 
     if (rule->set_layer) {
         struct wlr_scene_tree *layer = apps_rule_layer_tree(server, rule->layer);

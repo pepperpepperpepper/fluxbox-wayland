@@ -7,6 +7,7 @@
 #include <wlr/types/wlr_foreign_toplevel_management_v1.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_xdg_shell.h>
+#include <wlr/util/log.h>
 #include <wlr/xwayland.h>
 
 #include "wmcore/fbwm_output.h"
@@ -140,12 +141,30 @@ static void xdg_toplevel_map(struct wl_listener *listener, void *data) {
     struct fbwl_xdg_shell_hooks hooks = xdg_shell_hooks(server);
     fbwl_xdg_shell_handle_toplevel_map(view, &server->wm, server->output_layout, &server->outputs,
         server->cursor->x, server->cursor->y, server->apps_rules, server->apps_rule_count, &hooks);
-    if (server->focus.focus_new_windows && fbwm_core_view_is_visible(&server->wm, &view->wm_view)) {
-        const enum fbwl_focus_reason prev_reason = server->focus_reason;
-        server->focus_reason = FBWL_FOCUS_REASON_MAP;
-        fbwm_core_focus_view(&server->wm, &view->wm_view);
-        server->focus_reason = prev_reason;
+    if (!fbwm_core_view_is_visible(&server->wm, &view->wm_view)) {
+        return;
     }
+
+    bool focus_new = server->focus.focus_new_windows;
+    if (view->focus_protection & FBWL_APPS_FOCUS_PROTECT_GAIN) {
+        focus_new = true;
+    } else if (view->focus_protection & FBWL_APPS_FOCUS_PROTECT_REFUSE) {
+        focus_new = false;
+    }
+
+    if (!focus_new) {
+        if (view->focus_protection & FBWL_APPS_FOCUS_PROTECT_REFUSE) {
+            wlr_log(WLR_INFO, "FocusNew: refused title=%s app_id=%s",
+                fbwl_view_display_title(view),
+                fbwl_view_app_id(view) != NULL ? fbwl_view_app_id(view) : "(no-app-id)");
+        }
+        return;
+    }
+
+    const enum fbwl_focus_reason prev_reason = server->focus_reason;
+    server->focus_reason = FBWL_FOCUS_REASON_MAP;
+    fbwm_core_focus_view(&server->wm, &view->wm_view);
+    server->focus_reason = prev_reason;
 }
 
 static void xdg_toplevel_unmap(struct wl_listener *listener, void *data) {
@@ -232,7 +251,10 @@ static void foreign_toplevel_request_activate(struct wl_listener *listener, void
         apply_workspace_visibility(server, "foreign-activate-switch");
     }
 
+    const enum fbwl_focus_reason prev_reason = server->focus_reason;
+    server->focus_reason = FBWL_FOCUS_REASON_ACTIVATE;
     fbwm_core_focus_view(&server->wm, &view->wm_view);
+    server->focus_reason = prev_reason;
     (void)event;
 }
 
@@ -260,12 +282,30 @@ static void xwayland_surface_map(struct wl_listener *listener, void *data) {
     struct fbwl_xwayland_hooks hooks = xwayland_hooks(server);
     fbwl_xwayland_handle_surface_map(view, &server->wm, server->output_layout, &server->outputs,
         server->cursor->x, server->cursor->y, server->apps_rules, server->apps_rule_count, &hooks);
-    if (server->focus.focus_new_windows && fbwm_core_view_is_visible(&server->wm, &view->wm_view)) {
-        const enum fbwl_focus_reason prev_reason = server->focus_reason;
-        server->focus_reason = FBWL_FOCUS_REASON_MAP;
-        fbwm_core_focus_view(&server->wm, &view->wm_view);
-        server->focus_reason = prev_reason;
+    if (!fbwm_core_view_is_visible(&server->wm, &view->wm_view)) {
+        return;
     }
+
+    bool focus_new = server->focus.focus_new_windows;
+    if (view->focus_protection & FBWL_APPS_FOCUS_PROTECT_GAIN) {
+        focus_new = true;
+    } else if (view->focus_protection & FBWL_APPS_FOCUS_PROTECT_REFUSE) {
+        focus_new = false;
+    }
+
+    if (!focus_new) {
+        if (view->focus_protection & FBWL_APPS_FOCUS_PROTECT_REFUSE) {
+            wlr_log(WLR_INFO, "FocusNew: refused title=%s app_id=%s",
+                fbwl_view_display_title(view),
+                fbwl_view_app_id(view) != NULL ? fbwl_view_app_id(view) : "(no-app-id)");
+        }
+        return;
+    }
+
+    const enum fbwl_focus_reason prev_reason = server->focus_reason;
+    server->focus_reason = FBWL_FOCUS_REASON_MAP;
+    fbwm_core_focus_view(&server->wm, &view->wm_view);
+    server->focus_reason = prev_reason;
 }
 
 static void xwayland_surface_unmap(struct wl_listener *listener, void *data) {

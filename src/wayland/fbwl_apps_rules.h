@@ -2,6 +2,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <regex.h>
 
 struct fbwl_apps_rule_match {
@@ -22,6 +23,14 @@ enum fbwl_apps_rule_anchor {
     FBWL_APPS_ANCHOR_TOPRIGHT,
     FBWL_APPS_ANCHOR_RIGHT,
     FBWL_APPS_ANCHOR_BOTTOMRIGHT,
+};
+
+enum fbwl_apps_focus_protection {
+    FBWL_APPS_FOCUS_PROTECT_NONE = 0,
+    FBWL_APPS_FOCUS_PROTECT_GAIN = 1u << 0,
+    FBWL_APPS_FOCUS_PROTECT_REFUSE = 1u << 1,
+    FBWL_APPS_FOCUS_PROTECT_LOCK = 1u << 2,
+    FBWL_APPS_FOCUS_PROTECT_DENY = 1u << 3,
 };
 
 struct fbwl_apps_rule {
@@ -71,6 +80,9 @@ struct fbwl_apps_rule {
     bool set_alpha;
     int alpha_focused;
     int alpha_unfocused;
+
+    bool set_focus_protection;
+    uint32_t focus_protection;
 
     bool set_decor;
     bool decor_enabled;

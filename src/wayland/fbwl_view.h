@@ -42,6 +42,7 @@ struct fbwl_view {
     bool alpha_set;
     uint8_t alpha_focused;
     uint8_t alpha_unfocused;
+    uint32_t focus_protection;
     struct wlr_scene_tree *decor_tree;
     struct wlr_scene_rect *decor_titlebar;
     struct wlr_scene_buffer *decor_title_text;

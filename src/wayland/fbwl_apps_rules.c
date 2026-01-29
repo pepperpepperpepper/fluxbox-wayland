@@ -325,6 +325,10 @@ static void apps_rule_apply_attrs(struct fbwl_apps_rule *rule, const struct fbwl
         rule->alpha_focused = attrs->alpha_focused;
         rule->alpha_unfocused = attrs->alpha_unfocused;
     }
+    if (attrs->set_focus_protection) {
+        rule->set_focus_protection = true;
+        rule->focus_protection = attrs->focus_protection;
+    }
     if (attrs->set_decor) {
         rule->set_decor = true;
         rule->decor_enabled = attrs->decor_enabled;
@@ -830,6 +834,60 @@ bool fbwl_apps_rules_load_file(struct fbwl_apps_rule **rules, size_t *rule_count
             target->set_alpha = true;
             target->alpha_focused = focused;
             target->alpha_unfocused = unfocused;
+            continue;
+        }
+
+        if (strcasecmp(key, "focusnewwindow") == 0) {
+            bool v = false;
+            if (label == NULL || !parse_yes_no(label, &v)) {
+                continue;
+            }
+
+            uint32_t prot = target->set_focus_protection ? target->focus_protection : 0;
+            if ((prot & (FBWL_APPS_FOCUS_PROTECT_GAIN | FBWL_APPS_FOCUS_PROTECT_REFUSE)) == 0) {
+                prot |= v ? FBWL_APPS_FOCUS_PROTECT_GAIN : FBWL_APPS_FOCUS_PROTECT_REFUSE;
+                prot &= v ? ~FBWL_APPS_FOCUS_PROTECT_REFUSE : ~FBWL_APPS_FOCUS_PROTECT_GAIN;
+            }
+
+            target->set_focus_protection = true;
+            target->focus_protection = prot;
+            continue;
+        }
+
+        if (strcasecmp(key, "focusprotection") == 0) {
+            if (label == NULL || *label == '\0') {
+                continue;
+            }
+
+            char tmp[256];
+            size_t len = strlen(label);
+            if (len >= sizeof(tmp)) {
+                len = sizeof(tmp) - 1;
+            }
+            memcpy(tmp, label, len);
+            tmp[len] = '\0';
+
+            uint32_t prot = 0;
+            char *saveptr = NULL;
+            for (char *tok = strtok_r(tmp, ", \t", &saveptr); tok != NULL; tok = strtok_r(NULL, ", \t", &saveptr)) {
+                if (*tok == '\0') {
+                    continue;
+                }
+                if (strcasecmp(tok, "none") == 0) {
+                    prot = FBWL_APPS_FOCUS_PROTECT_NONE;
+                } else if (strcasecmp(tok, "lock") == 0) {
+                    prot = (prot & ~FBWL_APPS_FOCUS_PROTECT_DENY) | FBWL_APPS_FOCUS_PROTECT_LOCK;
+                } else if (strcasecmp(tok, "deny") == 0) {
+                    prot = (prot & ~FBWL_APPS_FOCUS_PROTECT_LOCK) | FBWL_APPS_FOCUS_PROTECT_DENY;
+                } else if (strcasecmp(tok, "gain") == 0) {
+                    prot = (prot & ~FBWL_APPS_FOCUS_PROTECT_REFUSE) | FBWL_APPS_FOCUS_PROTECT_GAIN;
+                } else if (strcasecmp(tok, "refuse") == 0) {
+                    prot = (prot & ~FBWL_APPS_FOCUS_PROTECT_GAIN) | FBWL_APPS_FOCUS_PROTECT_REFUSE;
+                }
+            }
+
+            target->set_focus_protection = true;
+            target->focus_protection = prot;
             continue;
         }
 

@@ -563,7 +563,7 @@ bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_
         return false;
     }
 
-    if (!fbwl_xdg_activation_init(&server->xdg_activation, server->wl_display, &server->wm, view_set_minimized)) {
+    if (!fbwl_xdg_activation_init(&server->xdg_activation, server->wl_display, server, &server->wm, view_set_minimized)) {
         return false;
     }
 

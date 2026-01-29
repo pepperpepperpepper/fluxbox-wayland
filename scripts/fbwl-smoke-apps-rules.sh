@@ -27,6 +27,7 @@ cleanup() {
   if [[ -n "${PLACED_PID:-}" ]]; then kill "$PLACED_PID" 2>/dev/null || true; fi
   if [[ -n "${SHADED_PID:-}" ]]; then kill "$SHADED_PID" 2>/dev/null || true; fi
   if [[ -n "${ALPHA_PID:-}" ]]; then kill "$ALPHA_PID" 2>/dev/null || true; fi
+  if [[ -n "${FOCUS_PID:-}" ]]; then kill "$FOCUS_PID" 2>/dev/null || true; fi
   if [[ -n "${FBW_PID:-}" ]]; then kill "$FBW_PID" 2>/dev/null || true; fi
   wait 2>/dev/null || true
 }
@@ -69,6 +70,10 @@ cat >"$APPS_FILE" <<'EOF'
 
 [app] (app_id=fbwl-apps-alpha)
   [Alpha] {200 100}
+[end]
+
+[app] (app_id=fbwl-apps-focus-refuse)
+  [FocusProtection] {refuse}
 [end]
 EOF
 
@@ -149,5 +154,13 @@ ALPHA_PID=$!
 START=$((OFFSET + 1))
 timeout 5 bash -c "until tail -c +$START '$LOG' | rg -q 'Apps: applied .*app_id=fbwl-apps-alpha .*alpha=200,100'; do sleep 0.05; done"
 timeout 5 bash -c "until tail -c +$START '$LOG' | rg -q 'Alpha: .* focused=200 unfocused=100 reason=apps'; do sleep 0.05; done"
+
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-smoke-client --socket "$SOCKET" --app-id fbwl-apps-focus-refuse --title apps-focus-refuse --stay-ms 10000 >/dev/null 2>&1 &
+FOCUS_PID=$!
+
+START=$((OFFSET + 1))
+timeout 5 bash -c "until tail -c +$START '$LOG' | rg -q 'Apps: applied .*app_id=fbwl-apps-focus-refuse .*focus_protect=0x2'; do sleep 0.05; done"
+timeout 5 bash -c "until tail -c +$START '$LOG' | rg -q 'FocusNew: refused .*app_id=fbwl-apps-focus-refuse'; do sleep 0.05; done"
 
 echo "ok: apps rules smoke passed (socket=$SOCKET log=$LOG apps=$APPS_FILE)"

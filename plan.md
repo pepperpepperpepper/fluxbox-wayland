@@ -1322,7 +1322,7 @@ Goal: users can drop in their existing `~/.fluxbox` directory and get the same b
     - [x] Head: `[Head] {number}` (Wayland outputs via ScreenMap).
 	    - [x] Shaded
 	    - [x] Alpha
-    - [ ] FocusProtection
+	    - [x] FocusProtection
     - [ ] SaveOnClose (write-back)
 - [ ] Extend menu/style parity:
   - [x] Menu: support `[include]` (file/dir), `[separator]`, `[nop]`.
