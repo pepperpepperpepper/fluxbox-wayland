@@ -47,7 +47,18 @@ void fbwl_xdg_shell_handle_new_popup(struct wl_listener *listener, void *data) {
         wlr_xdg_surface_try_from_wlr_surface(xdg_popup->parent);
     if (parent != NULL) {
         struct wlr_scene_tree *parent_tree = parent->data;
-        xdg_popup->base->data = wlr_scene_xdg_surface_create(parent_tree, xdg_popup->base);
+        struct wlr_scene_tree *popup_tree = wlr_scene_xdg_surface_create(parent_tree, xdg_popup->base);
+        xdg_popup->base->data = popup_tree;
+
+        struct wlr_scene_node *walk = parent_tree != NULL ? &parent_tree->node : NULL;
+        while (walk != NULL && walk->data == NULL) {
+            walk = walk->parent != NULL ? &walk->parent->node : NULL;
+        }
+        struct fbwl_view *view = walk != NULL ? walk->data : NULL;
+        if (view != NULL && popup_tree != NULL) {
+            popup_tree->node.data = view;
+            fbwl_view_alpha_apply(view);
+        }
     }
 
     popup->commit.notify = xdg_popup_commit;
@@ -184,7 +195,7 @@ void fbwl_xdg_shell_handle_toplevel_map(struct fbwl_view *view,
             view->apps_rules_applied = true;
 
             wlr_log(WLR_INFO,
-                "Apps: applied title=%s app_id=%s workspace_id=%d sticky=%d jump=%d minimized=%d maximized=%d fullscreen=%d shaded=%d group_id=%d deco=%d layer=%d head=%d dims=%d%sx%d%s pos=%d%s,%d%s anchor=%d",
+                "Apps: applied title=%s app_id=%s workspace_id=%d sticky=%d jump=%d minimized=%d maximized=%d fullscreen=%d shaded=%d alpha=%d,%d group_id=%d deco=%d layer=%d head=%d dims=%d%sx%d%s pos=%d%s,%d%s anchor=%d",
                 fbwl_view_display_title(view),
                 fbwl_view_app_id(view) != NULL ? fbwl_view_app_id(view) : "(no-app-id)",
                 apps_rule->set_workspace ? apps_rule->workspace : -1,
@@ -194,6 +205,8 @@ void fbwl_xdg_shell_handle_toplevel_map(struct fbwl_view *view,
                 apps_rule->set_maximized ? (apps_rule->maximized ? 1 : 0) : -1,
                 apps_rule->set_fullscreen ? (apps_rule->fullscreen ? 1 : 0) : -1,
                 apps_rule->set_shaded ? (apps_rule->shaded ? 1 : 0) : -1,
+                apps_rule->set_alpha ? apps_rule->alpha_focused : -1,
+                apps_rule->set_alpha ? apps_rule->alpha_unfocused : -1,
                 apps_rule->group_id,
                 apps_rule->set_decor ? (apps_rule->decor_enabled ? 1 : 0) : -1,
                 apps_rule->set_layer ? apps_rule->layer : -1,

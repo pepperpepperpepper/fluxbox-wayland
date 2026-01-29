@@ -26,6 +26,7 @@ cleanup() {
   if [[ -n "${NODECO_PID:-}" ]]; then kill "$NODECO_PID" 2>/dev/null || true; fi
   if [[ -n "${PLACED_PID:-}" ]]; then kill "$PLACED_PID" 2>/dev/null || true; fi
   if [[ -n "${SHADED_PID:-}" ]]; then kill "$SHADED_PID" 2>/dev/null || true; fi
+  if [[ -n "${ALPHA_PID:-}" ]]; then kill "$ALPHA_PID" 2>/dev/null || true; fi
   if [[ -n "${FBW_PID:-}" ]]; then kill "$FBW_PID" 2>/dev/null || true; fi
   wait 2>/dev/null || true
 }
@@ -64,6 +65,10 @@ cat >"$APPS_FILE" <<'EOF'
 
 [app] (app_id=fbwl-apps-shaded)
   [Shaded] {yes}
+[end]
+
+[app] (app_id=fbwl-apps-alpha)
+  [Alpha] {200 100}
 [end]
 EOF
 
@@ -136,5 +141,13 @@ SHADED_PID=$!
 START=$((OFFSET + 1))
 timeout 5 bash -c "until tail -c +$START '$LOG' | rg -q 'Apps: applied .*app_id=fbwl-apps-shaded .*shaded=1'; do sleep 0.05; done"
 timeout 5 bash -c "until tail -c +$START '$LOG' | rg -q 'Shade: .* on reason=apps'; do sleep 0.05; done"
+
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-smoke-client --socket "$SOCKET" --app-id fbwl-apps-alpha --title apps-alpha --stay-ms 10000 >/dev/null 2>&1 &
+ALPHA_PID=$!
+
+START=$((OFFSET + 1))
+timeout 5 bash -c "until tail -c +$START '$LOG' | rg -q 'Apps: applied .*app_id=fbwl-apps-alpha .*alpha=200,100'; do sleep 0.05; done"
+timeout 5 bash -c "until tail -c +$START '$LOG' | rg -q 'Alpha: .* focused=200 unfocused=100 reason=apps'; do sleep 0.05; done"
 
 echo "ok: apps rules smoke passed (socket=$SOCKET log=$LOG apps=$APPS_FILE)"

@@ -177,6 +177,10 @@ static int decor_theme_button_size(const struct fbwl_decor_theme *theme) {
     return size;
 }
 
+static float alpha_to_opacity(uint8_t alpha) {
+    return (float)alpha / 255.0f;
+}
+
 void fbwl_view_decor_apply_enabled(struct fbwl_view *view) {
     if (view == NULL || view->decor_tree == NULL) {
         return;
@@ -196,6 +200,7 @@ void fbwl_view_decor_set_active(struct fbwl_view *view, const struct fbwl_decor_
         const float *color = active ? theme->titlebar_active : theme->titlebar_inactive;
         wlr_scene_rect_set_color(view->decor_titlebar, color);
     }
+    fbwl_view_alpha_apply(view);
 }
 
 void fbwl_view_decor_update_title_text(struct fbwl_view *view, const struct fbwl_decor_theme *theme) {
@@ -451,6 +456,42 @@ struct fbwl_decor_hit fbwl_view_decor_hit_test(const struct fbwl_view *view, con
         hit.edges = edges;
     }
     return hit;
+}
+
+static void alpha_apply_iter(struct wlr_scene_buffer *buffer, int sx, int sy, void *user_data) {
+    (void)sx;
+    (void)sy;
+    if (buffer == NULL || user_data == NULL) {
+        return;
+    }
+    const float opacity = *(float *)user_data;
+    wlr_scene_buffer_set_opacity(buffer, opacity);
+}
+
+void fbwl_view_alpha_apply(struct fbwl_view *view) {
+    if (view == NULL || view->scene_tree == NULL || !view->alpha_set) {
+        return;
+    }
+    const uint8_t alpha = view->decor_active ? view->alpha_focused : view->alpha_unfocused;
+    const float opacity = alpha_to_opacity(alpha);
+    wlr_scene_node_for_each_buffer(&view->scene_tree->node, alpha_apply_iter, (void *)&opacity);
+}
+
+void fbwl_view_set_alpha(struct fbwl_view *view, uint8_t focused, uint8_t unfocused, const char *why) {
+    if (view == NULL) {
+        return;
+    }
+
+    view->alpha_set = true;
+    view->alpha_focused = focused;
+    view->alpha_unfocused = unfocused;
+    fbwl_view_alpha_apply(view);
+
+    wlr_log(WLR_INFO, "Alpha: %s focused=%u unfocused=%u reason=%s",
+        fbwl_view_display_title(view),
+        (unsigned int)focused,
+        (unsigned int)unfocused,
+        why != NULL ? why : "(null)");
 }
 
 void fbwl_view_set_shaded(struct fbwl_view *view, bool shaded, const char *why) {

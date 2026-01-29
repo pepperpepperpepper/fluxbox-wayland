@@ -68,6 +68,10 @@ struct fbwl_apps_rule {
     bool set_shaded;
     bool shaded;
 
+    bool set_alpha;
+    int alpha_focused;
+    int alpha_unfocused;
+
     bool set_decor;
     bool decor_enabled;
 

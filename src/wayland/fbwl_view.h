@@ -39,6 +39,9 @@ struct fbwl_view {
     bool decor_enabled;
     bool decor_active;
     bool shaded;
+    bool alpha_set;
+    uint8_t alpha_focused;
+    uint8_t alpha_unfocused;
     struct wlr_scene_tree *decor_tree;
     struct wlr_scene_rect *decor_titlebar;
     struct wlr_scene_buffer *decor_title_text;
@@ -131,6 +134,8 @@ void fbwl_view_decor_set_enabled(struct fbwl_view *view, bool enabled);
 struct fbwl_decor_hit fbwl_view_decor_hit_test(const struct fbwl_view *view, const struct fbwl_decor_theme *theme,
         double lx, double ly);
 
+void fbwl_view_alpha_apply(struct fbwl_view *view);
+void fbwl_view_set_alpha(struct fbwl_view *view, uint8_t focused, uint8_t unfocused, const char *why);
 void fbwl_view_set_shaded(struct fbwl_view *view, bool shaded, const char *why);
 
 void fbwl_view_save_geometry(struct fbwl_view *view);

@@ -1216,6 +1216,8 @@ void server_apps_rules_apply_pre_map(struct fbwl_view *view,
         fbwl_view_decor_set_enabled(view, rule->decor_enabled);
     }
 
+    if (rule->set_alpha) { fbwl_view_set_alpha(view, (uint8_t)rule->alpha_focused, (uint8_t)rule->alpha_unfocused, "apps"); }
+
     if (rule->set_layer) {
         struct wlr_scene_tree *layer = apps_rule_layer_tree(server, rule->layer);
         if (layer != NULL) {

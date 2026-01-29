@@ -320,6 +320,11 @@ static void apps_rule_apply_attrs(struct fbwl_apps_rule *rule, const struct fbwl
         rule->set_shaded = true;
         rule->shaded = attrs->shaded;
     }
+    if (attrs->set_alpha) {
+        rule->set_alpha = true;
+        rule->alpha_focused = attrs->alpha_focused;
+        rule->alpha_unfocused = attrs->alpha_unfocused;
+    }
     if (attrs->set_decor) {
         rule->set_decor = true;
         rule->decor_enabled = attrs->decor_enabled;
@@ -796,6 +801,35 @@ bool fbwl_apps_rules_load_file(struct fbwl_apps_rule **rules, size_t *rule_count
                 target->set_shaded = true;
                 target->shaded = v;
             }
+            continue;
+        }
+
+        if (strcasecmp(key, "alpha") == 0) {
+            if (label == NULL || *label == '\0') {
+                continue;
+            }
+            int focused = 0;
+            int unfocused = 0;
+            int matched = sscanf(label, "%d %d", &focused, &unfocused);
+            if (matched == 1) {
+                unfocused = focused;
+            } else if (matched != 2) {
+                continue;
+            }
+            if (focused < 0) {
+                focused = 0;
+            } else if (focused > 255) {
+                focused = 255;
+            }
+            if (unfocused < 0) {
+                unfocused = 0;
+            } else if (unfocused > 255) {
+                unfocused = 255;
+            }
+
+            target->set_alpha = true;
+            target->alpha_focused = focused;
+            target->alpha_unfocused = unfocused;
             continue;
         }
 
