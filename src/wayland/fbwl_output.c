@@ -130,6 +130,10 @@ static void output_destroy(struct wl_listener *listener, void *data) {
     fbwl_cleanup_listener(&output->present);
     fbwl_cleanup_listener(&output->request_state);
     fbwl_cleanup_listener(&output->destroy);
+    if (output->background_image != NULL) {
+        wlr_scene_node_destroy(&output->background_image->node);
+        output->background_image = NULL;
+    }
     if (output->background_rect != NULL) {
         wlr_scene_node_destroy(&output->background_rect->node);
         output->background_rect = NULL;

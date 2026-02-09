@@ -303,6 +303,72 @@ const char *fbwl_resource_db_get(const struct fbwl_resource_db *db, const char *
     return NULL;
 }
 
+size_t fbwl_resource_db_max_screen_index(const struct fbwl_resource_db *db) {
+    if (db == NULL) {
+        return 0;
+    }
+    size_t max_idx = 0;
+    const char *prefix = "session.screen";
+    const size_t prefix_len = strlen(prefix);
+    for (size_t i = 0; i < db->items_len; i++) {
+        const char *k = db->items[i].key;
+        if (k == NULL) {
+            continue;
+        }
+        if (strncasecmp(k, prefix, prefix_len) != 0) {
+            continue;
+        }
+        const char *p = k + prefix_len;
+        if (*p == '\0' || !isdigit((unsigned char)*p)) {
+            continue;
+        }
+        unsigned long v = 0;
+        const char *digits = p;
+        while (*p != '\0' && isdigit((unsigned char)*p)) {
+            v = v * 10 + (unsigned long)(*p - '0');
+            p++;
+            if (v > 1000000ul) {
+                break;
+            }
+        }
+        if (p == digits || *p != '.') {
+            continue;
+        }
+        if (v > max_idx) {
+            max_idx = (size_t)v;
+        }
+    }
+    return max_idx;
+}
+
+static bool screen_key(char buf[static 256], size_t screen, const char *suffix) {
+    if (buf == NULL || suffix == NULL || *suffix == '\0') {
+        return false;
+    }
+    int n = snprintf(buf, 256, "session.screen%zu.%s", screen, suffix);
+    return n > 0 && n < 256;
+}
+
+const char *fbwl_resource_db_get_screen(const struct fbwl_resource_db *db, size_t screen, const char *suffix) {
+    if (db == NULL || suffix == NULL || *suffix == '\0') {
+        return NULL;
+    }
+
+    char key[256];
+    if (!screen_key(key, screen, suffix)) {
+        return NULL;
+    }
+    const char *val = fbwl_resource_db_get(db, key);
+    if (val != NULL || screen == 0) {
+        return val;
+    }
+
+    if (!screen_key(key, 0, suffix)) {
+        return NULL;
+    }
+    return fbwl_resource_db_get(db, key);
+}
+
 static bool parse_bool(const char *s, bool *out) {
     if (s == NULL || out == NULL) {
         return false;
@@ -343,11 +409,44 @@ bool fbwl_resource_db_get_bool(const struct fbwl_resource_db *db, const char *ke
     return parse_bool(fbwl_resource_db_get(db, key), out);
 }
 
+bool fbwl_resource_db_get_screen_bool(const struct fbwl_resource_db *db, size_t screen, const char *suffix, bool *out) {
+    return parse_bool(fbwl_resource_db_get_screen(db, screen, suffix), out);
+}
+
 bool fbwl_resource_db_get_int(const struct fbwl_resource_db *db, const char *key, int *out) {
     if (out == NULL) {
         return false;
     }
     const char *s = fbwl_resource_db_get(db, key);
+    if (s == NULL) {
+        return false;
+    }
+    while (*s != '\0' && isspace((unsigned char)*s)) {
+        s++;
+    }
+    if (*s == '\0') {
+        return false;
+    }
+    char *end = NULL;
+    long v = strtol(s, &end, 10);
+    if (end == s || end == NULL) {
+        return false;
+    }
+    while (*end != '\0' && isspace((unsigned char)*end)) {
+        end++;
+    }
+    if (*end != '\0') {
+        return false;
+    }
+    *out = (int)v;
+    return true;
+}
+
+bool fbwl_resource_db_get_screen_int(const struct fbwl_resource_db *db, size_t screen, const char *suffix, int *out) {
+    if (out == NULL) {
+        return false;
+    }
+    const char *s = fbwl_resource_db_get_screen(db, screen, suffix);
     if (s == NULL) {
         return false;
     }
@@ -399,4 +498,431 @@ char *fbwl_resource_db_discover_path(const struct fbwl_resource_db *db, const ch
         joined = NULL;
     }
     return joined;
+}
+
+enum fbwl_focus_model fbwl_parse_focus_model(const char *s) {
+    if (s == NULL) {
+        return FBWL_FOCUS_MODEL_CLICK_TO_FOCUS;
+    }
+    if (strcasecmp(s, "ClickToFocus") == 0 || strcasecmp(s, "ClickFocus") == 0) {
+        return FBWL_FOCUS_MODEL_CLICK_TO_FOCUS;
+    }
+    if (strcasecmp(s, "MouseFocus") == 0 || strcasecmp(s, "SloppyFocus") == 0 || strcasecmp(s, "SemiSloppyFocus") == 0) {
+        return FBWL_FOCUS_MODEL_MOUSE_FOCUS;
+    }
+    if (strcasecmp(s, "StrictMouseFocus") == 0) {
+        return FBWL_FOCUS_MODEL_STRICT_MOUSE_FOCUS;
+    }
+    return FBWL_FOCUS_MODEL_CLICK_TO_FOCUS;
+}
+
+const char *fbwl_focus_model_str(enum fbwl_focus_model model) {
+    switch (model) {
+    case FBWL_FOCUS_MODEL_CLICK_TO_FOCUS:
+        return "ClickToFocus";
+    case FBWL_FOCUS_MODEL_MOUSE_FOCUS:
+        return "MouseFocus";
+    case FBWL_FOCUS_MODEL_STRICT_MOUSE_FOCUS:
+        return "StrictMouseFocus";
+    default:
+        return "ClickToFocus";
+    }
+}
+
+enum fbwm_window_placement_strategy fbwl_parse_window_placement(const char *s) {
+    if (s == NULL) {
+        return FBWM_PLACE_ROW_SMART;
+    }
+    if (strcasecmp(s, "RowSmartPlacement") == 0) {
+        return FBWM_PLACE_ROW_SMART;
+    }
+    if (strcasecmp(s, "ColSmartPlacement") == 0) {
+        return FBWM_PLACE_COL_SMART;
+    }
+    if (strcasecmp(s, "CascadePlacement") == 0) {
+        return FBWM_PLACE_CASCADE;
+    }
+    if (strcasecmp(s, "UnderMousePlacement") == 0) {
+        return FBWM_PLACE_UNDER_MOUSE;
+    }
+    if (strcasecmp(s, "RowMinOverlapPlacement") == 0) {
+        return FBWM_PLACE_ROW_MIN_OVERLAP;
+    }
+    if (strcasecmp(s, "ColMinOverlapPlacement") == 0) {
+        return FBWM_PLACE_COL_MIN_OVERLAP;
+    }
+    if (strcasecmp(s, "AutotabPlacement") == 0) {
+        return FBWM_PLACE_AUTOTAB;
+    }
+    return FBWM_PLACE_ROW_SMART;
+}
+
+const char *fbwl_window_placement_str(enum fbwm_window_placement_strategy placement) {
+    switch (placement) {
+    case FBWM_PLACE_ROW_SMART:
+        return "RowSmartPlacement";
+    case FBWM_PLACE_COL_SMART:
+        return "ColSmartPlacement";
+    case FBWM_PLACE_CASCADE:
+        return "CascadePlacement";
+    case FBWM_PLACE_UNDER_MOUSE:
+        return "UnderMousePlacement";
+    case FBWM_PLACE_ROW_MIN_OVERLAP:
+        return "RowMinOverlapPlacement";
+    case FBWM_PLACE_COL_MIN_OVERLAP:
+        return "ColMinOverlapPlacement";
+    case FBWM_PLACE_AUTOTAB:
+        return "AutotabPlacement";
+    default:
+        return "RowSmartPlacement";
+    }
+}
+
+enum fbwl_toolbar_placement fbwl_parse_toolbar_placement(const char *s) {
+    if (s == NULL) {
+        return FBWL_TOOLBAR_PLACEMENT_BOTTOM_CENTER;
+    }
+    if (strcasecmp(s, "BottomLeft") == 0) {
+        return FBWL_TOOLBAR_PLACEMENT_BOTTOM_LEFT;
+    }
+    if (strcasecmp(s, "BottomCenter") == 0) {
+        return FBWL_TOOLBAR_PLACEMENT_BOTTOM_CENTER;
+    }
+    if (strcasecmp(s, "BottomRight") == 0) {
+        return FBWL_TOOLBAR_PLACEMENT_BOTTOM_RIGHT;
+    }
+    if (strcasecmp(s, "LeftBottom") == 0) {
+        return FBWL_TOOLBAR_PLACEMENT_LEFT_BOTTOM;
+    }
+    if (strcasecmp(s, "LeftCenter") == 0) {
+        return FBWL_TOOLBAR_PLACEMENT_LEFT_CENTER;
+    }
+    if (strcasecmp(s, "LeftTop") == 0) {
+        return FBWL_TOOLBAR_PLACEMENT_LEFT_TOP;
+    }
+    if (strcasecmp(s, "RightBottom") == 0) {
+        return FBWL_TOOLBAR_PLACEMENT_RIGHT_BOTTOM;
+    }
+    if (strcasecmp(s, "RightCenter") == 0) {
+        return FBWL_TOOLBAR_PLACEMENT_RIGHT_CENTER;
+    }
+    if (strcasecmp(s, "RightTop") == 0) {
+        return FBWL_TOOLBAR_PLACEMENT_RIGHT_TOP;
+    }
+    if (strcasecmp(s, "TopLeft") == 0) {
+        return FBWL_TOOLBAR_PLACEMENT_TOP_LEFT;
+    }
+    if (strcasecmp(s, "TopCenter") == 0) {
+        return FBWL_TOOLBAR_PLACEMENT_TOP_CENTER;
+    }
+    if (strcasecmp(s, "TopRight") == 0) {
+        return FBWL_TOOLBAR_PLACEMENT_TOP_RIGHT;
+    }
+    return FBWL_TOOLBAR_PLACEMENT_BOTTOM_CENTER;
+}
+
+const char *fbwl_toolbar_placement_str(enum fbwl_toolbar_placement placement) {
+    switch (placement) {
+    case FBWL_TOOLBAR_PLACEMENT_BOTTOM_LEFT:
+        return "BottomLeft";
+    case FBWL_TOOLBAR_PLACEMENT_BOTTOM_CENTER:
+        return "BottomCenter";
+    case FBWL_TOOLBAR_PLACEMENT_BOTTOM_RIGHT:
+        return "BottomRight";
+    case FBWL_TOOLBAR_PLACEMENT_LEFT_BOTTOM:
+        return "LeftBottom";
+    case FBWL_TOOLBAR_PLACEMENT_LEFT_CENTER:
+        return "LeftCenter";
+    case FBWL_TOOLBAR_PLACEMENT_LEFT_TOP:
+        return "LeftTop";
+    case FBWL_TOOLBAR_PLACEMENT_RIGHT_BOTTOM:
+        return "RightBottom";
+    case FBWL_TOOLBAR_PLACEMENT_RIGHT_CENTER:
+        return "RightCenter";
+    case FBWL_TOOLBAR_PLACEMENT_RIGHT_TOP:
+        return "RightTop";
+    case FBWL_TOOLBAR_PLACEMENT_TOP_LEFT:
+        return "TopLeft";
+    case FBWL_TOOLBAR_PLACEMENT_TOP_CENTER:
+        return "TopCenter";
+    case FBWL_TOOLBAR_PLACEMENT_TOP_RIGHT:
+        return "TopRight";
+    default:
+        return "BottomCenter";
+    }
+}
+
+uint32_t fbwl_toolbar_tools_default(void) {
+    return FBWL_TOOLBAR_TOOL_WORKSPACES | FBWL_TOOLBAR_TOOL_ICONBAR | FBWL_TOOLBAR_TOOL_SYSTEMTRAY | FBWL_TOOLBAR_TOOL_CLOCK;
+}
+
+uint32_t fbwl_parse_toolbar_tools(const char *s) {
+    if (s == NULL || *s == '\0') {
+        return fbwl_toolbar_tools_default();
+    }
+
+    uint32_t tools = 0;
+    char *copy = strdup(s);
+    if (copy == NULL) {
+        return fbwl_toolbar_tools_default();
+    }
+
+    char *save = NULL;
+    for (char *tok = strtok_r(copy, ",", &save); tok != NULL; tok = strtok_r(NULL, ",", &save)) {
+        while (*tok != '\0' && isspace((unsigned char)*tok)) {
+            tok++;
+        }
+        char *end = tok + strlen(tok);
+        while (end > tok && isspace((unsigned char)end[-1])) {
+            end--;
+        }
+        *end = '\0';
+        if (*tok == '\0') {
+            continue;
+        }
+
+        for (char *p = tok; *p != '\0'; p++) {
+            *p = (char)tolower((unsigned char)*p);
+        }
+
+        if (strcmp(tok, "workspacename") == 0 || strcmp(tok, "prevworkspace") == 0 || strcmp(tok, "nextworkspace") == 0) {
+            tools |= FBWL_TOOLBAR_TOOL_WORKSPACES;
+        } else if (strcmp(tok, "iconbar") == 0 || strcmp(tok, "prevwindow") == 0 || strcmp(tok, "nextwindow") == 0) {
+            tools |= FBWL_TOOLBAR_TOOL_ICONBAR;
+        } else if (strcmp(tok, "systemtray") == 0) {
+            tools |= FBWL_TOOLBAR_TOOL_SYSTEMTRAY;
+        } else if (strcmp(tok, "clock") == 0) {
+            tools |= FBWL_TOOLBAR_TOOL_CLOCK;
+        } else if (strncmp(tok, "button.", 7) == 0) {
+            tools |= FBWL_TOOLBAR_TOOL_BUTTONS;
+        }
+    }
+
+    free(copy);
+    if (tools == 0) {
+        tools = fbwl_toolbar_tools_default();
+    }
+    return tools;
+}
+
+bool fbwl_parse_layer_num(const char *s, int *out_layer) {
+    if (s == NULL || out_layer == NULL) {
+        return false;
+    }
+
+    while (*s != '\0' && isspace((unsigned char)*s)) {
+        s++;
+    }
+    if (*s == '\0') {
+        return false;
+    }
+
+    char *endptr = NULL;
+    long n = strtol(s, &endptr, 10);
+    if (endptr != s && endptr != NULL) {
+        while (*endptr != '\0' && isspace((unsigned char)*endptr)) {
+            endptr++;
+        }
+        if (*endptr == '\0') {
+            *out_layer = (int)n;
+            return true;
+        }
+    }
+
+    if (strcasecmp(s, "menu") == 0 || strcasecmp(s, "overlay") == 0) {
+        *out_layer = 0;
+        return true;
+    }
+    if (strcasecmp(s, "abovedock") == 0) {
+        *out_layer = 2;
+        return true;
+    }
+    if (strcasecmp(s, "dock") == 0) {
+        *out_layer = 4;
+        return true;
+    }
+    if (strcasecmp(s, "top") == 0) {
+        *out_layer = 6;
+        return true;
+    }
+    if (strcasecmp(s, "normal") == 0) {
+        *out_layer = 8;
+        return true;
+    }
+    if (strcasecmp(s, "bottom") == 0) {
+        *out_layer = 10;
+        return true;
+    }
+    if (strcasecmp(s, "desktop") == 0 || strcasecmp(s, "background") == 0) {
+        *out_layer = 12;
+        return true;
+    }
+
+    return false;
+}
+
+enum fbwm_row_placement_direction fbwl_parse_row_dir(const char *s) {
+    if (s != NULL && strcasecmp(s, "RightToLeft") == 0) {
+        return FBWM_ROW_RIGHT_TO_LEFT;
+    }
+    return FBWM_ROW_LEFT_TO_RIGHT;
+}
+
+const char *fbwl_row_dir_str(enum fbwm_row_placement_direction dir) {
+    return dir == FBWM_ROW_RIGHT_TO_LEFT ? "RightToLeft" : "LeftToRight";
+}
+
+enum fbwm_col_placement_direction fbwl_parse_col_dir(const char *s) {
+    if (s != NULL && strcasecmp(s, "BottomToTop") == 0) {
+        return FBWM_COL_BOTTOM_TO_TOP;
+    }
+    return FBWM_COL_TOP_TO_BOTTOM;
+}
+
+const char *fbwl_col_dir_str(enum fbwm_col_placement_direction dir) {
+    return dir == FBWM_COL_BOTTOM_TO_TOP ? "BottomToTop" : "TopToBottom";
+}
+
+enum fbwl_tab_focus_model fbwl_parse_tab_focus_model(const char *s) {
+    if (s == NULL) {
+        return FBWL_TAB_FOCUS_CLICK;
+    }
+    if (strcasecmp(s, "MouseTabFocus") == 0) {
+        return FBWL_TAB_FOCUS_MOUSE;
+    }
+    if (strcasecmp(s, "ClickTabFocus") == 0) {
+        return FBWL_TAB_FOCUS_CLICK;
+    }
+    return FBWL_TAB_FOCUS_CLICK;
+}
+
+const char *fbwl_tab_focus_model_str(enum fbwl_tab_focus_model model) {
+    switch (model) {
+    case FBWL_TAB_FOCUS_MOUSE:
+        return "MouseTabFocus";
+    case FBWL_TAB_FOCUS_CLICK:
+    default:
+        return "ClickTabFocus";
+    }
+}
+
+enum fbwl_tabs_attach_area fbwl_parse_tabs_attach_area(const char *s) {
+    if (s == NULL) {
+        return FBWL_TABS_ATTACH_WINDOW;
+    }
+    if (strcasecmp(s, "Titlebar") == 0) {
+        return FBWL_TABS_ATTACH_TITLEBAR;
+    }
+    if (strcasecmp(s, "Window") == 0) {
+        return FBWL_TABS_ATTACH_WINDOW;
+    }
+    return FBWL_TABS_ATTACH_WINDOW;
+}
+
+const char *fbwl_tabs_attach_area_str(enum fbwl_tabs_attach_area area) {
+    switch (area) {
+    case FBWL_TABS_ATTACH_TITLEBAR:
+        return "Titlebar";
+    case FBWL_TABS_ATTACH_WINDOW:
+    default:
+        return "Window";
+    }
+}
+
+static enum fbwl_decor_hit_kind titlebar_button_from_token(const char *tok) {
+    if (tok == NULL || *tok == '\0') {
+        return FBWL_DECOR_HIT_NONE;
+    }
+    if (strcasecmp(tok, "Close") == 0) {
+        return FBWL_DECOR_HIT_BTN_CLOSE;
+    }
+    if (strcasecmp(tok, "Maximize") == 0) {
+        return FBWL_DECOR_HIT_BTN_MAX;
+    }
+    if (strcasecmp(tok, "MenuIcon") == 0 || strcasecmp(tok, "Menu") == 0) {
+        return FBWL_DECOR_HIT_BTN_MENU;
+    }
+    if (strcasecmp(tok, "Minimize") == 0) {
+        return FBWL_DECOR_HIT_BTN_MIN;
+    }
+    if (strcasecmp(tok, "Shade") == 0) {
+        return FBWL_DECOR_HIT_BTN_SHADE;
+    }
+    if (strcasecmp(tok, "Stick") == 0) {
+        return FBWL_DECOR_HIT_BTN_STICK;
+    }
+    if (strcasecmp(tok, "LHalf") == 0) {
+        return FBWL_DECOR_HIT_BTN_LHALF;
+    }
+    if (strcasecmp(tok, "RHalf") == 0) {
+        return FBWL_DECOR_HIT_BTN_RHALF;
+    }
+    return FBWL_DECOR_HIT_NONE;
+}
+
+bool fbwl_titlebar_buttons_parse(const char *s, enum fbwl_decor_hit_kind *out, size_t cap, size_t *out_len) {
+    if (s == NULL || out == NULL || out_len == NULL || cap < 1) {
+        return false;
+    }
+
+    char *copy = strdup(s);
+    if (copy == NULL) {
+        return false;
+    }
+
+    char *trim = trim_inplace(copy);
+    if (trim == NULL || *trim == '\0') {
+        *out_len = 0;
+        free(copy);
+        return true;
+    }
+
+    size_t n = 0;
+    char *saveptr = NULL;
+    for (char *tok = strtok_r(trim, " \t\r\n", &saveptr);
+            tok != NULL;
+            tok = strtok_r(NULL, " \t\r\n", &saveptr)) {
+        const enum fbwl_decor_hit_kind kind = titlebar_button_from_token(tok);
+        if (kind == FBWL_DECOR_HIT_NONE) {
+            continue;
+        }
+        if (n < cap) {
+            out[n++] = kind;
+        }
+    }
+
+    free(copy);
+    if (n < 1) {
+        return false;
+    }
+
+    *out_len = n;
+    return true;
+}
+
+void fbwl_apply_workspace_names_from_init(struct fbwm_core *wm, const char *csv) {
+    if (wm == NULL || csv == NULL) {
+        return;
+    }
+
+    fbwm_core_clear_workspace_names(wm);
+
+    char *tmp = strdup(csv);
+    if (tmp == NULL) {
+        return;
+    }
+
+    char *saveptr = NULL;
+    char *tok = strtok_r(tmp, ",", &saveptr);
+    int idx = 0;
+    while (tok != NULL && idx < 1000) {
+        char *name = trim_inplace(tok);
+        if (name != NULL && *name != '\0') {
+            (void)fbwm_core_set_workspace_name(wm, idx, name);
+            idx++;
+        }
+        tok = strtok_r(NULL, ",", &saveptr);
+    }
+
+    free(tmp);
 }

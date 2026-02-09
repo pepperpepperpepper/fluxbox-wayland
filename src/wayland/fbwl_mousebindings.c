@@ -32,8 +32,20 @@ static bool context_matches(enum fbwl_mousebinding_context binding, enum fbwl_mo
     if (binding == actual) {
         return true;
     }
+    if (binding == FBWL_MOUSEBIND_TITLEBAR) {
+        return actual == FBWL_MOUSEBIND_TAB;
+    }
     if (binding == FBWL_MOUSEBIND_WINDOW) {
-        return actual == FBWL_MOUSEBIND_TITLEBAR || actual == FBWL_MOUSEBIND_WINDOW_BORDER;
+        return actual == FBWL_MOUSEBIND_TITLEBAR ||
+            actual == FBWL_MOUSEBIND_TAB ||
+            actual == FBWL_MOUSEBIND_WINDOW_BORDER ||
+            actual == FBWL_MOUSEBIND_LEFT_GRIP ||
+            actual == FBWL_MOUSEBIND_RIGHT_GRIP;
+    }
+    if (binding == FBWL_MOUSEBIND_WINDOW_BORDER) {
+        return actual == FBWL_MOUSEBIND_WINDOW_BORDER ||
+            actual == FBWL_MOUSEBIND_LEFT_GRIP ||
+            actual == FBWL_MOUSEBIND_RIGHT_GRIP;
     }
     return false;
 }
@@ -54,7 +66,8 @@ void fbwl_mousebindings_free(struct fbwl_mousebinding **bindings, size_t *count)
 }
 
 bool fbwl_mousebindings_add(struct fbwl_mousebinding **bindings, size_t *count, enum fbwl_mousebinding_context context,
-        int button, uint32_t modifiers, enum fbwl_keybinding_action action, int arg, const char *cmd, const char *mode) {
+        enum fbwl_mousebinding_event_kind event_kind, int button, uint32_t modifiers, bool is_double,
+        enum fbwl_keybinding_action action, int arg, const char *cmd, const char *mode) {
     if (bindings == NULL || count == NULL) {
         return false;
     }
@@ -70,8 +83,10 @@ bool fbwl_mousebindings_add(struct fbwl_mousebinding **bindings, size_t *count, 
 
     struct fbwl_mousebinding *binding = &(*bindings)[(*count)++];
     binding->context = context;
+    binding->event_kind = event_kind;
     binding->button = button;
     binding->modifiers = modifiers & FBWL_MOUSEMOD_MASK;
+    binding->is_double = is_double;
     binding->action = action;
     binding->arg = arg;
     binding->cmd = cmd != NULL ? strdup(cmd) : NULL;
@@ -79,8 +94,10 @@ bool fbwl_mousebindings_add(struct fbwl_mousebinding **bindings, size_t *count, 
     return true;
 }
 
-bool fbwl_mousebindings_handle(const struct fbwl_mousebinding *bindings, size_t count, enum fbwl_mousebinding_context context,
-        int button, uint32_t modifiers, struct fbwl_view *target_view, const struct fbwl_keybindings_hooks *hooks) {
+static bool mousebindings_handle_once(const struct fbwl_mousebinding *bindings, size_t count,
+        enum fbwl_mousebinding_context context, enum fbwl_mousebinding_event_kind event_kind,
+        int button, uint32_t modifiers, bool is_double,
+        struct fbwl_view *target_view, const struct fbwl_keybindings_hooks *hooks) {
     if (bindings == NULL || count == 0 || hooks == NULL) {
         return false;
     }
@@ -88,6 +105,12 @@ bool fbwl_mousebindings_handle(const struct fbwl_mousebinding *bindings, size_t 
     modifiers &= FBWL_MOUSEMOD_MASK;
     for (size_t i = count; i-- > 0;) {
         const struct fbwl_mousebinding *binding = &bindings[i];
+        if (binding->event_kind != event_kind) {
+            continue;
+        }
+        if (binding->is_double != is_double) {
+            continue;
+        }
         if (!mode_matches(binding->mode, hooks->key_mode)) {
             continue;
         }
@@ -101,6 +124,60 @@ bool fbwl_mousebindings_handle(const struct fbwl_mousebinding *bindings, size_t 
             continue;
         }
         return fbwl_keybindings_execute_action(binding->action, binding->arg, binding->cmd, target_view, hooks);
+    }
+
+    return false;
+}
+
+bool fbwl_mousebindings_handle(const struct fbwl_mousebinding *bindings, size_t count, enum fbwl_mousebinding_context context,
+        enum fbwl_mousebinding_event_kind event_kind, int button, uint32_t modifiers, bool is_double,
+        struct fbwl_view *target_view, const struct fbwl_keybindings_hooks *hooks) {
+    if (bindings == NULL || count == 0 || hooks == NULL) {
+        return false;
+    }
+
+    if (event_kind != FBWL_MOUSEBIND_EVENT_PRESS) {
+        is_double = false;
+    }
+
+    if (event_kind == FBWL_MOUSEBIND_EVENT_PRESS && is_double) {
+        if (mousebindings_handle_once(bindings, count, context, event_kind, button, modifiers, true, target_view, hooks)) {
+            return true;
+        }
+        return mousebindings_handle_once(bindings, count, context, event_kind, button, modifiers, false, target_view, hooks);
+    }
+
+    return mousebindings_handle_once(bindings, count, context, event_kind, button, modifiers, false, target_view, hooks);
+}
+
+bool fbwl_mousebindings_has(const struct fbwl_mousebinding *bindings, size_t count, enum fbwl_mousebinding_context context,
+        enum fbwl_mousebinding_event_kind event_kind, int button, uint32_t modifiers, const struct fbwl_keybindings_hooks *hooks) {
+    if (bindings == NULL || count == 0 || hooks == NULL) {
+        return false;
+    }
+
+    modifiers &= FBWL_MOUSEMOD_MASK;
+    for (size_t i = count; i-- > 0;) {
+        const struct fbwl_mousebinding *binding = &bindings[i];
+        if (binding->event_kind != event_kind) {
+            continue;
+        }
+        if (binding->is_double) {
+            continue;
+        }
+        if (!mode_matches(binding->mode, hooks->key_mode)) {
+            continue;
+        }
+        if (!context_matches(binding->context, context)) {
+            continue;
+        }
+        if (binding->button != button) {
+            continue;
+        }
+        if (binding->modifiers != modifiers) {
+            continue;
+        }
+        return true;
     }
 
     return false;

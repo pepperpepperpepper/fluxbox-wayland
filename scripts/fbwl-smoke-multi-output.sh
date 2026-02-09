@@ -134,4 +134,34 @@ OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" key alt-f
 tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Fullscreen: out-b on w=$W2 h=$H2"
 
+# Workspace semantics: per-head workspaces (Xinerama-like).
+# Switching workspaces affects only the head under the pointer.
+
+# Switch head 0 to workspace 2 (hide out-a, keep out-b visible).
+./fbwl-input-injector --socket "$SOCKET" click "$CX1" "$CY1"
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-input-injector --socket "$SOCKET" key alt-2
+tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Workspace: apply current=2 reason=switch'
+tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Workspace: view=out-a ws=1 visible=0'
+tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Workspace: view=out-b ws=1 visible=1'
+
+# Switch head 1 to workspace 2 (hide out-b as well), then back to workspace 1.
+./fbwl-input-injector --socket "$SOCKET" click "$CX2" "$CY2"
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-input-injector --socket "$SOCKET" key alt-2
+tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Workspace: apply current=2 reason=switch'
+tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Workspace: view=out-b ws=1 visible=0'
+
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-input-injector --socket "$SOCKET" key alt-1
+tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Workspace: apply current=1 reason=switch'
+tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Workspace: view=out-b ws=1 visible=1'
+
+# Restore head 0 to workspace 1 (show out-a again).
+./fbwl-input-injector --socket "$SOCKET" click "$CX1" "$CY1"
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-input-injector --socket "$SOCKET" key alt-1
+tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Workspace: apply current=1 reason=switch'
+tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Workspace: view=out-a ws=1 visible=1'
+
 echo "ok: multi-output smoke passed (socket=$SOCKET log=$LOG)"

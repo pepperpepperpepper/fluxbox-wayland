@@ -12,7 +12,7 @@ need_exe() {
 pick_display_num() {
   local base="${1:-99}"
   local d
-  for ((d = base; d <= base + 20; d++)); do
+  for ((d = base; d <= base + 200; d++)); do
     if [[ ! -e "/tmp/.X11-unix/X$d" && ! -e "/tmp/.X${d}-lock" ]]; then
       echo "$d"
       return 0
@@ -44,7 +44,11 @@ export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/xdg-runtime-$UID}"
 mkdir -p "$XDG_RUNTIME_DIR"
 chmod 0700 "$XDG_RUNTIME_DIR"
 
-DISPLAY_NUM="$(pick_display_num "${DISPLAY_NUM:-99}")"
+DISPLAY_NUM="$(pick_display_num "${DISPLAY_NUM:-99}" || true)"
+if [[ -z "$DISPLAY_NUM" ]]; then
+  echo "failed to find a free X display number" >&2
+  exit 1
+fi
 SOCKET="${SOCKET:-wayland-fbwl-xvfb-ks-$UID-$$}"
 XVFB_LOG="${XVFB_LOG:-/tmp/xvfb-ks-$UID-$$.log}"
 LOG="${LOG:-/tmp/fluxbox-wayland-xvfb-ks-$UID-$$.log}"
@@ -59,7 +63,8 @@ APPS_FILE="${APPS_FILE:-/tmp/fbwl-apps-xvfb-ks-$UID-$$.apps}"
 BG_COLOR="${BG_COLOR:-#336699}"
 
 source scripts/fbwl-smoke-report-lib.sh
-fbwl_report_init "${FBWL_SMOKE_REPORT_DIR:-}" "$SOCKET" "$XDG_RUNTIME_DIR"
+REPORT_DIR="${FBWL_REPORT_DIR:-${FBWL_SMOKE_REPORT_DIR:-}}"
+fbwl_report_init "$REPORT_DIR" "$SOCKET" "$XDG_RUNTIME_DIR"
 
 have_cmd() {
   command -v "$1" >/dev/null 2>&1
@@ -142,6 +147,8 @@ cleanup() {
   kill_wait "${IB_A_PID:-}"
   kill_wait "${HOLD_PID:-}"
   kill_wait "${FBW_PID:-}"
+  kill_wait "${FBW_VT_PID:-}"
+  rm -rf "${VT_CFGDIR:-}" 2>/dev/null || true
   kill_wait "${XVFB_PID:-}"
 }
 trap cleanup EXIT
@@ -254,9 +261,18 @@ tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Menu: exec '
 timeout 5 bash -c "until [[ -f '$MENU_MARKER' ]]; do sleep 0.05; done"
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
-./fbwl-input-injector --socket "$SOCKET" click $((TB_X0 + TB_CELL_W + TB_CELL_W / 2)) $((TB_Y0 + TB_H / 2))
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Toolbar: click workspace=2'
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Workspace: apply current=2 reason=toolbar'
+tool_line="$(rg 'Toolbar: tool tok=nextworkspace ' "$LOG" | tail -n 1)"
+if [[ "$tool_line" =~ lx=([-0-9]+)\ w=([0-9]+) ]]; then
+  TB_LX="${BASH_REMATCH[1]}"
+  TB_W="${BASH_REMATCH[2]}"
+else
+  echo "failed to parse Toolbar: tool tok=nextworkspace line: $tool_line" >&2
+  exit 1
+fi
+
+./fbwl-input-injector --socket "$SOCKET" click $((TB_X0 + TB_LX + TB_W / 2)) $((TB_Y0 + TB_H / 2))
+tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Toolbar: click tool=nextworkspace cmd=nextworkspace'
+tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Workspace: apply current=2 reason=switch-next'
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" key alt-3
@@ -448,16 +464,23 @@ else
   echo "failed to parse Place line: $MF_PLACE_LINE" >&2
   exit 1
 fi
+if [[ "$MF_PLACE_LINE" =~ usable=([-0-9]+),([-0-9]+)[[:space:]]([0-9]+)x([0-9]+)[[:space:]] ]]; then
+  MF_USABLE_W="${BASH_REMATCH[3]}"
+  MF_USABLE_H="${BASH_REMATCH[4]}"
+else
+  echo "failed to parse usable box from Place line: $MF_PLACE_LINE" >&2
+  exit 1
+fi
 
 ./fbwl-input-injector --socket "$SOCKET" click "$MF_CLICK_X" "$MF_CLICK_Y" >/dev/null 2>&1 || true
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" key alt-m
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Maximize: ks-mf on w=$OUT_W h=$OUT_H"
+tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Maximize: ks-mf on w=$MF_USABLE_W h=$MF_USABLE_H"
 if ((REPORT_USE_WESTON_TERMINAL)); then
   timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Surface size: ks-mf '; do sleep 0.05; done"
 else
-  timeout 5 bash -c "until rg -q 'Surface size: ks-mf ${OUT_W}x${OUT_H}' '$LOG'; do sleep 0.05; done"
+  timeout 5 bash -c "until rg -q 'Surface size: ks-mf ${MF_USABLE_W}x${MF_USABLE_H}' '$LOG'; do sleep 0.05; done"
 fi
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
@@ -527,7 +550,7 @@ unset APPS_STICKY_PID
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" key alt-1
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Policy: workspace switch to 1'
+tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Policy: workspace switch( head=[0-9]+)? to 1'
 tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Workspace: apply current=1 reason=switch'
 
 ./fbwl-smoke-client --socket "$SOCKET" --title ks-winmenu --stay-ms 20000 --xdg-decoration >/dev/null 2>&1 &
@@ -566,13 +589,20 @@ if (( WINMENU_TB_Y < 0 )); then
   WINMENU_TB_Y=$((WINMENU_Y0 - TB_H + 2))
 fi
 
-OFFSET=$(wc -c <"$LOG" | tr -d ' ')
-./fbwl-input-injector --socket "$SOCKET" drag-right "$WINMENU_TB_X" "$WINMENU_TB_Y" "$WINMENU_TB_X" "$WINMENU_TB_Y"
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Menu: open-window title=ks-winmenu'
-fbwl_report_shot "08-window-menu.png" "Window menu"
-
-CLICK_X=$((WINMENU_TB_X + 10))
-CLICK_Y=$((WINMENU_TB_Y + TB_H / 2))
+	OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+	./fbwl-input-injector --socket "$SOCKET" drag-right "$WINMENU_TB_X" "$WINMENU_TB_Y" "$WINMENU_TB_X" "$WINMENU_TB_Y"
+	open_line="$(tail -c +$((OFFSET + 1)) "$LOG" | rg -m1 'Menu: open-window title=ks-winmenu')"
+	if [[ "$open_line" =~ items=([0-9]+) ]]; then
+	  MENU_ITEMS="${BASH_REMATCH[1]}"
+	else
+	  echo "failed to parse window menu items from open line: $open_line" >&2
+	  exit 1
+	fi
+	fbwl_report_shot "08-window-menu.png" "Window menu"
+	
+	CLICK_X=$((WINMENU_TB_X + 10))
+	CLOSE_IDX=$((MENU_ITEMS - 1))
+	CLICK_Y=$((WINMENU_TB_Y + TB_H * CLOSE_IDX + TB_H / 2))
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" click "$CLICK_X" "$CLICK_Y"
@@ -621,6 +651,13 @@ PLACED_PID=$!
 timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Place: ks-placed '; do sleep 0.05; done"
 
 PLACED_LINE="$(tail -c +$((OFFSET + 1)) "$LOG" | rg 'Place: ks-placed ' | tail -n 1)"
+if [[ "$PLACED_LINE" =~ usable=([-0-9]+),([-0-9]+)[[:space:]]([0-9]+)x([0-9]+)[[:space:]] ]]; then
+  MAX_USABLE_W="${BASH_REMATCH[3]}"
+  MAX_USABLE_H="${BASH_REMATCH[4]}"
+else
+  echo "failed to parse usable box from Place line: $PLACED_LINE" >&2
+  exit 1
+fi
 PLACED_X=$(echo "$PLACED_LINE" | rg -o 'x=-?[0-9]+' | head -n 1 | cut -d= -f2)
 PLACED_Y=$(echo "$PLACED_LINE" | rg -o 'y=-?[0-9]+' | head -n 1 | cut -d= -f2)
 if (( PLACED_X < USABLE_X )); then
@@ -635,7 +672,7 @@ fi
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" click $((PLACED_X + 5)) $((PLACED_Y + 5)) >/dev/null 2>&1 || true
 ./fbwl-input-injector --socket "$SOCKET" key alt-m >/dev/null 2>&1
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Maximize: ks-placed on w=${OUT_W} h=${USABLE_H}"
+tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Maximize: ks-placed on w=${MAX_USABLE_W} h=${MAX_USABLE_H}"
 fbwl_report_shot "10-maximize-usable.png" "Maximize respects usable area"
 
 kill_wait "$PLACED_PID"
@@ -812,5 +849,64 @@ timeout 5 bash -c "until [[ -f '$CMD_MARKER' ]]; do sleep 0.05; done"
 timeout 10 bash -c "while kill -0 '$FBW_PID' 2>/dev/null; do sleep 0.05; done"
 wait "$FBW_PID" 2>/dev/null || true
 unset FBW_PID
+
+if [[ -n "${FBWL_REPORT_DIR:-}" ]]; then
+  SOCKET_VT="${SOCKET}-vt"
+  VT_CFGDIR="$(mktemp -d "/tmp/fbwl-ks-vert-toolbar-$UID-XXXXXX")"
+  VT_LOG="${VT_LOG:-/tmp/fluxbox-wayland-xvfb-ks-vert-toolbar-$UID-$$.log}"
+
+	  cat >"$VT_CFGDIR/init" <<EOF
+	session.screen0.toolbar.visible: true
+	session.screen0.allowRemoteActions: true
+	session.screen0.toolbar.placement: LeftCenter
+	session.screen0.toolbar.widthPercent: 70
+	session.screen0.toolbar.height: 30
+	session.screen0.toolbar.tools: workspacename,iconbar,clock
+	session.screen0.toolbar.autoHide: false
+session.screen0.toolbar.autoRaise: false
+EOF
+
+  DISPLAY=":$DISPLAY_NUM" WLR_BACKENDS=x11 WLR_RENDERER=pixman ./fluxbox-wayland \
+    --no-xwayland \
+    --socket "$SOCKET_VT" \
+    --bg-color "$BG_COLOR" \
+    --workspaces 3 \
+    --menu "$MENU_FILE" \
+    --apps "$APPS_FILE" \
+    --config-dir "$VT_CFGDIR" \
+    >"$VT_LOG" 2>&1 &
+  FBW_VT_PID=$!
+  timeout 5 bash -c "until rg -q 'Running fluxbox-wayland' '$VT_LOG' && rg -q 'Toolbar: position ' '$VT_LOG'; do sleep 0.05; done"
+
+  ./fbwl-smoke-client --socket "$SOCKET_VT" --title ks-vt --stay-ms 10000 >/dev/null 2>&1 &
+  VT_CLIENT_PID=$!
+  timeout 5 bash -c "until rg -q 'Place: ks-vt ' '$VT_LOG'; do sleep 0.05; done"
+
+  fbwl_report_init "${FBWL_REPORT_DIR:-}" "$SOCKET_VT" "$XDG_RUNTIME_DIR"
+  fbwl_report_shot "13-toolbar-left.png" "Vertical toolbar: LeftCenter"
+
+	  cat >"$VT_CFGDIR/init" <<EOF
+	session.screen0.toolbar.visible: true
+	session.screen0.allowRemoteActions: true
+	session.screen0.toolbar.placement: RightCenter
+	session.screen0.toolbar.widthPercent: 70
+	session.screen0.toolbar.height: 30
+	session.screen0.toolbar.tools: workspacename,iconbar,clock
+	session.screen0.toolbar.autoHide: false
+session.screen0.toolbar.autoRaise: false
+EOF
+
+  OFFSET=$(wc -c <"$VT_LOG" | tr -d ' ')
+  ./fbwl-remote --socket "$SOCKET_VT" reconfigure | rg -q '^ok reconfigure$'
+  timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$VT_LOG' | rg -q 'Toolbar: built ' && tail -c +$((OFFSET + 1)) '$VT_LOG' | rg -q 'Toolbar: position '; do sleep 0.05; done"
+  fbwl_report_shot "14-toolbar-right.png" "Vertical toolbar: RightCenter"
+
+  ./fbwl-remote --socket "$SOCKET_VT" quit | rg -q '^ok quitting$'
+  timeout 10 bash -c "while kill -0 '$FBW_VT_PID' 2>/dev/null; do sleep 0.05; done"
+  wait "$FBW_VT_PID" 2>/dev/null || true
+  unset FBW_VT_PID
+  kill_wait "$VT_CLIENT_PID"
+  unset VT_CLIENT_PID
+fi
 
 echo "ok: xvfb kitchen sink smoke passed (DISPLAY=:$DISPLAY_NUM socket=$SOCKET log=$LOG xvfb_log=$XVFB_LOG)"

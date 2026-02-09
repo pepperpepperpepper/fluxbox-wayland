@@ -3,15 +3,18 @@
 #include <stdlib.h>
 
 #include <wlr/types/wlr_foreign_toplevel_management_v1.h>
+#include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/util/log.h>
 #include <wlr/xwayland.h>
 
 #include "wayland/fbwl_apps_rules.h"
+#include "wayland/fbwl_server_internal.h"
 #include "wayland/fbwl_tabs.h"
 #include "wayland/fbwl_util.h"
 #include "wayland/fbwl_view.h"
+#include "wayland/fbwl_view_attention.h"
 #include "wayland/fbwl_view_foreign_toplevel.h"
 
 struct fbwl_popup {
@@ -34,6 +37,39 @@ static void xdg_popup_destroy(struct wl_listener *listener, void *data) {
     fbwl_cleanup_listener(&popup->commit);
     fbwl_cleanup_listener(&popup->destroy);
     free(popup);
+}
+
+static bool point_in_view_frame(const struct fbwl_view *view, int content_w, int content_h, double lx, double ly) {
+    if (view == NULL || content_w < 1 || content_h < 1) {
+        return false;
+    }
+
+    int left = 0;
+    int top = 0;
+    int right = 0;
+    int bottom = 0;
+    if (view->decor_enabled && !view->fullscreen && view->server != NULL) {
+        const int border = view->server->decor_theme.border_width;
+        const int title_h = view->server->decor_theme.title_height;
+        if (border > 0) {
+            left = border;
+            right = border;
+            bottom = border;
+        }
+        if (title_h > 0) {
+            top = title_h + border;
+        }
+    }
+
+    const double frame_x = (double)view->x - (double)left;
+    const double frame_y = (double)view->y - (double)top;
+    const double frame_w = (double)content_w + (double)left + (double)right;
+    const double frame_h = (double)content_h + (double)top + (double)bottom;
+    if (frame_w < 1.0 || frame_h < 1.0) {
+        return false;
+    }
+
+    return lx >= frame_x && lx < frame_x + frame_w && ly >= frame_y && ly < frame_y + frame_h;
 }
 
 void fbwl_xdg_shell_handle_new_popup(struct wl_listener *listener, void *data) {
@@ -88,6 +124,7 @@ void fbwl_xdg_shell_handle_new_toplevel(struct fbwl_server *server, struct wlr_x
 
     struct fbwl_view *view = calloc(1, sizeof(*view));
     view->server = server;
+    view->create_seq = ++server->view_create_seq;
     view->type = FBWL_VIEW_XDG;
     view->xdg_toplevel = xdg_toplevel;
     wl_list_init(&view->tab_link);
@@ -152,6 +189,25 @@ void fbwl_xdg_shell_handle_toplevel_map(struct fbwl_view *view,
         return;
     }
 
+    const struct fbwl_apps_rule *apps_rule = NULL;
+    size_t apps_rule_idx = 0;
+    if (!view->apps_rules_applied) {
+        const char *app_id = fbwl_view_app_id(view);
+        const char *instance = NULL;
+        if (view->type == FBWL_VIEW_XWAYLAND && view->xwayland_surface != NULL) {
+            instance = view->xwayland_surface->instance;
+        } else {
+            instance = app_id;
+        }
+        const char *title = fbwl_view_title(view);
+        apps_rule = fbwl_apps_rules_match(apps_rules, apps_rule_count,
+            app_id, instance, title, &apps_rule_idx);
+        if (apps_rule != NULL && apps_rule->set_tab) {
+            view->tabs_enabled_override_set = true;
+            view->tabs_enabled_override = apps_rule->tab;
+        }
+    }
+
     struct fbwl_view *autotab_anchor = NULL;
     if (!view->placed && fbwm_core_window_placement(wm) == FBWM_PLACE_AUTOTAB) {
         struct fbwm_view *focused = wm->focused;
@@ -167,66 +223,75 @@ void fbwl_xdg_shell_handle_toplevel_map(struct fbwl_view *view,
         view->wm_view.workspace = autotab_anchor->wm_view.workspace;
         view->wm_view.sticky = autotab_anchor->wm_view.sticky;
     } else {
-        view->wm_view.workspace = fbwm_core_workspace_current(wm);
+        const size_t head = view->server != NULL ? fbwl_server_screen_index_at(view->server, cursor_x, cursor_y) : 0;
+        view->wm_view.workspace = fbwm_core_workspace_current_for_head(wm, head);
     }
 
-    const struct fbwl_apps_rule *apps_rule = NULL;
-    size_t apps_rule_idx = 0;
-    if (!view->apps_rules_applied) {
-        const char *app_id = fbwl_view_app_id(view);
-        const char *instance = NULL;
-        if (view->type == FBWL_VIEW_XWAYLAND && view->xwayland_surface != NULL) {
-            instance = view->xwayland_surface->instance;
-        } else {
-            instance = app_id;
-        }
-        const char *title = fbwl_view_title(view);
-        apps_rule = fbwl_apps_rules_match(apps_rules, apps_rule_count,
-            app_id, instance, title, &apps_rule_idx);
-        if (apps_rule != NULL) {
-            wlr_log(WLR_INFO, "Apps: match rule=%zu title=%s app_id=%s",
-                apps_rule_idx,
-                fbwl_view_title(view) != NULL ? fbwl_view_title(view) : "(no-title)",
-                fbwl_view_app_id(view) != NULL ? fbwl_view_app_id(view) : "(no-app-id)");
+    if (!view->apps_rules_applied && apps_rule != NULL) {
+        view->apps_rule_index_valid = true;
+        view->apps_rule_index = apps_rule_idx;
+        view->apps_rules_generation = view->server != NULL ? view->server->apps_rules_generation : 0;
 
-            if (hooks != NULL && hooks->apps_rules_apply_pre_map != NULL) {
-                hooks->apps_rules_apply_pre_map(view, apps_rule);
-            }
-            view->apps_rules_applied = true;
+        wlr_log(WLR_INFO, "Apps: match rule=%zu title=%s app_id=%s",
+            apps_rule_idx,
+            fbwl_view_title(view) != NULL ? fbwl_view_title(view) : "(no-title)",
+            fbwl_view_app_id(view) != NULL ? fbwl_view_app_id(view) : "(no-app-id)");
 
-            wlr_log(WLR_INFO,
-                "Apps: applied title=%s app_id=%s workspace_id=%d sticky=%d jump=%d minimized=%d maximized=%d fullscreen=%d shaded=%d alpha=%d,%d focus_protect=0x%x group_id=%d deco=%d layer=%d head=%d dims=%d%sx%d%s pos=%d%s,%d%s anchor=%d",
-                fbwl_view_display_title(view),
-                fbwl_view_app_id(view) != NULL ? fbwl_view_app_id(view) : "(no-app-id)",
-                apps_rule->set_workspace ? apps_rule->workspace : -1,
-                apps_rule->set_sticky ? (apps_rule->sticky ? 1 : 0) : -1,
-                apps_rule->set_jump ? (apps_rule->jump ? 1 : 0) : -1,
-                apps_rule->set_minimized ? (apps_rule->minimized ? 1 : 0) : -1,
-                apps_rule->set_maximized ? (apps_rule->maximized ? 1 : 0) : -1,
-                apps_rule->set_fullscreen ? (apps_rule->fullscreen ? 1 : 0) : -1,
-                apps_rule->set_shaded ? (apps_rule->shaded ? 1 : 0) : -1,
-                apps_rule->set_alpha ? apps_rule->alpha_focused : -1,
-                apps_rule->set_alpha ? apps_rule->alpha_unfocused : -1,
-                apps_rule->set_focus_protection ? (unsigned int)apps_rule->focus_protection : 0u,
-                apps_rule->group_id,
-                apps_rule->set_decor ? (apps_rule->decor_enabled ? 1 : 0) : -1,
-                apps_rule->set_layer ? apps_rule->layer : -1,
-                apps_rule->set_head ? apps_rule->head : -1,
-                apps_rule->set_dimensions ? apps_rule->width : -1,
-                apps_rule->set_dimensions && apps_rule->width_percent ? "%" : "",
-                apps_rule->set_dimensions ? apps_rule->height : -1,
-                apps_rule->set_dimensions && apps_rule->height_percent ? "%" : "",
-                apps_rule->set_position ? apps_rule->x : -1,
-                apps_rule->set_position && apps_rule->x_percent ? "%" : "",
-                apps_rule->set_position ? apps_rule->y : -1,
-                apps_rule->set_position && apps_rule->y_percent ? "%" : "",
-                apps_rule->set_position ? (int)apps_rule->position_anchor : -1);
+        if (hooks != NULL && hooks->apps_rules_apply_pre_map != NULL) {
+            hooks->apps_rules_apply_pre_map(view, apps_rule);
         }
+        view->apps_rules_applied = true;
+
+        wlr_log(WLR_INFO,
+            "Apps: applied title=%s app_id=%s workspace_id=%d sticky=%d jump=%d minimized=%d maximized=%d fullscreen=%d shaded=%d alpha=%d,%d focus_protect=0x%x group_id=%d deco=%d layer=%d head=%d dims=%d%sx%d%s pos=%d%s,%d%s anchor=%d",
+            fbwl_view_display_title(view),
+            fbwl_view_app_id(view) != NULL ? fbwl_view_app_id(view) : "(no-app-id)",
+            apps_rule->set_workspace ? apps_rule->workspace : -1,
+            apps_rule->set_sticky ? (apps_rule->sticky ? 1 : 0) : -1,
+            apps_rule->set_jump ? (apps_rule->jump ? 1 : 0) : -1,
+            apps_rule->set_minimized ? (apps_rule->minimized ? 1 : 0) : -1,
+            apps_rule->set_maximized ? ((apps_rule->maximized_h || apps_rule->maximized_v) ? 1 : 0) : -1,
+            apps_rule->set_fullscreen ? (apps_rule->fullscreen ? 1 : 0) : -1,
+            apps_rule->set_shaded ? (apps_rule->shaded ? 1 : 0) : -1,
+            apps_rule->set_alpha ? apps_rule->alpha_focused : -1,
+            apps_rule->set_alpha ? apps_rule->alpha_unfocused : -1,
+            apps_rule->set_focus_protection ? (unsigned int)apps_rule->focus_protection : 0u,
+            apps_rule->group_id,
+            apps_rule->set_decor ? (apps_rule->decor_enabled ? 1 : 0) : -1,
+            apps_rule->set_layer ? apps_rule->layer : -1,
+            apps_rule->set_head ? apps_rule->head : -1,
+            apps_rule->set_dimensions ? apps_rule->width : -1,
+            apps_rule->set_dimensions && apps_rule->width_percent ? "%" : "",
+            apps_rule->set_dimensions ? apps_rule->height : -1,
+            apps_rule->set_dimensions && apps_rule->height_percent ? "%" : "",
+            apps_rule->set_position ? apps_rule->x : -1,
+            apps_rule->set_position && apps_rule->x_percent ? "%" : "",
+            apps_rule->set_position ? apps_rule->y : -1,
+            apps_rule->set_position && apps_rule->y_percent ? "%" : "",
+            apps_rule->set_position ? (int)apps_rule->position_anchor : -1);
+    }
+
+    if (autotab_anchor == NULL && apps_rule != NULL && apps_rule->set_head && !apps_rule->set_workspace) {
+        const size_t head = apps_rule->head >= 0 ? (size_t)apps_rule->head : 0;
+        view->wm_view.workspace = fbwm_core_workspace_current_for_head(wm, head);
     }
 
     if (autotab_anchor != NULL) {
         view->wm_view.workspace = autotab_anchor->wm_view.workspace;
         view->wm_view.sticky = autotab_anchor->wm_view.sticky;
+    }
+
+    if (!view->decor_forced) {
+        const bool enable = view->xdg_decoration_server_side && view->server != NULL && view->server->default_deco_enabled;
+        fbwl_view_decor_set_enabled(view, enable);
+    }
+
+    if (view->server != NULL &&
+            view->server->window_alpha_defaults_configured &&
+            (view->alpha_is_default || !view->alpha_set)) {
+        fbwl_view_set_alpha(view, view->server->window_alpha_default_focused, view->server->window_alpha_default_unfocused,
+            "init-default");
+        view->alpha_is_default = true;
     }
 
     if (!view->placed) {
@@ -275,9 +340,18 @@ void fbwl_xdg_shell_handle_toplevel_commit(struct fbwl_view *view,
     }
 
     struct wlr_surface *surface = fbwl_view_wlr_surface(view);
+    if (surface == NULL) {
+        return;
+    }
+
+    const int old_w = view->committed_width;
+    const int old_h = view->committed_height;
     const int w = surface->current.width;
     const int h = surface->current.height;
-    if (w > 0 && h > 0 && (w != view->width || h != view->height)) {
+    const bool size_changed = w > 0 && h > 0 && (w != old_w || h != old_h);
+    if (size_changed) {
+        view->committed_width = w;
+        view->committed_height = h;
         view->width = w;
         view->height = h;
         wlr_log(WLR_INFO, "Surface size: %s %dx%d",
@@ -285,6 +359,16 @@ void fbwl_xdg_shell_handle_toplevel_commit(struct fbwl_view *view,
             w, h);
     }
     fbwl_view_decor_update(view, view->server != NULL ? decor_theme : NULL);
+
+    if (size_changed && view->server != NULL && view->server->cursor != NULL) {
+        const double cx = view->server->cursor->x;
+        const double cy = view->server->cursor->y;
+        const bool was_inside = point_in_view_frame(view, old_w, old_h, cx, cy);
+        const bool now_inside = point_in_view_frame(view, w, h, cx, cy);
+        if (was_inside != now_inside) {
+            server_strict_mousefocus_recheck(view->server, "commit-size");
+        }
+    }
 }
 
 void fbwl_xdg_shell_handle_toplevel_request_maximize(struct fbwl_view *view,
@@ -324,7 +408,9 @@ void fbwl_xdg_shell_handle_toplevel_set_title(struct fbwl_view *view,
     if (view == NULL || view->xdg_toplevel == NULL) {
         return;
     }
-    fbwl_view_foreign_toplevel_set_title(view, view->xdg_toplevel->title);
+    free(view->title_override);
+    view->title_override = NULL;
+    fbwl_view_foreign_toplevel_set_title(view, fbwl_view_title(view));
     fbwl_view_decor_update_title_text(view, view->server != NULL ? decor_theme : NULL);
     if (view->server != NULL && hooks != NULL && hooks->toolbar_rebuild != NULL) {
         hooks->toolbar_rebuild(hooks->userdata);
@@ -370,7 +456,11 @@ void fbwl_xdg_shell_handle_toplevel_destroy(struct fbwl_view *view,
         hooks->clear_focused_view_if_matches(hooks->userdata, view);
     }
 
+    fbwl_view_attention_finish(view);
+
     fbwl_view_foreign_toplevel_destroy(view);
+
+    fbwl_view_cleanup(view);
 
     if (view->scene_tree != NULL) {
         wlr_scene_node_destroy(&view->scene_tree->node);

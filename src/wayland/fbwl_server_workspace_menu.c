@@ -11,6 +11,18 @@ static struct fbwl_ui_menu_env menu_ui_env(struct fbwl_server *server) {
     };
 }
 
+static void menu_ui_apply_screen_config(struct fbwl_server *server, int x, int y) {
+    if (server == NULL) {
+        return;
+    }
+    const struct fbwl_screen_config *cfg = fbwl_server_screen_config_at(server, x, y);
+    if (cfg == NULL) {
+        return;
+    }
+    server->menu_ui.menu_delay_ms = cfg->menu.delay_ms;
+    server->menu_ui.alpha = cfg->menu.alpha;
+}
+
 void server_menu_ui_open_workspace(struct fbwl_server *server, int x, int y) {
     if (server == NULL) {
         return;
@@ -31,15 +43,16 @@ void server_menu_ui_open_workspace(struct fbwl_server *server, int x, int y) {
         } else {
             snprintf(label, sizeof(label), "%d", i + 1);
         }
-        (void)fbwl_menu_add_workspace_switch(server->workspace_menu, label, i);
+        (void)fbwl_menu_add_workspace_switch(server->workspace_menu, label, i, NULL);
     }
 
+    menu_ui_apply_screen_config(server, x, y);
     const struct fbwl_ui_menu_env env = menu_ui_env(server);
     fbwl_ui_menu_open_root(&server->menu_ui, &env, server->workspace_menu, x, y);
 
-    const int cur = fbwm_core_workspace_current(&server->wm);
+    const size_t head = fbwl_server_screen_index_at(server, x, y);
+    const int cur = fbwm_core_workspace_current_for_head(&server->wm, head);
     if (cur >= 0) {
         fbwl_ui_menu_set_selected(&server->menu_ui, (size_t)cur);
     }
 }
-

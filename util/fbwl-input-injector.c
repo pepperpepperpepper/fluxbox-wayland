@@ -821,6 +821,125 @@ static int do_drag_sequence_alt_button(struct fbwl_injector *inj, uint32_t butto
     return 0;
 }
 
+static int do_drag_sequence_alt_button_hold(struct fbwl_injector *inj, uint32_t button,
+        int argc, char **argv) {
+    if (inj->vkbd_mgr == NULL) {
+        fprintf(stderr, "fbwl-input-injector: drag: virtual keyboard manager not available\n");
+        return 1;
+    }
+    if (inj->vptr_mgr == NULL) {
+        fprintf(stderr, "fbwl-input-injector: drag: virtual pointer manager not available\n");
+        return 1;
+    }
+    if (argc != 5) {
+        fprintf(stderr, "fbwl-input-injector: drag requires X1 Y1 X2 Y2 HOLD_MS\n");
+        return 1;
+    }
+
+    const double x1 = atof(argv[0]);
+    const double y1 = atof(argv[1]);
+    const double x2 = atof(argv[2]);
+    const double y2 = atof(argv[3]);
+    int hold_ms = atoi(argv[4]);
+    if (hold_ms < 0) {
+        hold_ms = 0;
+    }
+
+    struct zwp_virtual_keyboard_v1 *vkbd =
+        zwp_virtual_keyboard_manager_v1_create_virtual_keyboard(inj->vkbd_mgr, inj->seat);
+    if (vkbd == NULL) {
+        fprintf(stderr, "fbwl-input-injector: drag: create_virtual_keyboard failed\n");
+        return 1;
+    }
+
+    struct xkb_context *context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+    if (context == NULL) {
+        fprintf(stderr, "fbwl-input-injector: drag: xkb_context_new failed\n");
+        zwp_virtual_keyboard_v1_destroy(vkbd);
+        return 1;
+    }
+
+    struct xkb_keymap *keymap =
+        xkb_keymap_new_from_names(context, NULL, XKB_KEYMAP_COMPILE_NO_FLAGS);
+    if (keymap == NULL) {
+        fprintf(stderr, "fbwl-input-injector: drag: xkb_keymap_new_from_names failed\n");
+        xkb_context_unref(context);
+        zwp_virtual_keyboard_v1_destroy(vkbd);
+        return 1;
+    }
+
+    struct xkb_state *state = xkb_state_new(keymap);
+    if (state == NULL) {
+        fprintf(stderr, "fbwl-input-injector: drag: xkb_state_new failed\n");
+        xkb_keymap_unref(keymap);
+        xkb_context_unref(context);
+        zwp_virtual_keyboard_v1_destroy(vkbd);
+        return 1;
+    }
+
+    if (send_keymap(vkbd, keymap) != 0) {
+        fprintf(stderr, "fbwl-input-injector: drag: failed to send keymap\n");
+        xkb_state_unref(state);
+        xkb_keymap_unref(keymap);
+        xkb_context_unref(context);
+        zwp_virtual_keyboard_v1_destroy(vkbd);
+        return 1;
+    }
+
+    /* Hold Alt during drag. */
+    send_key(vkbd, state, KEY_LEFTALT, WL_KEYBOARD_KEY_STATE_PRESSED);
+    wl_display_roundtrip(inj->display);
+
+    struct zwlr_virtual_pointer_v1 *vptr =
+        zwlr_virtual_pointer_manager_v1_create_virtual_pointer(inj->vptr_mgr, inj->seat);
+    if (vptr == NULL) {
+        fprintf(stderr, "fbwl-input-injector: drag: create_virtual_pointer failed\n");
+        send_key(vkbd, state, KEY_LEFTALT, WL_KEYBOARD_KEY_STATE_RELEASED);
+        wl_display_roundtrip(inj->display);
+        xkb_state_unref(state);
+        xkb_keymap_unref(keymap);
+        xkb_context_unref(context);
+        zwp_virtual_keyboard_v1_destroy(vkbd);
+        return 1;
+    }
+
+    zwlr_virtual_pointer_v1_motion_absolute(vptr, now_ms(), 0, 0, 1, 1);
+    zwlr_virtual_pointer_v1_frame(vptr);
+
+    zwlr_virtual_pointer_v1_motion(vptr, now_ms(),
+        wl_fixed_from_double(x1), wl_fixed_from_double(y1));
+    zwlr_virtual_pointer_v1_frame(vptr);
+
+    zwlr_virtual_pointer_v1_button(vptr, now_ms(), button,
+        WL_POINTER_BUTTON_STATE_PRESSED);
+    zwlr_virtual_pointer_v1_frame(vptr);
+
+    zwlr_virtual_pointer_v1_motion(vptr, now_ms(),
+        wl_fixed_from_double(x2 - x1), wl_fixed_from_double(y2 - y1));
+    zwlr_virtual_pointer_v1_frame(vptr);
+
+    wl_display_roundtrip(inj->display);
+    if (hold_ms > 0) {
+        usleep((useconds_t)hold_ms * 1000);
+    }
+
+    zwlr_virtual_pointer_v1_button(vptr, now_ms(), button,
+        WL_POINTER_BUTTON_STATE_RELEASED);
+    zwlr_virtual_pointer_v1_frame(vptr);
+
+    wl_display_roundtrip(inj->display);
+
+    send_key(vkbd, state, KEY_LEFTALT, WL_KEYBOARD_KEY_STATE_RELEASED);
+    wl_display_roundtrip(inj->display);
+
+    zwlr_virtual_pointer_v1_destroy(vptr);
+    xkb_state_unref(state);
+    xkb_keymap_unref(keymap);
+    xkb_context_unref(context);
+    zwp_virtual_keyboard_v1_destroy(vkbd);
+    return 0;
+}
+
 static int do_hold(struct fbwl_injector *inj, int hold_ms) {
     struct zwp_virtual_keyboard_v1 *vkbd = NULL;
     struct zwlr_virtual_pointer_v1 *vptr = NULL;
@@ -903,6 +1022,11 @@ static void usage(const char *argv0) {
     fprintf(stderr, "  %s [--socket NAME] key alt-f2\n", argv0);
     fprintf(stderr, "  %s [--socket NAME] key alt-escape\n", argv0);
     fprintf(stderr, "  %s [--socket NAME] key enter\n", argv0);
+    fprintf(stderr, "  %s [--socket NAME] key escape\n", argv0);
+    fprintf(stderr, "  %s [--socket NAME] key left\n", argv0);
+    fprintf(stderr, "  %s [--socket NAME] key right\n", argv0);
+    fprintf(stderr, "  %s [--socket NAME] key up\n", argv0);
+    fprintf(stderr, "  %s [--socket NAME] key down\n", argv0);
     fprintf(stderr, "  %s [--socket NAME] key alt-f\n", argv0);
     fprintf(stderr, "  %s [--socket NAME] key alt-m\n", argv0);
     fprintf(stderr, "  %s [--socket NAME] key alt-i\n", argv0);
@@ -912,6 +1036,8 @@ static void usage(const char *argv0) {
     fprintf(stderr, "  %s [--socket NAME] drag-right X1 Y1 X2 Y2\n", argv0);
     fprintf(stderr, "  %s [--socket NAME] drag-alt-left X1 Y1 X2 Y2\n", argv0);
     fprintf(stderr, "  %s [--socket NAME] drag-alt-right X1 Y1 X2 Y2\n", argv0);
+    fprintf(stderr, "  %s [--socket NAME] drag-alt-left-hold X1 Y1 X2 Y2 HOLD_MS\n", argv0);
+    fprintf(stderr, "  %s [--socket NAME] drag-alt-right-hold X1 Y1 X2 Y2 HOLD_MS\n", argv0);
     fprintf(stderr, "  %s [--socket NAME] hold [MS]\n", argv0);
 }
 
@@ -925,7 +1051,9 @@ int main(int argc, char **argv) {
     };
 
     int c;
-    while ((c = getopt_long(argc, argv, "h", options, NULL)) != -1) {
+    // Use leading '+' to stop option parsing at the first non-option.
+    // This allows negative coordinate arguments (e.g. -1) without getopt treating them as options.
+    while ((c = getopt_long(argc, argv, "+h", options, NULL)) != -1) {
         switch (c) {
         case 1:
             socket_name = optarg;
@@ -990,6 +1118,10 @@ int main(int argc, char **argv) {
         rc = do_drag_sequence_alt_button(&inj, BTN_LEFT, argc - optind, &argv[optind]);
     } else if (strcmp(cmd, "drag-alt-right") == 0) {
         rc = do_drag_sequence_alt_button(&inj, BTN_RIGHT, argc - optind, &argv[optind]);
+    } else if (strcmp(cmd, "drag-alt-left-hold") == 0) {
+        rc = do_drag_sequence_alt_button_hold(&inj, BTN_LEFT, argc - optind, &argv[optind]);
+    } else if (strcmp(cmd, "drag-alt-right-hold") == 0) {
+        rc = do_drag_sequence_alt_button_hold(&inj, BTN_RIGHT, argc - optind, &argv[optind]);
     } else if (strcmp(cmd, "hold") == 0) {
         int hold_ms = 10000;
         if (optind < argc) {
@@ -1013,6 +1145,16 @@ int main(int argc, char **argv) {
             rc = do_key_sequence_alt_escape(&inj);
         } else if (strcmp(argv[optind], "enter") == 0) {
             rc = do_key_sequence_key(&inj, KEY_ENTER, argv[optind]);
+        } else if (strcmp(argv[optind], "escape") == 0) {
+            rc = do_key_sequence_key(&inj, KEY_ESC, argv[optind]);
+        } else if (strcmp(argv[optind], "left") == 0) {
+            rc = do_key_sequence_key(&inj, KEY_LEFT, argv[optind]);
+        } else if (strcmp(argv[optind], "right") == 0) {
+            rc = do_key_sequence_key(&inj, KEY_RIGHT, argv[optind]);
+        } else if (strcmp(argv[optind], "up") == 0) {
+            rc = do_key_sequence_key(&inj, KEY_UP, argv[optind]);
+        } else if (strcmp(argv[optind], "down") == 0) {
+            rc = do_key_sequence_key(&inj, KEY_DOWN, argv[optind]);
         } else if (strcmp(argv[optind], "alt-f") == 0) {
             rc = do_key_sequence_alt_key(&inj, KEY_F, argv[optind]);
         } else if (strcmp(argv[optind], "alt-m") == 0) {

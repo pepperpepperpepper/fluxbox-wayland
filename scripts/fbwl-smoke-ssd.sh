@@ -50,9 +50,9 @@ fi
 
 TITLE_H=24
 
-# Move by dragging the titlebar (no Alt).
+# Move by dragging the titlebar (no Alt), in the non-button area.
 START_X=$((X0 + 10))
-START_Y=$((Y0 - TITLE_H / 2))
+START_Y=$((Y0 - TITLE_H + 2))
 END_X=$((START_X + 100))
 END_Y=$((START_Y + 50))
 DX=$((END_X - START_X))

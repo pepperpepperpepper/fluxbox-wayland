@@ -32,10 +32,13 @@
 #include "wayland/fbwl_menu.h"
 #include "wayland/fbwl_ui_menu.h"
 #include "wayland/fbwl_ui_toolbar.h"
+#include "wayland/fbwl_ui_slit.h"
 #include "wayland/fbwl_tabs.h"
 #include "wayland/fbwl_ui_cmd_dialog.h"
 #include "wayland/fbwl_ui_decor_theme.h"
 #include "wayland/fbwl_ui_osd.h"
+#include "wayland/fbwl_ui_tooltip.h"
+#include "wayland/fbwl_view.h"
 #include "wayland/fbwl_xdg_shell.h"
 #include "wayland/fbwl_xwayland.h"
 
@@ -53,6 +56,7 @@ struct wlr_data_control_manager_v1;
 struct wlr_ext_data_control_manager_v1;
 struct wlr_primary_selection_v1_device_manager;
 struct wlr_single_pixel_buffer_manager_v1;
+struct wlr_buffer;
 struct wlr_scene;
 struct wlr_scene_output_layout;
 struct wlr_scene_tree;
@@ -71,6 +75,8 @@ struct wlr_keyboard_shortcuts_inhibitor_v1;
 struct wlr_virtual_keyboard_manager_v1;
 struct wlr_virtual_pointer_manager_v1;
 struct wlr_surface;
+struct wlr_pointer_button_event;
+struct wlr_pointer_axis_event;
 
 struct fbwl_view;
 
@@ -100,12 +106,103 @@ enum fbwl_focus_reason {
     FBWL_FOCUS_REASON_ACTIVATE,
 };
 
+#define FBWL_TITLEBAR_BUTTONS_MAX 16
+
 struct fbwl_focus_config {
     enum fbwl_focus_model model;
     bool auto_raise;
     int auto_raise_delay_ms;
     bool click_raises;
     bool focus_new_windows;
+    int no_focus_while_typing_delay_ms;
+    bool focus_same_head;
+    int demands_attention_timeout_ms;
+    bool allow_remote_actions;
+};
+
+struct fbwl_screen_toolbar_config {
+    bool enabled;
+    enum fbwl_toolbar_placement placement;
+    int on_head;
+    int layer_num;
+    int width_percent;
+    int height_override;
+    uint32_t tools;
+    bool auto_hide;
+    bool auto_raise;
+    bool max_over;
+    uint8_t alpha;
+    char strftime_format[64];
+};
+
+struct fbwl_screen_menu_config {
+    int delay_ms;
+    uint8_t alpha;
+    bool client_menu_use_pixmap;
+};
+
+struct fbwl_screen_slit_config {
+    enum fbwl_toolbar_placement placement;
+    int on_head;
+    int layer_num;
+    bool auto_hide;
+    bool auto_raise;
+    bool max_over;
+    bool accept_kde_dockapps;
+    uint8_t alpha;
+    enum fbwl_slit_direction direction;
+};
+
+struct fbwl_screen_iconbar_config {
+    char mode[256];
+    enum fbwl_iconbar_alignment alignment;
+    int icon_width_px;
+    int icon_text_padding_px;
+    bool use_pixmap;
+    char iconified_prefix[64];
+    char iconified_suffix[64];
+};
+
+struct fbwl_screen_struts_config {
+    int left_px;
+    int right_px;
+    int top_px;
+    int bottom_px;
+};
+
+struct fbwl_screen_config {
+    struct fbwl_focus_config focus;
+
+    int tooltip_delay_ms;
+
+    struct fbwl_screen_iconbar_config iconbar;
+
+    bool opaque_move;
+    bool opaque_resize;
+    int opaque_resize_delay_ms;
+    bool full_maximization;
+    bool max_ignore_increment;
+    bool max_disable_move;
+    bool max_disable_resize;
+    bool workspace_warping;
+    bool workspace_warping_horizontal;
+    bool workspace_warping_vertical;
+    int workspace_warping_horizontal_offset;
+    int workspace_warping_vertical_offset;
+    bool show_window_position;
+    int edge_snap_threshold_px;
+    int edge_resize_snap_threshold_px;
+
+    struct fbwl_screen_struts_config struts;
+
+    enum fbwm_window_placement_strategy placement_strategy;
+    enum fbwm_row_placement_direction placement_row_dir;
+    enum fbwm_col_placement_direction placement_col_dir;
+
+    struct fbwl_tabs_config tabs;
+    struct fbwl_screen_slit_config slit;
+    struct fbwl_screen_toolbar_config toolbar;
+    struct fbwl_screen_menu_config menu;
 };
 
 struct fbwl_server;
@@ -115,6 +212,17 @@ struct fbwl_shortcuts_inhibitor {
     struct fbwl_server *server;
     struct wlr_keyboard_shortcuts_inhibitor_v1 *inhibitor;
     struct wl_listener destroy;
+};
+
+struct fbwl_marked_window {
+    uint32_t keycode;
+    uint64_t create_seq;
+};
+
+struct fbwl_marked_windows {
+    struct fbwl_marked_window *items;
+    size_t len;
+    size_t cap;
 };
 
 struct fbwl_server {
@@ -141,16 +249,28 @@ struct fbwl_server {
     struct wlr_scene_tree *layer_overlay;
 
     float background_color[4];
+    char *wallpaper_path;
+    struct wlr_buffer *wallpaper_buf;
 
     struct fbwl_decor_theme decor_theme;
+    enum fbwl_decor_hit_kind titlebar_left[FBWL_TITLEBAR_BUTTONS_MAX];
+    size_t titlebar_left_len;
+    enum fbwl_decor_hit_kind titlebar_right[FBWL_TITLEBAR_BUTTONS_MAX];
+    size_t titlebar_right_len;
     struct fbwl_menu *root_menu;
+    struct fbwl_menu *custom_menu;
     struct fbwl_menu *window_menu;
     struct fbwl_menu *workspace_menu;
+    struct fbwl_menu *client_menu;
+    struct fbwl_menu *slit_menu;
     char *config_dir;
     char *keys_file;
     char *apps_file;
     char *style_file;
+    char *style_overlay_file;
     char *menu_file;
+    char *window_menu_file;
+    char *slitlist_file;
     bool workspaces_override;
     bool keys_file_override;
     bool apps_file_override;
@@ -158,10 +278,16 @@ struct fbwl_server {
     bool menu_file_override;
     struct fbwl_menu_ui menu_ui;
     struct fbwl_toolbar_ui toolbar_ui;
+    struct fbwl_slit_ui slit_ui;
+    struct fbwl_tooltip_ui tooltip_ui;
     struct fbwl_cmd_dialog_ui cmd_dialog_ui;
+    uint64_t cmd_dialog_target_create_seq;
     struct fbwl_osd_ui osd_ui;
+    struct fbwl_osd_ui move_osd_ui;
     struct fbwl_tabs_config tabs;
     struct wl_list tab_groups;
+    struct fbwl_screen_config *screen_configs;
+    size_t screen_configs_len;
 
     struct wlr_output_layout *output_layout;
     struct wlr_output_manager_v1 *output_manager;
@@ -179,6 +305,7 @@ struct fbwl_server {
     struct wlr_xwayland *xwayland;
     struct wl_listener xwayland_ready;
     struct wl_listener xwayland_new_surface;
+    pid_t xembed_sni_proxy_pid;
 
     struct wlr_layer_shell_v1 *layer_shell;
     struct wl_listener new_layer_surface;
@@ -240,17 +367,67 @@ struct fbwl_server {
 
     const char *startup_cmd;
     const char *terminal_cmd;
+    bool restart_requested;
+    char *restart_cmd;
     bool has_pointer;
+    bool ignore_border;
+    bool force_pseudo_transparency;
+    int double_click_interval_ms;
+    bool opaque_move;
+    bool opaque_resize;
+    int opaque_resize_delay_ms;
+    bool full_maximization;
+    bool max_ignore_increment;
+    bool max_disable_move;
+    bool max_disable_resize;
+    bool workspace_warping;
+    bool workspace_warping_horizontal;
+    bool workspace_warping_vertical;
+    int workspace_warping_horizontal_offset;
+    int workspace_warping_vertical_offset;
+    bool show_window_position;
+    int edge_snap_threshold_px;
+    int edge_resize_snap_threshold_px;
+    int colors_per_channel;
+    int cache_life_minutes;
+    int cache_max_kb;
+    int config_version;
+    char *group_file;
+    uint32_t last_button_time_msec;
+    int last_button;
+    bool mousebind_capture_active;
+    bool mousebind_capture_has_click;
+    bool mousebind_capture_has_move;
+    bool mousebind_capture_moved;
+    uint32_t mousebind_capture_button;
+    int mousebind_capture_fb_button;
+    uint32_t mousebind_capture_modifiers;
+    enum fbwl_mousebinding_context mousebind_capture_context;
+    int mousebind_capture_press_x;
+    int mousebind_capture_press_y;
+    uint64_t mousebind_capture_target_create_seq;
+    bool window_alpha_defaults_configured;
+    uint8_t window_alpha_default_focused;
+    uint8_t window_alpha_default_unfocused;
+    bool default_deco_enabled;
 
     struct fbwl_keybinding *keybindings;
     size_t keybinding_count;
     char *key_mode;
+    bool change_workspace_binding_active;
+    bool keychain_active;
+    char *keychain_saved_mode;
+    uint64_t keychain_start_time_msec;
+    struct fbwl_marked_windows marked_windows;
 
     struct fbwl_mousebinding *mousebindings;
     size_t mousebinding_count;
 
     struct fbwl_apps_rule *apps_rules;
     size_t apps_rule_count;
+    bool apps_rules_rewrite_safe;
+    uint64_t apps_rules_generation;
+    uint64_t view_create_seq;
 
     struct fbwm_core wm;
     struct fbwl_view *focused_view;
@@ -284,15 +461,47 @@ char *fbwl_path_join(const char *dir, const char *rel);
 bool fbwl_file_exists(const char *path);
 char *fbwl_resolve_config_path(const char *config_dir, const char *value);
 
+enum fbwl_focus_model fbwl_parse_focus_model(const char *s);
+const char *fbwl_focus_model_str(enum fbwl_focus_model model);
+enum fbwm_window_placement_strategy fbwl_parse_window_placement(const char *s);
+const char *fbwl_window_placement_str(enum fbwm_window_placement_strategy placement);
+enum fbwl_toolbar_placement fbwl_parse_toolbar_placement(const char *s);
+const char *fbwl_toolbar_placement_str(enum fbwl_toolbar_placement placement);
+uint32_t fbwl_toolbar_tools_default(void);
+uint32_t fbwl_parse_toolbar_tools(const char *s);
+bool fbwl_parse_layer_num(const char *s, int *out_layer);
+enum fbwm_row_placement_direction fbwl_parse_row_dir(const char *s);
+const char *fbwl_row_dir_str(enum fbwm_row_placement_direction dir);
+enum fbwm_col_placement_direction fbwl_parse_col_dir(const char *s);
+const char *fbwl_col_dir_str(enum fbwm_col_placement_direction dir);
+enum fbwl_tab_focus_model fbwl_parse_tab_focus_model(const char *s);
+const char *fbwl_tab_focus_model_str(enum fbwl_tab_focus_model model);
+enum fbwl_tabs_attach_area fbwl_parse_tabs_attach_area(const char *s);
+const char *fbwl_tabs_attach_area_str(enum fbwl_tabs_attach_area area);
+bool fbwl_titlebar_buttons_parse(const char *s, enum fbwl_decor_hit_kind *out, size_t cap, size_t *out_len);
+void fbwl_apply_workspace_names_from_init(struct fbwm_core *wm, const char *csv);
+
 void fbwl_resource_db_free(struct fbwl_resource_db *db);
 bool fbwl_resource_db_load_init(struct fbwl_resource_db *db, const char *config_dir);
 const char *fbwl_resource_db_get(const struct fbwl_resource_db *db, const char *key);
+size_t fbwl_resource_db_max_screen_index(const struct fbwl_resource_db *db);
+const char *fbwl_resource_db_get_screen(const struct fbwl_resource_db *db, size_t screen, const char *suffix);
 bool fbwl_resource_db_get_bool(const struct fbwl_resource_db *db, const char *key, bool *out);
+bool fbwl_resource_db_get_screen_bool(const struct fbwl_resource_db *db, size_t screen, const char *suffix, bool *out);
 bool fbwl_resource_db_get_int(const struct fbwl_resource_db *db, const char *key, int *out);
+bool fbwl_resource_db_get_screen_int(const struct fbwl_resource_db *db, size_t screen, const char *suffix, int *out);
 bool fbwl_resource_db_get_color(const struct fbwl_resource_db *db, const char *key, float rgba[static 4]);
 char *fbwl_resource_db_resolve_path(const struct fbwl_resource_db *db, const char *config_dir, const char *key);
 char *fbwl_resource_db_discover_path(const struct fbwl_resource_db *db, const char *config_dir, const char *key,
         const char *fallback_rel);
+
+void fbwl_server_load_screen_configs(struct fbwl_server *server, const struct fbwl_resource_db *init);
+size_t fbwl_server_screen_index_at(const struct fbwl_server *server, double lx, double ly);
+size_t fbwl_server_screen_index_for_view(const struct fbwl_server *server, const struct fbwl_view *view);
+const struct fbwl_screen_config *fbwl_server_screen_config(const struct fbwl_server *server, size_t screen);
+const struct fbwl_screen_config *fbwl_server_screen_config_at(const struct fbwl_server *server, double lx, double ly);
+const struct fbwl_screen_config *fbwl_server_screen_config_for_view(const struct fbwl_server *server,
+        const struct fbwl_view *view);
 
 struct fbwl_session_lock_hooks session_lock_hooks(struct fbwl_server *server);
 
@@ -300,16 +509,36 @@ void server_text_input_update_focus(struct fbwl_server *server, struct wlr_surfa
 bool server_keyboard_shortcuts_inhibited(struct fbwl_server *server);
 void server_update_shortcuts_inhibitor(struct fbwl_server *server);
 void focus_view(struct fbwl_view *view);
+bool server_focus_request_allowed(struct fbwl_server *server, struct fbwl_view *view, enum fbwl_focus_reason reason,
+        const char *why);
 void clear_keyboard_focus(struct fbwl_server *server);
+bool server_refocus_candidate_allowed(void *userdata, const struct fbwm_view *candidate,
+        const struct fbwm_view *reference);
 void apply_workspace_visibility(struct fbwl_server *server, const char *why);
+void server_workspace_switch_on_head(struct fbwl_server *server, size_t head, int workspace0, const char *why);
 void view_set_minimized(struct fbwl_view *view, bool minimized, const char *why);
+void server_raise_view(struct fbwl_view *view, const char *why);
+void server_lower_view(struct fbwl_view *view, const char *why);
+struct fbwl_view *server_strict_mousefocus_view_under_cursor(struct fbwl_server *server);
+void server_strict_mousefocus_recheck(struct fbwl_server *server, const char *why);
+void server_strict_mousefocus_recheck_after_restack(struct fbwl_server *server, struct fbwl_view *before, const char *why);
 struct fbwl_cursor_menu_hooks server_cursor_menu_hooks(struct fbwl_server *server);
+void server_grab_update(struct fbwl_server *server);
 
 void server_cursor_motion(struct wl_listener *listener, void *data);
 void server_cursor_motion_absolute(struct wl_listener *listener, void *data);
 void server_cursor_button(struct wl_listener *listener, void *data);
 void server_cursor_axis(struct wl_listener *listener, void *data);
 void server_cursor_frame(struct wl_listener *listener, void *data);
+
+int server_fluxbox_mouse_button_from_event(uint32_t button);
+int server_fluxbox_mouse_button_from_axis(const struct wlr_pointer_axis_event *event);
+enum fbwl_mousebinding_context server_mousebinding_context_at(struct fbwl_server *server,
+        struct fbwl_view *view, struct wlr_surface *surface);
+bool server_mousebind_capture_handle_press(struct fbwl_server *server, struct fbwl_view *view, struct wlr_surface *surface,
+        const struct wlr_pointer_button_event *event, uint32_t modifiers);
+bool server_mousebind_capture_handle_release(struct fbwl_server *server, const struct wlr_pointer_button_event *event);
+void server_mousebind_capture_handle_motion(struct fbwl_server *server);
 
 void seat_request_cursor(struct wl_listener *listener, void *data);
 void cursor_shape_request_set_shape(struct wl_listener *listener, void *data);
@@ -331,14 +560,29 @@ void decor_theme_set_defaults(struct fbwl_decor_theme *theme);
 void server_menu_create_default(struct fbwl_server *server);
 void server_menu_create_window(struct fbwl_server *server);
 bool server_menu_load_file(struct fbwl_server *server, const char *path);
+bool server_menu_load_custom_file(struct fbwl_server *server, const char *path);
 
 bool fbwl_server_outputs_init(struct fbwl_server *server);
+bool server_wallpaper_set(struct fbwl_server *server, const char *path);
 bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_bootstrap_options *opts);
 void fbwl_server_finish(struct fbwl_server *server);
 void server_toolbar_ui_rebuild(struct fbwl_server *server);
 void server_toolbar_ui_update_position(struct fbwl_server *server);
 void server_toolbar_ui_update_iconbar_focus(struct fbwl_server *server);
 bool server_toolbar_ui_handle_click(struct fbwl_server *server, int lx, int ly, uint32_t button);
+void server_toolbar_ui_handle_motion(struct fbwl_server *server);
+bool server_toolbar_ui_load_button_tools(struct fbwl_server *server, const struct fbwl_resource_db *init, size_t toolbar_screen);
+
+void server_slit_ui_rebuild(struct fbwl_server *server);
+void server_slit_ui_update_position(struct fbwl_server *server);
+void server_slit_ui_handle_motion(struct fbwl_server *server);
+bool server_slit_ui_handle_button(struct fbwl_server *server, const struct wlr_pointer_button_event *event);
+bool server_slit_ui_attach_view(struct fbwl_server *server, struct fbwl_view *view, const char *why);
+void server_slit_ui_detach_view(struct fbwl_server *server, struct fbwl_view *view, const char *why);
+void server_slit_ui_handle_view_commit(struct fbwl_server *server, struct fbwl_view *view, const char *why);
+void server_slit_ui_apply_view_geometry(struct fbwl_server *server, struct fbwl_view *view, const char *why);
+void server_tooltip_ui_handle_motion(struct fbwl_server *server);
+void server_tabs_ui_handle_motion(struct fbwl_server *server);
 void server_cmd_dialog_ui_update_position(struct fbwl_server *server);
 void server_cmd_dialog_ui_close(struct fbwl_server *server, const char *why);
 void server_cmd_dialog_ui_open(struct fbwl_server *server);
@@ -354,13 +598,21 @@ void server_menu_ui_set_selected(struct fbwl_server *server, size_t idx);
 void server_menu_free(struct fbwl_server *server);
 
 void server_menu_ui_open_workspace(struct fbwl_server *server, int x, int y);
+void server_menu_ui_close(struct fbwl_server *server, const char *why);
+void server_menu_ui_open_root(struct fbwl_server *server, int x, int y, const char *menu_file);
+void server_menu_ui_open_window(struct fbwl_server *server, struct fbwl_view *view, int x, int y);
+void server_menu_ui_open_client(struct fbwl_server *server, int x, int y, const char *pattern);
+void server_menu_ui_open_slit(struct fbwl_server *server, int x, int y);
 
 void fbwl_server_key_mode_set(struct fbwl_server *server, const char *mode);
 
 struct fbwl_keybindings_hooks keybindings_hooks(struct fbwl_server *server);
 void server_reconfigure(struct fbwl_server *server);
+void server_request_restart(struct fbwl_server *server, const char *cmd);
+void server_keybindings_restart(void *userdata, const char *cmd);
 void server_apps_rules_apply_pre_map(struct fbwl_view *view, const struct fbwl_apps_rule *rule);
 void server_apps_rules_apply_post_map(struct fbwl_view *view, const struct fbwl_apps_rule *rule);
+void server_apps_rules_save_on_close(struct fbwl_view *view);
 
 void server_ipc_command(void *userdata, int client_fd, char *line);
 

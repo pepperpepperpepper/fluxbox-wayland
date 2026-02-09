@@ -62,7 +62,7 @@ tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Focus: $OTHER_VIEW"
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" key alt-2
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Policy: workspace switch to 2'
+tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Policy: workspace switch( head=[0-9]+)? to 2'
 tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Workspace: apply current=2 reason=switch'
 tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Workspace: view=$OTHER_VIEW ws=1 visible=0"
 tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Workspace: view=$FOCUSED_VIEW ws=2 visible=1"
@@ -70,7 +70,7 @@ tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Focus: $FOCUSED_VIEW"
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" key alt-1
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Policy: workspace switch to 1'
+tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Policy: workspace switch( head=[0-9]+)? to 1'
 tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Workspace: apply current=1 reason=switch'
 tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Workspace: view=$OTHER_VIEW ws=1 visible=1"
 tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Workspace: view=$FOCUSED_VIEW ws=2 visible=0"

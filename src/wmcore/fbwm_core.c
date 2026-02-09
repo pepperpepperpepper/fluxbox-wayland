@@ -22,6 +22,40 @@ static bool view_is_mapped(const struct fbwm_view *view) {
     return true;
 }
 
+static size_t view_head0(const struct fbwm_core *core, const struct fbwm_view *view) {
+    if (core == NULL || view == NULL) {
+        return 0;
+    }
+
+    if (core->workspace_current_by_head_len == 0) {
+        return 0;
+    }
+
+    int head = -1;
+    if (view->ops != NULL && view->ops->head != NULL) {
+        head = view->ops->head(view);
+    }
+    if (head < 0 || (size_t)head >= core->workspace_current_by_head_len) {
+        return 0;
+    }
+    return (size_t)head;
+}
+
+static int workspace_current_for_head(const struct fbwm_core *core, size_t head) {
+    if (core == NULL) {
+        return 0;
+    }
+
+    if (core->workspace_current_by_head_len == 0 || core->workspace_current_by_head == NULL) {
+        return core->workspace_current;
+    }
+
+    if (head >= core->workspace_current_by_head_len) {
+        head = 0;
+    }
+    return core->workspace_current_by_head[head];
+}
+
 static bool view_is_visible(const struct fbwm_core *core, const struct fbwm_view *view) {
     if (core == NULL || view == NULL) {
         return false;
@@ -35,7 +69,8 @@ static bool view_is_visible(const struct fbwm_core *core, const struct fbwm_view
     if (view->sticky) {
         return true;
     }
-    return view->workspace == core->workspace_current;
+    const size_t head = view_head0(core, view);
+    return view->workspace == workspace_current_for_head(core, head);
 }
 
 static void list_insert_after(struct fbwm_view *pos, struct fbwm_view *view) {
@@ -88,8 +123,14 @@ void fbwm_core_init(struct fbwm_core *core) {
     core->views.prev = &core->views;
     core->views.next = &core->views;
     core->focused = NULL;
+    core->refocus_filter = NULL;
+    core->refocus_filter_userdata = NULL;
 
     core->workspace_current = 0;
+    core->workspace_prev = 0;
+    core->workspace_current_by_head = NULL;
+    core->workspace_prev_by_head = NULL;
+    core->workspace_current_by_head_len = 0;
     core->workspace_count = 4;
     core->workspace_names = NULL;
     core->workspace_names_len = 0;
@@ -103,6 +144,15 @@ void fbwm_core_init(struct fbwm_core *core) {
 }
 
 void fbwm_core_finish(struct fbwm_core *core) {
+    if (core == NULL) {
+        return;
+    }
+
+    free(core->workspace_current_by_head);
+    core->workspace_current_by_head = NULL;
+    free(core->workspace_prev_by_head);
+    core->workspace_prev_by_head = NULL;
+    core->workspace_current_by_head_len = 0;
     fbwm_core_clear_workspace_names(core);
 }
 
@@ -114,12 +164,31 @@ void fbwm_core_view_map(struct fbwm_core *core, struct fbwm_view *view) {
         return;
     }
     if (view->workspace < 0 || view->workspace >= core->workspace_count) {
-        view->workspace = core->workspace_current;
+        const size_t head = view_head0(core, view);
+        view->workspace = workspace_current_for_head(core, head);
     }
     list_insert_after(&core->views, view);
 }
 
-static void refocus_if_needed(struct fbwm_core *core) {
+static struct fbwm_view *pick_refocus_candidate(struct fbwm_core *core, const struct fbwm_view *reference,
+        bool filter_enabled) {
+    if (core == NULL) {
+        return NULL;
+    }
+    for (struct fbwm_view *walk = core->views.next; walk != &core->views; walk = walk->next) {
+        if (!view_is_visible(core, walk)) {
+            continue;
+        }
+        if (filter_enabled && core->refocus_filter != NULL &&
+                !core->refocus_filter(core->refocus_filter_userdata, walk, reference)) {
+            continue;
+        }
+        return walk;
+    }
+    return NULL;
+}
+
+static void refocus_if_needed(struct fbwm_core *core, const struct fbwm_view *reference) {
     if (core == NULL) {
         return;
     }
@@ -127,17 +196,21 @@ static void refocus_if_needed(struct fbwm_core *core) {
         return;
     }
 
+    const struct fbwm_view *prev_focus = core->focused;
+    const struct fbwm_view *ref = reference != NULL ? reference : prev_focus;
     core->focused = NULL;
-    for (struct fbwm_view *walk = core->views.next; walk != &core->views; walk = walk->next) {
-        if (view_is_visible(core, walk)) {
-            fbwm_core_focus_view(core, walk);
-            return;
-        }
+
+    struct fbwm_view *candidate = pick_refocus_candidate(core, ref, core->refocus_filter != NULL);
+    if (candidate == NULL && core->refocus_filter == NULL) {
+        candidate = pick_refocus_candidate(core, ref, false);
+    }
+    if (candidate != NULL) {
+        fbwm_core_focus_view(core, candidate);
     }
 }
 
 void fbwm_core_refocus(struct fbwm_core *core) {
-    refocus_if_needed(core);
+    refocus_if_needed(core, NULL);
 }
 
 void fbwm_core_view_unmap(struct fbwm_core *core, struct fbwm_view *view) {
@@ -151,12 +224,20 @@ void fbwm_core_view_unmap(struct fbwm_core *core, struct fbwm_view *view) {
     const bool was_focused = core->focused == view;
     list_remove(view);
     if (was_focused) {
-        refocus_if_needed(core);
+        refocus_if_needed(core, view);
     }
 }
 
 void fbwm_core_view_destroy(struct fbwm_core *core, struct fbwm_view *view) {
     fbwm_core_view_unmap(core, view);
+}
+
+void fbwm_core_set_refocus_filter(struct fbwm_core *core, fbwm_core_refocus_filter_fn filter, void *userdata) {
+    if (core == NULL) {
+        return;
+    }
+    core->refocus_filter = filter;
+    core->refocus_filter_userdata = userdata;
 }
 
 void fbwm_core_focus_view(struct fbwm_core *core, struct fbwm_view *view) {
@@ -177,6 +258,17 @@ void fbwm_core_focus_view(struct fbwm_core *core, struct fbwm_view *view) {
     if (view->ops != NULL && view->ops->focus != NULL) {
         view->ops->focus(view);
     }
+}
+
+void fbwm_core_focus_view_with_reason(struct fbwm_core *core, struct fbwm_view *view, const char *why) {
+    if (core == NULL || view == NULL) {
+        return;
+    }
+    if (!view_is_visible(core, view)) {
+        return;
+    }
+    log_focus(view, why != NULL ? why : "direct");
+    fbwm_core_focus_view(core, view);
 }
 
 void fbwm_core_focus_next(struct fbwm_core *core) {
@@ -230,7 +322,35 @@ void fbwm_core_set_workspace_count(struct fbwm_core *core, int count) {
     if (core->workspace_current >= core->workspace_count) {
         core->workspace_current = core->workspace_count - 1;
     }
-    refocus_if_needed(core);
+    if (core->workspace_prev >= core->workspace_count) {
+        core->workspace_prev = core->workspace_count - 1;
+    }
+    if (core->workspace_prev < 0) {
+        core->workspace_prev = 0;
+    }
+    if (core->workspace_current_by_head != NULL && core->workspace_current_by_head_len > 0) {
+        for (size_t i = 0; i < core->workspace_current_by_head_len; i++) {
+            if (core->workspace_current_by_head[i] >= core->workspace_count) {
+                core->workspace_current_by_head[i] = core->workspace_count - 1;
+            }
+            if (core->workspace_current_by_head[i] < 0) {
+                core->workspace_current_by_head[i] = 0;
+            }
+            if (core->workspace_prev_by_head != NULL) {
+                if (core->workspace_prev_by_head[i] >= core->workspace_count) {
+                    core->workspace_prev_by_head[i] = core->workspace_count - 1;
+                }
+                if (core->workspace_prev_by_head[i] < 0) {
+                    core->workspace_prev_by_head[i] = 0;
+                }
+            }
+        }
+        core->workspace_current = core->workspace_current_by_head[0];
+        if (core->workspace_prev_by_head != NULL) {
+            core->workspace_prev = core->workspace_prev_by_head[0];
+        }
+    }
+    refocus_if_needed(core, NULL);
 }
 
 int fbwm_core_workspace_count(const struct fbwm_core *core) {
@@ -238,7 +358,84 @@ int fbwm_core_workspace_count(const struct fbwm_core *core) {
 }
 
 int fbwm_core_workspace_current(const struct fbwm_core *core) {
-    return core != NULL ? core->workspace_current : 0;
+    return fbwm_core_workspace_current_for_head(core, 0);
+}
+
+void fbwm_core_set_head_count(struct fbwm_core *core, size_t head_count) {
+    if (core == NULL) {
+        return;
+    }
+    if (head_count < 1) {
+        head_count = 1;
+    }
+
+    int *next_cur = calloc(head_count, sizeof(*next_cur));
+    int *next_prev = calloc(head_count, sizeof(*next_prev));
+    if (next_cur == NULL || next_prev == NULL) {
+        free(next_cur);
+        free(next_prev);
+        return;
+    }
+
+    if (core->workspace_current_by_head != NULL && core->workspace_current_by_head_len > 0) {
+        const size_t copy_len =
+            head_count < core->workspace_current_by_head_len ? head_count : core->workspace_current_by_head_len;
+        for (size_t i = 0; i < copy_len; i++) {
+            next_cur[i] = core->workspace_current_by_head[i];
+            next_prev[i] = core->workspace_prev_by_head != NULL ? core->workspace_prev_by_head[i] : next_cur[i];
+        }
+        for (size_t i = copy_len; i < head_count; i++) {
+            next_cur[i] = core->workspace_current;
+            next_prev[i] = next_cur[i];
+        }
+    } else {
+        for (size_t i = 0; i < head_count; i++) {
+            next_cur[i] = core->workspace_current;
+            next_prev[i] = next_cur[i];
+        }
+        next_prev[0] = core->workspace_prev;
+    }
+
+    free(core->workspace_current_by_head);
+    free(core->workspace_prev_by_head);
+    core->workspace_current_by_head = next_cur;
+    core->workspace_prev_by_head = next_prev;
+    core->workspace_current_by_head_len = head_count;
+    core->workspace_current = next_cur[0];
+    core->workspace_prev = next_prev[0];
+}
+
+size_t fbwm_core_head_count(const struct fbwm_core *core) {
+    if (core == NULL) {
+        return 0;
+    }
+    return core->workspace_current_by_head_len > 0 ? core->workspace_current_by_head_len : 1;
+}
+
+int fbwm_core_workspace_current_for_head(const struct fbwm_core *core, size_t head) {
+    return workspace_current_for_head(core, head);
+}
+
+int fbwm_core_workspace_prev_for_head(const struct fbwm_core *core, size_t head) {
+    if (core == NULL) {
+        return 0;
+    }
+    if (core->workspace_current_by_head != NULL && core->workspace_current_by_head_len > 0 &&
+            core->workspace_prev_by_head != NULL) {
+        if (head >= core->workspace_current_by_head_len) {
+            head = 0;
+        }
+        const int prev = core->workspace_prev_by_head[head];
+        if (prev < 0 || prev >= core->workspace_count) {
+            return workspace_current_for_head(core, head);
+        }
+        return prev;
+    }
+    const int prev = core->workspace_prev;
+    if (prev < 0 || prev >= core->workspace_count) {
+        return core->workspace_current;
+    }
+    return prev;
 }
 
 void fbwm_core_clear_workspace_names(struct fbwm_core *core) {
@@ -302,6 +499,13 @@ const char *fbwm_core_workspace_name(const struct fbwm_core *core, int workspace
     return core->workspace_names[workspace];
 }
 
+size_t fbwm_core_workspace_names_len(const struct fbwm_core *core) {
+    if (core == NULL) {
+        return 0;
+    }
+    return core->workspace_names_len;
+}
+
 enum fbwm_window_placement_strategy fbwm_core_window_placement(const struct fbwm_core *core) {
     return core != NULL ? core->placement_strategy : FBWM_PLACE_ROW_SMART;
 }
@@ -340,20 +544,45 @@ bool fbwm_core_view_is_visible(const struct fbwm_core *core, const struct fbwm_v
 }
 
 void fbwm_core_workspace_switch(struct fbwm_core *core, int workspace) {
+    fbwm_core_workspace_switch_on_head(core, 0, workspace);
+}
+
+void fbwm_core_workspace_switch_on_head(struct fbwm_core *core, size_t head, int workspace) {
     if (core == NULL) {
         return;
     }
     if (workspace < 0 || workspace >= core->workspace_count) {
         return;
     }
-    if (workspace == core->workspace_current) {
-        return;
+    if (core->workspace_current_by_head != NULL && core->workspace_current_by_head_len > 0) {
+        if (head >= core->workspace_current_by_head_len) {
+            head = 0;
+        }
+        const int cur = core->workspace_current_by_head[head];
+        if (workspace == cur) {
+            return;
+        }
+        if (core->workspace_prev_by_head != NULL) {
+            core->workspace_prev_by_head[head] = cur;
+        }
+        if (head == 0) {
+            core->workspace_prev = core->workspace_prev_by_head != NULL ? core->workspace_prev_by_head[0] : cur;
+        }
+        core->workspace_current_by_head[head] = workspace;
+        if (head == 0) {
+            core->workspace_current = workspace;
+        }
+        fprintf(stderr, "Policy: workspace switch head=%zu to %d\n", head, workspace + 1);
+    } else {
+        if (workspace == core->workspace_current) {
+            return;
+        }
+        core->workspace_prev = core->workspace_current;
+        core->workspace_current = workspace;
+        fprintf(stderr, "Policy: workspace switch to %d\n", workspace + 1);
     }
 
-    core->workspace_current = workspace;
-    fprintf(stderr, "Policy: workspace switch to %d\n", workspace + 1);
-
-    refocus_if_needed(core);
+    refocus_if_needed(core, NULL);
 }
 
 void fbwm_core_move_focused_to_workspace(struct fbwm_core *core, int workspace) {
@@ -374,7 +603,7 @@ void fbwm_core_move_focused_to_workspace(struct fbwm_core *core, int workspace) 
     fprintf(stderr, "Policy: move focused to workspace %d title=%s app_id=%s\n",
         workspace + 1, safe_str(title), safe_str(app_id));
 
-    refocus_if_needed(core);
+    refocus_if_needed(core, view);
 }
 
 static int clamp_i32(int v, int lo, int hi) {

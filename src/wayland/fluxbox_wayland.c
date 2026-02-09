@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <unistd.h>
 #include <wlr/util/log.h>
 
 #include "wayland/fbwl_server_internal.h"
@@ -176,6 +177,34 @@ int main(int argc, char **argv) {
     }
 
     wl_display_run(server.wl_display);
+
+    const bool restarting = server.restart_requested;
+    char *restart_cmd = server.restart_cmd;
+    server.restart_cmd = NULL;
     fbwl_server_finish(&server);
+
+    if (restarting) {
+        if (restart_cmd != NULL && *restart_cmd != '\0') {
+            const char *shell = getenv("SHELL");
+            if (shell == NULL || *shell == '\0') {
+                shell = "/bin/sh";
+            }
+            execlp(shell, shell, "-c", restart_cmd, (const char *)NULL);
+            perror(restart_cmd);
+        }
+
+        execvp(argv[0], argv);
+        perror(argv[0]);
+
+        const char *base = strrchr(argv[0], '/');
+        base = base != NULL ? base + 1 : argv[0];
+        execvp(base, argv);
+        perror(base);
+
+        free(restart_cmd);
+        return 1;
+    }
+
+    free(restart_cmd);
     return 0;
 }

@@ -13,6 +13,7 @@ struct wlr_output;
 struct wlr_output_layout;
 struct wlr_scene;
 struct wlr_scene_output_layout;
+struct wlr_scene_buffer;
 struct wlr_scene_rect;
 
 typedef void (*fbwl_output_on_destroy_fn)(void *userdata, struct wlr_output *wlr_output);
@@ -22,6 +23,7 @@ struct fbwl_output {
     struct wlr_output *wlr_output;
     struct wlr_box usable_area;
     struct wlr_scene_rect *background_rect;
+    struct wlr_scene_buffer *background_image;
     struct wlr_scene *scene;
 
     fbwl_output_on_destroy_fn on_destroy;

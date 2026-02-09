@@ -25,6 +25,9 @@ cleanup() {
   rm -rf "$CFGDIR" 2>/dev/null || true
   rm -f "$MARK_DEFAULT" "$MARK_OVERRIDE" "$MARK_RELOAD_KEYS" "$MARK_MENU" 2>/dev/null || true
   if [[ -n "${APP_PID:-}" ]]; then kill "$APP_PID" 2>/dev/null || true; fi
+  if [[ -n "${STRUT_L_VISIBLE_PID:-}" ]]; then kill "$STRUT_L_VISIBLE_PID" 2>/dev/null || true; fi
+  if [[ -n "${STRUT_L_HIDDEN_PID:-}" ]]; then kill "$STRUT_L_HIDDEN_PID" 2>/dev/null || true; fi
+  if [[ -n "${STRUT_R_VISIBLE_PID:-}" ]]; then kill "$STRUT_R_VISIBLE_PID" 2>/dev/null || true; fi
   if [[ -n "${TAB_PID:-}" ]]; then kill "$TAB_PID" 2>/dev/null || true; fi
   if [[ -n "${FBW_PID:-}" ]]; then kill "$FBW_PID" 2>/dev/null || true; fi
   wait 2>/dev/null || true
@@ -37,10 +40,13 @@ rm -f "$MARK_DEFAULT" "$MARK_OVERRIDE" "$MARK_RELOAD_KEYS" "$MARK_MENU"
 cat >"$CFGDIR/init" <<EOF
 session.autoRaiseDelay: 50
 session.screen0.workspaces: 3
+session.screen0.focusModel: StrictMouseFocus
+session.screen0.allowRemoteActions: true
 session.screen0.windowPlacement: AutotabPlacement
 session.keyFile: mykeys
 session.appsFile: myapps
 session.styleFile: mystyle
+session.styleOverlay: myoverlay
 session.menuFile: mymenu
 session.screen0.toolbar.visible: true
 session.screen0.toolbar.placement: TopCenter
@@ -76,6 +82,10 @@ cat >"$CFGDIR/mystyle" <<EOF
 window.title.height: 33
 EOF
 
+cat >"$CFGDIR/myoverlay" <<EOF
+window.title.height: 44
+EOF
+
 cat >"$CFGDIR/mymenu" <<EOF
 [begin] (Fluxbox)
 [submenu] (Sub) {Sub}
@@ -96,6 +106,7 @@ timeout 5 bash -c "until rg -q 'Running fluxbox-wayland' '$LOG'; do sleep 0.05; 
 timeout 5 bash -c "until rg -q 'IPC: listening' '$LOG'; do sleep 0.05; done"
 timeout 5 bash -c "until rg -q 'OutputLayout: ' '$LOG'; do sleep 0.05; done"
 timeout 5 bash -c "until rg -q 'Style: loaded ' '$LOG'; do sleep 0.05; done"
+timeout 5 bash -c "until rg -q 'Style: loaded .*myoverlay \\(border=[0-9]+ title_h=44\\)' '$LOG'; do sleep 0.05; done"
 timeout 5 bash -c "until rg -q 'Menu: loaded ' '$LOG'; do sleep 0.05; done"
 timeout 5 bash -c "until rg -q 'Toolbar: built ' '$LOG'; do sleep 0.05; done"
 timeout 5 bash -c "until rg -q 'Toolbar: position ' '$LOG'; do sleep 0.05; done"
@@ -204,6 +215,11 @@ printf '%s\n' "$OUT" | rg -q '^err workspace_out_of_range$'
 APP_PID=$!
 
 timeout 5 bash -c "until rg -q 'Focus: cfgdir-client' '$LOG'; do sleep 0.05; done"
+
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-input-injector --socket "$SOCKET" motion "$((OUT_X + OUT_W - 1))" "$((OUT_Y + OUT_H - 1))" >/dev/null 2>&1 || true
+timeout 2 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Focus: clear reason=pointer-leave'; do sleep 0.05; done"
+
 timeout 5 bash -c "until ./fbwl-remote --socket \"$SOCKET\" get-workspace | rg -q '^ok workspace=2$'; do sleep 0.05; done"
 
 ./fbwl-input-injector --socket "$SOCKET" key alt-return
@@ -223,13 +239,15 @@ EOF
 cat >"$CFGDIR/init" <<EOF
 session.autoRaiseDelay: 50
 session.screen0.workspaces: 3
-session.screen0.windowPlacement: AutotabPlacement
+session.screen0.focusModel: StrictMouseFocus
+session.screen0.allowRemoteActions: true
+session.screen0.windowPlacement: RowSmartPlacement
 session.keyFile: mykeys2
 session.appsFile: myapps
 session.styleFile: mystyle
 session.menuFile: mymenu
 session.screen0.toolbar.visible: true
-session.screen0.toolbar.placement: TopCenter
+session.screen0.toolbar.placement: LeftCenter
 session.screen0.toolbar.widthPercent: 70
 session.screen0.toolbar.height: 30
 session.screen0.toolbar.tools: workspacename,clock
@@ -252,18 +270,84 @@ START=$((OFFSET + 1))
 timeout 5 bash -c "until tail -c +$START '$LOG' | rg -q 'Reconfigure: reloaded init from '; do sleep 0.05; done"
 timeout 5 bash -c "until tail -c +$START '$LOG' | rg -q 'Reconfigure: reloaded keys from '; do sleep 0.05; done"
 timeout 5 bash -c "until tail -c +$START '$LOG' | rg -q 'Toolbar: built '; do sleep 0.05; done"
+timeout 5 bash -c "until tail -c +$START '$LOG' | rg -q 'Toolbar: position '; do sleep 0.05; done"
 
 BUILT_LINE="$(tail -c +$START "$LOG" | rg 'Toolbar: built ' | tail -n 1)"
 if [[ "$BUILT_LINE" =~ w=([0-9]+)\ h=([0-9]+) ]]; then
   NEW_TB_W="${BASH_REMATCH[1]}"
+  NEW_TB_H="${BASH_REMATCH[2]}"
 else
   echo "failed to parse Toolbar: built line after reconfigure: $BUILT_LINE" >&2
   exit 1
 fi
 
-EXPECTED_TB_W=$((OUT_W * 70 / 100))
-if [[ "$NEW_TB_W" -ne "$EXPECTED_TB_W" ]]; then
-  echo "unexpected toolbar width after reconfigure: got $NEW_TB_W expected $EXPECTED_TB_W (out_w=$OUT_W)" >&2
+EXPECTED_TB_H=$((OUT_H * 70 / 100))
+if [[ "$NEW_TB_W" -ne 30 ]]; then
+  echo "unexpected toolbar width after reconfigure: got $NEW_TB_W expected 30" >&2
+  exit 1
+fi
+if [[ "$NEW_TB_H" -ne "$EXPECTED_TB_H" ]]; then
+  echo "unexpected toolbar height after reconfigure: got $NEW_TB_H expected $EXPECTED_TB_H (out_h=$OUT_H)" >&2
+  exit 1
+fi
+
+POS_LINE="$(tail -c +$START "$LOG" | rg 'Toolbar: position ' | tail -n 1)"
+if [[ "$POS_LINE" =~ x=([-0-9]+)\ y=([-0-9]+)\ h=([0-9]+)\ cell_w=([0-9]+)\ workspaces=([0-9]+) ]]; then
+  TB_X="${BASH_REMATCH[1]}"
+  TB_Y="${BASH_REMATCH[2]}"
+  H="${BASH_REMATCH[3]}"
+else
+  echo "failed to parse Toolbar: position line after reconfigure: $POS_LINE" >&2
+  exit 1
+fi
+
+EXPECTED_TB_X="$OUT_X"
+EXPECTED_TB_Y=$((OUT_Y + (OUT_H - H) / 2))
+if [[ "$TB_X" -ne "$EXPECTED_TB_X" ]]; then
+  echo "unexpected left toolbar x: got $TB_X expected $EXPECTED_TB_X (out_x=$OUT_X)" >&2
+  exit 1
+fi
+if [[ "$TB_Y" -ne "$EXPECTED_TB_Y" ]]; then
+  echo "unexpected left toolbar y: got $TB_Y expected $EXPECTED_TB_Y (out_y=$OUT_Y out_h=$OUT_H tb_h=$H)" >&2
+  exit 1
+fi
+
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-smoke-client --socket "$SOCKET" --title cfgdir-strut-left-visible --stay-ms 10000 >/dev/null 2>&1 &
+STRUT_L_VISIBLE_PID=$!
+timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Place: cfgdir-strut-left-visible '; do sleep 0.05; done"
+place_line="$(tail -c +$((OFFSET + 1)) "$LOG" | rg -m1 'Place: cfgdir-strut-left-visible ')"
+if [[ "$place_line" =~ usable=([-0-9]+),([-0-9]+)[[:space:]] ]]; then
+  USABLE_X="${BASH_REMATCH[1]}"
+else
+  echo "failed to parse usable box from Place line: $place_line" >&2
+  exit 1
+fi
+EXPECTED_USABLE_X="$OUT_X"
+if [[ "$USABLE_X" -ne "$EXPECTED_USABLE_X" ]]; then
+  echo "unexpected usable.x with left toolbar visible: got $USABLE_X expected $EXPECTED_USABLE_X" >&2
+  exit 1
+fi
+
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-input-injector --socket "$SOCKET" motion $((OUT_X + 1)) $((TB_Y + 1)) >/dev/null 2>&1 || true
+./fbwl-input-injector --socket "$SOCKET" motion $((OUT_X + OUT_W - 10)) $((OUT_Y + OUT_H / 2)) >/dev/null 2>&1 || true
+timeout 2 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Toolbar: autoHide hide'; do sleep 0.05; done"
+
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-smoke-client --socket "$SOCKET" --title cfgdir-strut-left-hidden --stay-ms 10000 >/dev/null 2>&1 &
+STRUT_L_HIDDEN_PID=$!
+timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Place: cfgdir-strut-left-hidden '; do sleep 0.05; done"
+place_line="$(tail -c +$((OFFSET + 1)) "$LOG" | rg -m1 'Place: cfgdir-strut-left-hidden ')"
+if [[ "$place_line" =~ usable=([-0-9]+),([-0-9]+)[[:space:]] ]]; then
+  USABLE_X="${BASH_REMATCH[1]}"
+else
+  echo "failed to parse usable box from Place line: $place_line" >&2
+  exit 1
+fi
+EXPECTED_USABLE_X="$OUT_X"
+if [[ "$USABLE_X" -ne "$EXPECTED_USABLE_X" ]]; then
+  echo "unexpected usable.x with left toolbar hidden: got $USABLE_X expected $EXPECTED_USABLE_X" >&2
   exit 1
 fi
 
@@ -273,6 +357,136 @@ if [[ -f "$MARK_OVERRIDE" ]]; then
   echo "expected init reload to switch keyFile to mykeys2, but old binding still triggered ($MARK_OVERRIDE exists)" >&2
   exit 1
 fi
+
+cat >"$CFGDIR/init" <<EOF
+session.autoRaiseDelay: 50
+session.screen0.workspaces: 3
+session.screen0.focusModel: StrictMouseFocus
+session.screen0.allowRemoteActions: true
+session.screen0.windowPlacement: RowSmartPlacement
+session.keyFile: mykeys2
+session.appsFile: myapps
+session.styleFile: mystyle
+session.menuFile: mymenu
+session.screen0.toolbar.visible: true
+session.screen0.toolbar.placement: RightCenter
+session.screen0.toolbar.widthPercent: 70
+session.screen0.toolbar.height: 30
+session.screen0.toolbar.tools: workspacename,clock
+session.screen0.toolbar.autoHide: true
+session.screen0.toolbar.autoRaise: true
+session.screen0.menuDelay: 250
+session.screen0.tabs.intitlebar: false
+session.screen0.tabs.maxOver: true
+session.screen0.tabs.usePixmap: false
+session.screen0.tab.placement: TopRight
+session.screen0.tab.width: 123
+session.tabPadding: 4
+session.tabsAttachArea: Titlebar
+session.screen0.tabFocusModel: MouseTabFocus
+EOF
+
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-remote --socket "$SOCKET" reconfigure | rg -q '^ok reconfigure$'
+START=$((OFFSET + 1))
+timeout 5 bash -c "until tail -c +$START '$LOG' | rg -q 'Reconfigure: reloaded init from '; do sleep 0.05; done"
+timeout 5 bash -c "until tail -c +$START '$LOG' | rg -q 'Toolbar: built '; do sleep 0.05; done"
+timeout 5 bash -c "until tail -c +$START '$LOG' | rg -q 'Toolbar: position '; do sleep 0.05; done"
+
+BUILT_LINE="$(tail -c +$START "$LOG" | rg 'Toolbar: built ' | tail -n 1)"
+if [[ "$BUILT_LINE" =~ w=([0-9]+)\ h=([0-9]+) ]]; then
+  NEW_TB_W="${BASH_REMATCH[1]}"
+  NEW_TB_H="${BASH_REMATCH[2]}"
+else
+  echo "failed to parse Toolbar: built line after right toolbar reconfigure: $BUILT_LINE" >&2
+  exit 1
+fi
+EXPECTED_TB_H=$((OUT_H * 70 / 100))
+if [[ "$NEW_TB_W" -ne 30 ]]; then
+  echo "unexpected right toolbar width: got $NEW_TB_W expected 30" >&2
+  exit 1
+fi
+if [[ "$NEW_TB_H" -ne "$EXPECTED_TB_H" ]]; then
+  echo "unexpected right toolbar height: got $NEW_TB_H expected $EXPECTED_TB_H (out_h=$OUT_H)" >&2
+  exit 1
+fi
+
+POS_LINE="$(tail -c +$START "$LOG" | rg 'Toolbar: position ' | tail -n 1)"
+if [[ "$POS_LINE" =~ x=([-0-9]+)\ y=([-0-9]+)\ h=([0-9]+)\ cell_w=([0-9]+)\ workspaces=([0-9]+) ]]; then
+  TB_X="${BASH_REMATCH[1]}"
+  TB_Y="${BASH_REMATCH[2]}"
+  H="${BASH_REMATCH[3]}"
+else
+  echo "failed to parse Toolbar: position line after right toolbar reconfigure: $POS_LINE" >&2
+  exit 1
+fi
+
+EXPECTED_TB_X=$((OUT_X + OUT_W - 30))
+EXPECTED_TB_Y=$((OUT_Y + (OUT_H - H) / 2))
+if [[ "$TB_X" -ne "$EXPECTED_TB_X" ]]; then
+  echo "unexpected right toolbar x: got $TB_X expected $EXPECTED_TB_X (out_x=$OUT_X out_w=$OUT_W)" >&2
+  exit 1
+fi
+if [[ "$TB_Y" -ne "$EXPECTED_TB_Y" ]]; then
+  echo "unexpected right toolbar y: got $TB_Y expected $EXPECTED_TB_Y (out_y=$OUT_Y out_h=$OUT_H tb_h=$H)" >&2
+  exit 1
+fi
+
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-smoke-client --socket "$SOCKET" --title cfgdir-strut-right-visible --stay-ms 10000 >/dev/null 2>&1 &
+STRUT_R_VISIBLE_PID=$!
+timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Place: cfgdir-strut-right-visible '; do sleep 0.05; done"
+place_line="$(tail -c +$((OFFSET + 1)) "$LOG" | rg -m1 'Place: cfgdir-strut-right-visible ')"
+if [[ "$place_line" =~ usable=([-0-9]+),([-0-9]+)[[:space:]]([0-9]+)x([0-9]+)[[:space:]] ]]; then
+  USABLE_X="${BASH_REMATCH[1]}"
+  USABLE_W="${BASH_REMATCH[3]}"
+else
+  echo "failed to parse usable box from Place line: $place_line" >&2
+  exit 1
+fi
+EXPECTED_USABLE_X="$OUT_X"
+EXPECTED_USABLE_W="$OUT_W"
+if [[ "$USABLE_X" -ne "$EXPECTED_USABLE_X" ]]; then
+  echo "unexpected usable.x with right toolbar visible: got $USABLE_X expected $EXPECTED_USABLE_X" >&2
+  exit 1
+fi
+if [[ "$USABLE_W" -ne "$EXPECTED_USABLE_W" ]]; then
+  echo "unexpected usable.w with right toolbar visible: got $USABLE_W expected $EXPECTED_USABLE_W" >&2
+  exit 1
+fi
+
+cat >"$CFGDIR/init" <<EOF
+session.autoRaiseDelay: 50
+session.screen0.workspaces: 3
+session.screen0.focusModel: StrictMouseFocus
+session.screen0.allowRemoteActions: true
+session.screen0.windowPlacement: AutotabPlacement
+session.keyFile: mykeys2
+session.appsFile: myapps
+session.styleFile: mystyle
+session.menuFile: mymenu
+session.screen0.toolbar.visible: true
+session.screen0.toolbar.placement: RightCenter
+session.screen0.toolbar.widthPercent: 70
+session.screen0.toolbar.height: 30
+session.screen0.toolbar.tools: workspacename,clock
+session.screen0.toolbar.autoHide: true
+session.screen0.toolbar.autoRaise: true
+session.screen0.menuDelay: 250
+session.screen0.tabs.intitlebar: false
+session.screen0.tabs.maxOver: true
+session.screen0.tabs.usePixmap: false
+session.screen0.tab.placement: TopRight
+session.screen0.tab.width: 123
+session.tabPadding: 4
+session.tabsAttachArea: Titlebar
+session.screen0.tabFocusModel: MouseTabFocus
+EOF
+
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-remote --socket "$SOCKET" reconfigure | rg -q '^ok reconfigure$'
+START=$((OFFSET + 1))
+timeout 5 bash -c "until tail -c +$START '$LOG' | rg -q 'Reconfigure: reloaded init from '; do sleep 0.05; done"
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-smoke-client --socket "$SOCKET" --title cfgdir-tab --app-id fbwl-config-dir-tab --stay-ms 3000 >/dev/null 2>&1 &

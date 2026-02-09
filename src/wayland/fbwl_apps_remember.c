@@ -235,6 +235,10 @@ void fbwl_apps_remember_apply_pre_map(struct fbwl_view *view, const struct fbwl_
     }
 
     struct fbwl_server *server = view->server;
+    if (rule->set_ignore_size_hints) {
+        view->ignore_size_hints_override_set = true;
+        view->ignore_size_hints_override = rule->ignore_size_hints;
+    }
     if (server->output_layout == NULL) {
         return;
     }
@@ -360,4 +364,3 @@ void fbwl_apps_remember_apply_pre_map(struct fbwl_view *view, const struct fbwl_
             rule->height_percent ? "%" : "");
     }
 }
-

@@ -25,7 +25,7 @@ chmod 0700 "$XDG_RUNTIME_DIR"
 pick_display_num() {
   local base="${1:-99}"
   local d
-  for ((d = base; d <= base + 20; d++)); do
+  for ((d = base; d <= base + 200; d++)); do
     if [[ ! -e "/tmp/.X11-unix/X$d" && ! -e "/tmp/.X${d}-lock" ]]; then
       echo "$d"
       return 0
@@ -34,7 +34,11 @@ pick_display_num() {
   return 1
 }
 
-DISPLAY_NUM="$(pick_display_num "${DISPLAY_NUM:-99}")"
+DISPLAY_NUM="$(pick_display_num "${DISPLAY_NUM:-99}" || true)"
+if [[ -z "$DISPLAY_NUM" ]]; then
+  echo "failed to find a free X display number" >&2
+  exit 1
+fi
 SOCKET="${SOCKET:-wayland-fbwl-test-$UID-$$}"
 XVFB_LOG="${XVFB_LOG:-/tmp/xvfb-$UID-$$.log}"
 LOG="${LOG:-/tmp/fluxbox-wayland-xvfb-$UID-$$.log}"
@@ -187,9 +191,18 @@ if [[ "$TB_WS" -lt 2 ]]; then
 fi
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
-./fbwl-input-injector --socket "$SOCKET" click $((TB_X0 + TB_CELL_W + TB_CELL_W / 2)) $((TB_Y0 + TB_H / 2))
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Toolbar: click workspace=2'
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Workspace: apply current=2 reason=toolbar'
+tool_line="$(rg 'Toolbar: tool tok=nextworkspace ' "$LOG" | tail -n 1)"
+if [[ "$tool_line" =~ lx=([-0-9]+)\ w=([0-9]+) ]]; then
+  TB_LX="${BASH_REMATCH[1]}"
+  TB_W="${BASH_REMATCH[2]}"
+else
+  echo "failed to parse Toolbar: tool tok=nextworkspace line: $tool_line" >&2
+  exit 1
+fi
+
+./fbwl-input-injector --socket "$SOCKET" click $((TB_X0 + TB_LX + TB_W / 2)) $((TB_Y0 + TB_H / 2))
+tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Toolbar: click tool=nextworkspace cmd=nextworkspace'
+tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Workspace: apply current=2 reason=switch-next'
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" key alt-3

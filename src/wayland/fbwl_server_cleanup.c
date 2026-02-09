@@ -1,6 +1,8 @@
 #include <stddef.h>
+#include <stdlib.h>
 
 #include <wlr/backend.h>
+#include <wlr/interfaces/wlr_buffer.h>
 #include <wlr/render/allocator.h>
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/types/wlr_cursor.h>
@@ -10,11 +12,18 @@
 
 #include "wayland/fbwl_output.h"
 #include "wayland/fbwl_server_internal.h"
+#include "wayland/fbwl_xembed_sni_proxy.h"
 #include "wayland/fbwl_util.h"
 
 void fbwl_server_finish(struct fbwl_server *server) {
     if (server == NULL) {
         return;
+    }
+
+    fbwl_xembed_sni_proxy_stop(server);
+
+    if (server->slitlist_file != NULL && *server->slitlist_file != '\0') {
+        (void)fbwl_ui_slit_save_order_file(&server->slit_ui, server->slitlist_file);
     }
 
     if (server->wl_display != NULL) {
@@ -65,6 +74,7 @@ void fbwl_server_finish(struct fbwl_server *server) {
 
     server_cmd_dialog_ui_close(server, "shutdown");
     server_osd_ui_destroy(server);
+    fbwl_ui_tooltip_destroy(&server->tooltip_ui);
     if (server->auto_raise_timer != NULL) {
         wl_event_source_remove(server->auto_raise_timer);
     server->auto_raise_timer = NULL;
@@ -73,21 +83,42 @@ void fbwl_server_finish(struct fbwl_server *server) {
     server_menu_free(server);
     free(server->config_dir);
     server->config_dir = NULL;
+    free(server->group_file);
+    server->group_file = NULL;
     free(server->keys_file);
     server->keys_file = NULL;
     free(server->apps_file);
     server->apps_file = NULL;
     free(server->style_file);
     server->style_file = NULL;
+    free(server->style_overlay_file);
+    server->style_overlay_file = NULL;
+    free(server->slitlist_file);
+    server->slitlist_file = NULL;
+    free(server->screen_configs);
+    server->screen_configs = NULL;
+    server->screen_configs_len = 0;
     fbwl_ui_toolbar_destroy(&server->toolbar_ui);
+    fbwl_ui_slit_destroy(&server->slit_ui);
     fbwm_core_finish(&server->wm);
 
     struct fbwl_output *out;
     wl_list_for_each(out, &server->outputs, link) {
+        if (out->background_image != NULL) {
+            wlr_scene_node_destroy(&out->background_image->node);
+            out->background_image = NULL;
+        }
         if (out->background_rect != NULL) {
             wlr_scene_node_destroy(&out->background_rect->node);
             out->background_rect = NULL;
         }
+    }
+
+    free(server->wallpaper_path);
+    server->wallpaper_path = NULL;
+    if (server->wallpaper_buf != NULL) {
+        wlr_buffer_drop(server->wallpaper_buf);
+        server->wallpaper_buf = NULL;
     }
 
     if (server->scene != NULL) {
@@ -118,8 +149,20 @@ void fbwl_server_finish(struct fbwl_server *server) {
     fbwl_apps_rules_free(&server->apps_rules, &server->apps_rule_count);
     fbwl_keybindings_free(&server->keybindings, &server->keybinding_count);
     fbwl_mousebindings_free(&server->mousebindings, &server->mousebinding_count);
+    free(server->marked_windows.items);
+    server->marked_windows.items = NULL;
+    server->marked_windows.len = 0;
+    server->marked_windows.cap = 0;
     free(server->key_mode);
     server->key_mode = NULL;
+    free(server->keychain_saved_mode);
+    server->keychain_saved_mode = NULL;
+    server->keychain_active = false;
+    server->keychain_start_time_msec = 0;
+    server->change_workspace_binding_active = false;
+    free(server->restart_cmd);
+    server->restart_cmd = NULL;
+    server->restart_requested = false;
     if (server->protocol_logger != NULL) {
         wl_protocol_logger_destroy(server->protocol_logger);
         server->protocol_logger = NULL;

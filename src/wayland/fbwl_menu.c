@@ -41,6 +41,8 @@ void fbwl_menu_free(struct fbwl_menu *menu) {
         it->label = NULL;
         free(it->cmd);
         it->cmd = NULL;
+        free(it->icon);
+        it->icon = NULL;
         if (it->submenu != NULL) {
             fbwl_menu_free(it->submenu);
             it->submenu = NULL;
@@ -70,7 +72,7 @@ struct fbwl_menu *fbwl_menu_create(const char *label) {
     return menu;
 }
 
-bool fbwl_menu_add_exec(struct fbwl_menu *menu, const char *label, const char *cmd) {
+bool fbwl_menu_add_exec(struct fbwl_menu *menu, const char *label, const char *cmd, const char *icon) {
     if (menu == NULL || cmd == NULL || *cmd == '\0') {
         return false;
     }
@@ -80,18 +82,21 @@ bool fbwl_menu_add_exec(struct fbwl_menu *menu, const char *label, const char *c
     struct fbwl_menu_item *it = &menu->items[menu->item_count++];
     memset(it, 0, sizeof(*it));
     it->kind = FBWL_MENU_ITEM_EXEC;
+    it->close_on_click = true;
     it->label = label != NULL && *label != '\0' ? strdup(label) : strdup(cmd);
     it->cmd = strdup(cmd);
-    if (it->label == NULL || it->cmd == NULL) {
+    it->icon = icon != NULL && *icon != '\0' ? strdup(icon) : NULL;
+    if (it->label == NULL || it->cmd == NULL || (icon != NULL && *icon != '\0' && it->icon == NULL)) {
         free(it->label);
         free(it->cmd);
+        free(it->icon);
         menu->item_count--;
         return false;
     }
     return true;
 }
 
-bool fbwl_menu_add_exit(struct fbwl_menu *menu, const char *label) {
+bool fbwl_menu_add_exit(struct fbwl_menu *menu, const char *label, const char *icon) {
     if (menu == NULL) {
         return false;
     }
@@ -101,15 +106,47 @@ bool fbwl_menu_add_exit(struct fbwl_menu *menu, const char *label) {
     struct fbwl_menu_item *it = &menu->items[menu->item_count++];
     memset(it, 0, sizeof(*it));
     it->kind = FBWL_MENU_ITEM_EXIT;
+    it->close_on_click = true;
     it->label = label != NULL && *label != '\0' ? strdup(label) : strdup("Exit");
-    if (it->label == NULL) {
+    it->icon = icon != NULL && *icon != '\0' ? strdup(icon) : NULL;
+    if (it->label == NULL || (icon != NULL && *icon != '\0' && it->icon == NULL)) {
+        free(it->label);
+        free(it->icon);
         menu->item_count--;
         return false;
     }
     return true;
 }
 
-bool fbwl_menu_add_view_action(struct fbwl_menu *menu, const char *label,
+bool fbwl_menu_add_server_action(struct fbwl_menu *menu, const char *label, const char *icon,
+        enum fbwl_menu_server_action action, int arg, const char *cmd) {
+    if (menu == NULL) {
+        return false;
+    }
+    if (!fbwl_menu_reserve_items(menu, 1)) {
+        return false;
+    }
+    struct fbwl_menu_item *it = &menu->items[menu->item_count++];
+    memset(it, 0, sizeof(*it));
+    it->kind = FBWL_MENU_ITEM_SERVER_ACTION;
+    it->close_on_click = true;
+    it->server_action = action;
+    it->arg = arg;
+    it->label = label != NULL && *label != '\0' ? strdup(label) : strdup("Action");
+    it->cmd = cmd != NULL && *cmd != '\0' ? strdup(cmd) : NULL;
+    it->icon = icon != NULL && *icon != '\0' ? strdup(icon) : NULL;
+    if (it->label == NULL || (cmd != NULL && *cmd != '\0' && it->cmd == NULL) ||
+            (icon != NULL && *icon != '\0' && it->icon == NULL)) {
+        free(it->label);
+        free(it->cmd);
+        free(it->icon);
+        menu->item_count--;
+        return false;
+    }
+    return true;
+}
+
+bool fbwl_menu_add_view_action(struct fbwl_menu *menu, const char *label, const char *icon,
         enum fbwl_menu_view_action action) {
     if (menu == NULL) {
         return false;
@@ -120,16 +157,21 @@ bool fbwl_menu_add_view_action(struct fbwl_menu *menu, const char *label,
     struct fbwl_menu_item *it = &menu->items[menu->item_count++];
     memset(it, 0, sizeof(*it));
     it->kind = FBWL_MENU_ITEM_VIEW_ACTION;
+    it->close_on_click = true;
     it->view_action = action;
     it->label = label != NULL && *label != '\0' ? strdup(label) : strdup("Action");
-    if (it->label == NULL) {
+    it->icon = icon != NULL && *icon != '\0' ? strdup(icon) : NULL;
+    if (it->label == NULL || (icon != NULL && *icon != '\0' && it->icon == NULL)) {
+        free(it->label);
+        free(it->icon);
         menu->item_count--;
         return false;
     }
     return true;
 }
 
-bool fbwl_menu_add_workspace_switch(struct fbwl_menu *menu, const char *label, int workspace0) {
+bool fbwl_menu_add_workspace_switch(struct fbwl_menu *menu, const char *label, int workspace0,
+        const char *icon) {
     if (menu == NULL) {
         return false;
     }
@@ -142,16 +184,21 @@ bool fbwl_menu_add_workspace_switch(struct fbwl_menu *menu, const char *label, i
     struct fbwl_menu_item *it = &menu->items[menu->item_count++];
     memset(it, 0, sizeof(*it));
     it->kind = FBWL_MENU_ITEM_WORKSPACE_SWITCH;
+    it->close_on_click = true;
     it->arg = workspace0;
     it->label = label != NULL && *label != '\0' ? strdup(label) : strdup("Workspace");
-    if (it->label == NULL) {
+    it->icon = icon != NULL && *icon != '\0' ? strdup(icon) : NULL;
+    if (it->label == NULL || (icon != NULL && *icon != '\0' && it->icon == NULL)) {
+        free(it->label);
+        free(it->icon);
         menu->item_count--;
         return false;
     }
     return true;
 }
 
-bool fbwl_menu_add_submenu(struct fbwl_menu *menu, const char *label, struct fbwl_menu *submenu) {
+bool fbwl_menu_add_submenu(struct fbwl_menu *menu, const char *label, struct fbwl_menu *submenu,
+        const char *icon) {
     if (menu == NULL || submenu == NULL) {
         return false;
     }
@@ -161,9 +208,13 @@ bool fbwl_menu_add_submenu(struct fbwl_menu *menu, const char *label, struct fbw
     struct fbwl_menu_item *it = &menu->items[menu->item_count++];
     memset(it, 0, sizeof(*it));
     it->kind = FBWL_MENU_ITEM_SUBMENU;
+    it->close_on_click = true;
     it->label = label != NULL && *label != '\0' ? strdup(label) : strdup("Submenu");
     it->submenu = submenu;
-    if (it->label == NULL) {
+    it->icon = icon != NULL && *icon != '\0' ? strdup(icon) : NULL;
+    if (it->label == NULL || (icon != NULL && *icon != '\0' && it->icon == NULL)) {
+        free(it->label);
+        free(it->icon);
         menu->item_count--;
         return false;
     }
@@ -180,10 +231,11 @@ bool fbwl_menu_add_separator(struct fbwl_menu *menu) {
     struct fbwl_menu_item *it = &menu->items[menu->item_count++];
     memset(it, 0, sizeof(*it));
     it->kind = FBWL_MENU_ITEM_SEPARATOR;
+    it->close_on_click = true;
     return true;
 }
 
-bool fbwl_menu_add_nop(struct fbwl_menu *menu, const char *label) {
+bool fbwl_menu_add_nop(struct fbwl_menu *menu, const char *label, const char *icon) {
     if (menu == NULL) {
         return false;
     }
@@ -193,8 +245,12 @@ bool fbwl_menu_add_nop(struct fbwl_menu *menu, const char *label) {
     struct fbwl_menu_item *it = &menu->items[menu->item_count++];
     memset(it, 0, sizeof(*it));
     it->kind = FBWL_MENU_ITEM_NOP;
+    it->close_on_click = true;
     it->label = label != NULL && *label != '\0' ? strdup(label) : strdup("");
-    if (it->label == NULL) {
+    it->icon = icon != NULL && *icon != '\0' ? strdup(icon) : NULL;
+    if (it->label == NULL || (icon != NULL && *icon != '\0' && it->icon == NULL)) {
+        free(it->label);
+        free(it->icon);
         menu->item_count--;
         return false;
     }

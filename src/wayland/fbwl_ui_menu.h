@@ -7,14 +7,16 @@
 
 #include <xkbcommon/xkbcommon.h>
 
+#include "wayland/fbwl_menu.h"
+
 struct wl_display;
 struct wl_event_source;
 
 struct fbwl_decor_theme;
-struct fbwl_menu;
 struct fbwl_view;
 
 struct wlr_scene;
+struct wlr_scene_buffer;
 struct wlr_scene_rect;
 struct wlr_scene_tree;
 
@@ -23,6 +25,12 @@ struct fbwl_ui_menu_env {
     struct wlr_scene_tree *layer_overlay;
     const struct fbwl_decor_theme *decor_theme;
     struct wl_display *wl_display;
+};
+
+enum fbwl_menu_search_mode {
+    FBWL_MENU_SEARCH_NOWHERE = 0,
+    FBWL_MENU_SEARCH_ITEMSTART,
+    FBWL_MENU_SEARCH_SOMEWHERE,
 };
 
 struct fbwl_menu_ui {
@@ -34,7 +42,10 @@ struct fbwl_menu_ui {
     struct fbwl_view *target_view;
 
     struct fbwl_ui_menu_env env;
+    uint8_t alpha;
     int menu_delay_ms;
+    enum fbwl_menu_search_mode search_mode;
+    char search_pattern[64];
     struct wl_event_source *submenu_timer;
     ssize_t hovered_idx;
     size_t submenu_pending_idx;
@@ -43,18 +54,22 @@ struct fbwl_menu_ui {
     int y;
     int width;
     int item_h;
+    bool any_icons;
 
     struct wlr_scene_tree *tree;
     struct wlr_scene_rect *bg;
     struct wlr_scene_rect *highlight;
     struct wlr_scene_rect **item_rects;
     size_t item_rect_count;
+    struct wlr_scene_buffer **item_labels;
+    size_t item_label_count;
 };
 
 struct fbwl_ui_menu_hooks {
     void *userdata;
     void (*spawn)(void *userdata, const char *cmd);
     void (*terminate)(void *userdata);
+    void (*server_action)(void *userdata, enum fbwl_menu_server_action action, int arg, const char *cmd);
     void (*view_close)(void *userdata, struct fbwl_view *view);
     void (*view_set_minimized)(void *userdata, struct fbwl_view *view, bool minimized, const char *why);
     void (*view_set_maximized)(void *userdata, struct fbwl_view *view, bool maximized);

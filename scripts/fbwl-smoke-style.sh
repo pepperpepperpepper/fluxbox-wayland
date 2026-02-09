@@ -25,12 +25,36 @@ cleanup() {
 trap cleanup EXIT
 
 cat >"$STYLE_FILE" <<'EOF'
-# Minimal Fluxbox style subset for fbwl smoke testing.
-window.borderWidth: 10
-window.borderColor: #112233
+# Representative Fluxbox style fragment (based on data/styles/BlueNight).
+toolbar: Flat Solid CrossDiagonal
+toolbar.color: #000000
+toolbar.colorTo: #0e1a27
+toolbar.textColor: #333333
+toolbar.font: lucidasans-10
+toolbar.clock.color: #40545d
+toolbar.clock.textColor: #ffffff
+toolbar.height: 55
+
+menu.frame: Flat Gradient CrossDiagonal
+menu.frame.color: #40545d
+menu.frame.colorTo: #0e1a27
+menu.frame.textColor: #ffffff
+menu.frame.font: lucidasans-10
+menu.frame.disableColor: #777777
+menu.hilite.color: #80949d
+menu.hilite.colorTo: #4e5a67
+menu.hilite.textColor: #ffffff
+
 window.title.height: 40
+borderWidth: 10
+borderColor: #112233
 window.title.focus.color: #334455
+window.title.focus.colorTo: #445566
 window.title.unfocus.color: #556677
+window.title.unfocus.colorTo: #667788
+window.button.focus.color: rgb:9B/9B/9B
+window.button.focus.colorTo: rgb:42/42/42
+window.font: lucidasans-10
 EOF
 
 : >"$LOG"
@@ -44,6 +68,37 @@ FBW_PID=$!
 
 timeout 5 bash -c "until rg -q 'Running fluxbox-wayland' '$LOG'; do sleep 0.05; done"
 timeout 5 bash -c "until rg -q 'Style: loaded .*\\(border=10 title_h=40\\)' '$LOG'; do sleep 0.05; done"
+timeout 5 bash -c "until rg -q 'Style: ignored key=toolbar\\.clock\\.color' '$LOG'; do sleep 0.05; done"
+timeout 5 bash -c "until rg -q 'Toolbar: built .* h=55 ' '$LOG'; do sleep 0.05; done"
+
+if rg -q 'Style: ignored key=borderWidth' "$LOG"; then
+  echo "unexpected: borderWidth should be parsed (not ignored)" >&2
+  exit 1
+fi
+if rg -q 'Style: ignored key=borderColor' "$LOG"; then
+  echo "unexpected: borderColor should be parsed (not ignored)" >&2
+  exit 1
+fi
+if rg -q 'Style: ignored key=toolbar\\.colorTo' "$LOG"; then
+  echo "unexpected: toolbar.colorTo should be parsed (not ignored)" >&2
+  exit 1
+fi
+if rg -q 'Style: ignored key=menu\\.frame\\.colorTo' "$LOG"; then
+  echo "unexpected: menu.frame.colorTo should be parsed (not ignored)" >&2
+  exit 1
+fi
+if rg -q 'Style: ignored key=menu\\.hilite\\.colorTo' "$LOG"; then
+  echo "unexpected: menu.hilite.colorTo should be parsed (not ignored)" >&2
+  exit 1
+fi
+if rg -q 'Style: ignored key=window\\.title\\.focus\\.colorTo' "$LOG"; then
+  echo "unexpected: window.title.focus.colorTo should be parsed (not ignored)" >&2
+  exit 1
+fi
+if rg -q 'Style: ignored key=menu\\.frame\\.font' "$LOG"; then
+  echo "unexpected: menu.frame.font should be parsed (not ignored)" >&2
+  exit 1
+fi
 
 ./fbwl-smoke-client --socket "$SOCKET" --title client-style --stay-ms 10000 --xdg-decoration >/dev/null 2>&1 &
 CLIENT_PID=$!

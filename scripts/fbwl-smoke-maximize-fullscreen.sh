@@ -45,10 +45,19 @@ CLIENT_PID=$!
 
 timeout 5 bash -c "until rg -q 'Surface size: client-mf 32x32' '$LOG'; do sleep 0.05; done"
 
+place_line="$(rg -m1 'Place: client-mf ' "$LOG" || true)"
+if [[ "$place_line" =~ usable=([-0-9]+),([-0-9]+)[[:space:]]([0-9]+)x([0-9]+)[[:space:]] ]]; then
+  USABLE_W="${BASH_REMATCH[3]}"
+  USABLE_H="${BASH_REMATCH[4]}"
+else
+  echo "failed to parse Place line for client-mf: $place_line" >&2
+  exit 1
+fi
+
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" key alt-m
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Maximize: client-mf on w=$OUT_W h=$OUT_H"
-timeout 5 bash -c "until rg -q 'Surface size: client-mf ${OUT_W}x${OUT_H}' '$LOG'; do sleep 0.05; done"
+tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Maximize: client-mf on w=$USABLE_W h=$USABLE_H"
+timeout 5 bash -c "until rg -q 'Surface size: client-mf ${USABLE_W}x${USABLE_H}' '$LOG'; do sleep 0.05; done"
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" key alt-m

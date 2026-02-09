@@ -31,6 +31,9 @@ cleanup() {
   if [[ -n "${TAB_B_PID:-}" ]]; then kill "$TAB_B_PID" 2>/dev/null || true; fi
   if [[ -n "${FOCUS_A_PID:-}" ]]; then kill "$FOCUS_A_PID" 2>/dev/null || true; fi
   if [[ -n "${FOCUS_B_PID:-}" ]]; then kill "$FOCUS_B_PID" 2>/dev/null || true; fi
+  if [[ -n "${CYCLE_1_PID:-}" ]]; then kill "$CYCLE_1_PID" 2>/dev/null || true; fi
+  if [[ -n "${CYCLE_2_PID:-}" ]]; then kill "$CYCLE_2_PID" 2>/dev/null || true; fi
+  if [[ -n "${CYCLE_3_PID:-}" ]]; then kill "$CYCLE_3_PID" 2>/dev/null || true; fi
   if [[ -n "${FBW_PID:-}" ]]; then kill "$FBW_PID" 2>/dev/null || true; fi
   wait 2>/dev/null || true
 }
@@ -93,6 +96,8 @@ Mod1 1 :Tab 1
 Mod1 2 :Tab 2
 Mod1 I :NextWindow {groups} (class=fbwl-keys-focus-a)
 Mod1 Escape :NextWindow {groups} (class=fbwl-keys-focus-b)
+Mod1 Control 7 :NextWindow {static groups} (class=fbwl-keys-cycle-.*)
+Mod1 Control 8 :PrevWindow {static groups} (class=fbwl-keys-cycle-.*)
 Mod1 F2 :KeyMode KeysMode None Escape
 KeysMode: Mod1 Return :ExecCommand touch '$MARK_MODE'
 KeysMode: OnDesktop Mouse1 :ExecCommand touch '$MARK_MODE_MOUSE'
@@ -155,7 +160,7 @@ timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Menu: open at 
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" click 20 236
-timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Policy: workspace switch to 2'; do sleep 0.05; done"
+timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Policy: workspace switch( head=[0-9]+)? to 2'; do sleep 0.05; done"
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-smoke-client --socket "$SOCKET" --title keys-tab-a --app-id fbwl-keys-tab-a --stay-ms 10000 >/dev/null 2>&1 &
@@ -201,5 +206,36 @@ timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Focus: keys-fo
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" key alt-escape
 timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Focus: keys-focus-b'; do sleep 0.05; done"
+
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-smoke-client --socket "$SOCKET" --title keys-cycle-1 --app-id fbwl-keys-cycle-1 --stay-ms 10000 >/dev/null 2>&1 &
+CYCLE_1_PID=$!
+timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Focus: keys-cycle-1'; do sleep 0.05; done"
+
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-smoke-client --socket "$SOCKET" --title keys-cycle-2 --app-id fbwl-keys-cycle-2 --stay-ms 10000 >/dev/null 2>&1 &
+CYCLE_2_PID=$!
+timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Focus: keys-cycle-2'; do sleep 0.05; done"
+
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-smoke-client --socket "$SOCKET" --title keys-cycle-3 --app-id fbwl-keys-cycle-3 --stay-ms 10000 >/dev/null 2>&1 &
+CYCLE_3_PID=$!
+timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Focus: keys-cycle-3'; do sleep 0.05; done"
+
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-input-injector --socket "$SOCKET" key alt-ctrl-7
+timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Focus: keys-cycle-1'; do sleep 0.05; done"
+
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-input-injector --socket "$SOCKET" key alt-ctrl-7
+timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Focus: keys-cycle-2'; do sleep 0.05; done"
+
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-input-injector --socket "$SOCKET" key alt-ctrl-8
+timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Focus: keys-cycle-1'; do sleep 0.05; done"
+
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-input-injector --socket "$SOCKET" key alt-ctrl-8
+timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Focus: keys-cycle-3'; do sleep 0.05; done"
 
 echo "ok: keys file smoke passed (socket=$SOCKET log=$LOG keys_file=$KEYS_FILE)"

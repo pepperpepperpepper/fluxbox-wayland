@@ -38,6 +38,8 @@ cat >"$APPS_FILE" <<EOF
 [app] (name=fbwl-xw-inst)
   [Workspace] {1}
   [Jump] {yes}
+  [Deco] {none}
+  [Maximized] {horz}
 [end]
 EOF
 
@@ -58,6 +60,7 @@ if [[ -z "$DISPLAY_NAME" ]]; then
   exit 1
 fi
 
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 DISPLAY="$DISPLAY_NAME" ./fbx11-smoke-client \
   --title xw-apps \
   --class fbwl-xw-class \
@@ -68,8 +71,26 @@ DISPLAY="$DISPLAY_NAME" ./fbx11-smoke-client \
   >/dev/null 2>&1 &
 X11_PID=$!
 
+START=$((OFFSET + 1))
 timeout 10 bash -c "until rg -q 'XWayland: map ' '$LOG'; do sleep 0.05; done"
 timeout 10 bash -c "until rg -q 'Focus: xw-apps' '$LOG'; do sleep 0.05; done"
 timeout 10 bash -c "until ./fbwl-remote --socket \"$SOCKET\" get-workspace | rg -q '^ok workspace=2$'; do sleep 0.05; done"
+
+timeout 10 bash -c "until tail -c +$START '$LOG' | rg -q 'Apps: applied .*app_id=fbwl-xw-class .*maximized=1'; do sleep 0.05; done"
+timeout 10 bash -c "until tail -c +$START '$LOG' | rg -q 'MaximizeAxes: xw-apps horz=1 vert=0 '; do sleep 0.05; done"
+
+maxh_line="$(tail -c +$START "$LOG" | rg -m1 'MaximizeAxes: xw-apps horz=1 vert=0 ')"
+if [[ "$maxh_line" =~ w=([0-9]+)\ h=([0-9]+) ]]; then
+  MAXH_W="${BASH_REMATCH[1]}"
+  MAXH_H="${BASH_REMATCH[2]}"
+else
+  echo "failed to parse MaximizeAxes line (xw-apps): $maxh_line" >&2
+  exit 1
+fi
+if [[ "$MAXH_H" -ne 96 ]]; then
+  echo "unexpected MaximizeAxes height for xw-apps: expected=96 got=$MAXH_H line=$maxh_line" >&2
+  exit 1
+fi
+timeout 10 bash -c "until tail -c +$START '$LOG' | rg -q 'Surface size: xw-apps ${MAXH_W}x${MAXH_H}'; do sleep 0.05; done"
 
 echo "ok: apps rules (XWayland instance match) smoke passed (socket=$SOCKET display=$DISPLAY_NAME log=$LOG apps=$APPS_FILE)"

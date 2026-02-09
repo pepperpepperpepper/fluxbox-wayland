@@ -24,7 +24,7 @@ done
 pick_display_num() {
   local base="${1:-99}"
   local d
-  for ((d = base; d <= base + 20; d++)); do
+  for ((d = base; d <= base + 200; d++)); do
     if [[ ! -e "/tmp/.X11-unix/X$d" && ! -e "/tmp/.X${d}-lock" ]]; then
       echo "$d"
       return 0
@@ -33,7 +33,11 @@ pick_display_num() {
   return 1
 }
 
-DISPLAY_NUM="$(pick_display_num "${DISPLAY_NUM:-99}")"
+DISPLAY_NUM="$(pick_display_num "${DISPLAY_NUM:-99}" || true)"
+if [[ -z "$DISPLAY_NUM" ]]; then
+  echo "failed to find a free X display number" >&2
+  exit 1
+fi
 XVFB_LOG="${XVFB_LOG:-/tmp/xvfb-portal-$UID-$$.log}"
 
 cleanup() {

@@ -48,7 +48,7 @@ static void fbwl_ui_cmd_dialog_render(struct fbwl_cmd_dialog_ui *ui) {
     }
 
     const char *txt = ui->text != NULL ? ui->text : "";
-    const char *prefix = "Run: ";
+    const char *prefix = ui->prefix[0] != '\0' ? ui->prefix : "Run: ";
     size_t need = strlen(prefix) + strlen(txt) + 1;
     char *render = malloc(need);
     if (render == NULL) {
@@ -57,7 +57,7 @@ static void fbwl_ui_cmd_dialog_render(struct fbwl_cmd_dialog_ui *ui) {
     (void)snprintf(render, need, "%s%s", prefix, txt);
 
     const float fg[4] = {1.0f, 1.0f, 1.0f, 1.0f};
-    struct wlr_buffer *buf = fbwl_text_buffer_create(render, ui->width, ui->height, 8, fg);
+    struct wlr_buffer *buf = fbwl_text_buffer_create(render, ui->width, ui->height, 8, fg, ui->font);
     free(render);
     if (buf == NULL) {
         wlr_scene_buffer_set_buffer(ui->label, NULL);
@@ -118,13 +118,19 @@ void fbwl_ui_cmd_dialog_close(struct fbwl_cmd_dialog_ui *ui, const char *why) {
     ui->open = false;
     free(ui->text);
     ui->text = NULL;
+    ui->font[0] = '\0';
+    ui->prefix[0] = '\0';
+    ui->submit = NULL;
+    ui->submit_userdata = NULL;
 
     wlr_log(WLR_INFO, "CmdDialog: close reason=%s", why != NULL ? why : "(null)");
 }
 
-void fbwl_ui_cmd_dialog_open(struct fbwl_cmd_dialog_ui *ui,
+void fbwl_ui_cmd_dialog_open_prompt(struct fbwl_cmd_dialog_ui *ui,
         struct wlr_scene *scene, struct wlr_scene_tree *layer_overlay,
-        const struct fbwl_decor_theme *decor_theme, struct wlr_output_layout *output_layout) {
+        const struct fbwl_decor_theme *decor_theme, struct wlr_output_layout *output_layout,
+        const char *prefix, const char *initial_text,
+        fbwl_cmd_dialog_submit_fn submit, void *submit_userdata) {
     if (ui == NULL || scene == NULL || decor_theme == NULL) {
         return;
     }
@@ -138,9 +144,17 @@ void fbwl_ui_cmd_dialog_open(struct fbwl_cmd_dialog_ui *ui,
     if (ui->width < 200) {
         ui->width = 200;
     }
+    (void)snprintf(ui->font, sizeof(ui->font), "%s", decor_theme->window_font);
+    if (prefix != NULL && *prefix != '\0') {
+        (void)snprintf(ui->prefix, sizeof(ui->prefix), "%s", prefix);
+    } else {
+        (void)snprintf(ui->prefix, sizeof(ui->prefix), "%s", "Run: ");
+    }
+    ui->submit = submit;
+    ui->submit_userdata = submit_userdata;
 
     free(ui->text);
-    ui->text = strdup("");
+    ui->text = strdup(initial_text != NULL ? initial_text : "");
     if (ui->text == NULL) {
         ui->open = false;
         return;
@@ -167,6 +181,13 @@ void fbwl_ui_cmd_dialog_open(struct fbwl_cmd_dialog_ui *ui,
     fbwl_ui_cmd_dialog_update_position(ui, output_layout);
 
     wlr_log(WLR_INFO, "CmdDialog: open");
+}
+
+void fbwl_ui_cmd_dialog_open(struct fbwl_cmd_dialog_ui *ui,
+        struct wlr_scene *scene, struct wlr_scene_tree *layer_overlay,
+        const struct fbwl_decor_theme *decor_theme, struct wlr_output_layout *output_layout) {
+    fbwl_ui_cmd_dialog_open_prompt(ui, scene, layer_overlay, decor_theme, output_layout,
+        "Run: ", "", NULL, NULL);
 }
 
 static bool fbwl_ui_cmd_dialog_text_backspace(struct fbwl_cmd_dialog_ui *ui) {
@@ -200,7 +221,12 @@ bool fbwl_ui_cmd_dialog_handle_key(struct fbwl_cmd_dialog_ui *ui, xkb_keysym_t s
     }
     if (sym == XKB_KEY_Return || sym == XKB_KEY_KP_Enter) {
         const char *cmd = ui->text != NULL ? ui->text : "";
-        if (*cmd != '\0') {
+        if (ui->submit != NULL) {
+            bool ok = ui->submit(ui->submit_userdata, cmd);
+            if (ok) {
+                fbwl_ui_cmd_dialog_close(ui, "submit");
+            }
+        } else if (*cmd != '\0') {
             wlr_log(WLR_INFO, "CmdDialog: execute cmd=%s", cmd);
             fbwl_spawn(cmd);
             fbwl_ui_cmd_dialog_close(ui, "execute");
@@ -241,4 +267,3 @@ bool fbwl_ui_cmd_dialog_handle_key(struct fbwl_cmd_dialog_ui *ui, xkb_keysym_t s
     fbwl_ui_cmd_dialog_render(ui);
     return true;
 }
-

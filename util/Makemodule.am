@@ -49,7 +49,8 @@ bin_PROGRAMS += \
 	fbwl-input-injector \
 	fbwl-foreign-toplevel-client \
 	fbwl-layer-shell-client \
-	fbx11-smoke-client
+	fbx11-smoke-client \
+	fbx11-xembed-tray-client
 
 if HAVE_SYSTEMD
 bin_PROGRAMS += \
@@ -513,5 +514,15 @@ fbx11_smoke_client_CPPFLAGS = \
 	$(XCB_CFLAGS)
 
 fbx11_smoke_client_LDADD = \
+	$(XCB_LIBS)
+
+fbx11_xembed_tray_client_SOURCES = \
+	util/fbx11-xembed-tray-client.c
+
+fbx11_xembed_tray_client_CPPFLAGS = \
+	$(AM_CPPFLAGS) \
+	$(XCB_CFLAGS)
+
+fbx11_xembed_tray_client_LDADD = \
 	$(XCB_LIBS)
 endif

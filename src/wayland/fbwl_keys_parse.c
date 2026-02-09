@@ -12,6 +12,8 @@
 
 #include "wayland/fbwl_fluxbox_cmd.h"
 
+static uint32_t next_chain_id = 1;
+
 static char *trim_inplace(char *s) {
     if (s == NULL) {
         return NULL;
@@ -152,9 +154,6 @@ bool fbwl_keys_parse_file(const char *path, fbwl_keys_add_binding_fn add_binding
             }
         }
 
-        uint32_t mods = 0;
-        bool ok = true;
-
         char *save = NULL;
         char *tok = NULL;
         const char *tokens[32];
@@ -189,58 +188,91 @@ bool fbwl_keys_parse_file(const char *path, fbwl_keys_add_binding_fn add_binding
             continue;
         }
 
-        for (size_t i = 0; i + 1 < ntok; i++) {
-            if (i < start) {
+        struct key_step {
+            enum fbwl_keybinding_key_kind kind;
+            uint32_t keycode;
+            xkb_keysym_t sym;
+            uint32_t modifiers;
+        };
+
+        struct key_step steps[16];
+        size_t nsteps = 0;
+        uint32_t mods = 0;
+        bool ok = true;
+        bool change_workspace = false;
+
+        for (size_t i = start; i < ntok; i++) {
+            const char *t = tokens[i];
+            if (t == NULL || *t == '\0') {
                 continue;
             }
-            if (strncasecmp(tokens[i], "on", 2) == 0) {
+            if (strncasecmp(t, "on", 2) == 0) {
                 continue;
             }
-            if (strncasecmp(tokens[i], "mouse", 5) == 0 || strncasecmp(tokens[i], "button", 6) == 0) {
+            if (strncasecmp(t, "mouse", 5) == 0 || strncasecmp(t, "button", 6) == 0 ||
+                    strncasecmp(t, "click", 5) == 0 || strncasecmp(t, "move", 4) == 0) {
                 ok = false;
                 break;
             }
-            if (!parse_keys_modifier(tokens[i], &mods)) {
-                ok = false;
-                break;
+            if (parse_keys_modifier(t, &mods)) {
+                continue;
             }
-        }
-        if (!ok) {
-            continue;
-        }
 
-        const char *key_name = tokens[ntok - 1];
-        if (key_name == NULL || *key_name == '\0') {
-            continue;
-        }
+            enum fbwl_keybinding_key_kind key_kind = FBWL_KEYBIND_KEYSYM;
+            uint32_t keycode = 0;
+            xkb_keysym_t sym = XKB_KEY_NoSymbol;
 
-        enum fbwl_keybinding_key_kind key_kind = FBWL_KEYBIND_KEYSYM;
-        uint32_t keycode = 0;
-        xkb_keysym_t sym = xkb_keysym_from_name(key_name, XKB_KEYSYM_CASE_INSENSITIVE);
-        if (sym != XKB_KEY_NoSymbol) {
-            key_kind = FBWL_KEYBIND_KEYSYM;
-        } else {
-            bool is_keycode = true;
-            for (const char *p = key_name; *p != '\0'; p++) {
-                if (!isdigit((unsigned char)*p)) {
-                    is_keycode = false;
-                    break;
+            if (strcasecmp(t, "arg") == 0) {
+                key_kind = FBWL_KEYBIND_PLACEHOLDER;
+            } else if (strcasecmp(t, "changeworkspace") == 0) {
+                key_kind = FBWL_KEYBIND_CHANGE_WORKSPACE;
+                mods = 0;
+                change_workspace = true;
+            } else {
+                sym = xkb_keysym_from_name(t, XKB_KEYSYM_CASE_INSENSITIVE);
+                if (sym != XKB_KEY_NoSymbol) {
+                    key_kind = FBWL_KEYBIND_KEYSYM;
+                } else {
+                    bool is_keycode = true;
+                    for (const char *p = t; *p != '\0'; p++) {
+                        if (!isdigit((unsigned char)*p)) {
+                            is_keycode = false;
+                            break;
+                        }
+                    }
+                    if (!is_keycode) {
+                        ok = false;
+                        break;
+                    }
+
+                    char *end = NULL;
+                    long code = strtol(t, &end, 10);
+                    if (end == t || *end != '\0' || code < 0 || code > 100000) {
+                        ok = false;
+                        break;
+                    }
+                    key_kind = FBWL_KEYBIND_KEYCODE;
+                    keycode = (uint32_t)code;
                 }
             }
-            if (!is_keycode) {
-                continue;
-            }
 
-            char *end = NULL;
-            long code = strtol(key_name, &end, 10);
-            if (end == key_name || *end != '\0') {
-                continue;
+            if (nsteps >= (sizeof(steps) / sizeof(steps[0]))) {
+                ok = false;
+                break;
             }
-            if (code < 0 || code > 100000) {
-                continue;
-            }
-            key_kind = FBWL_KEYBIND_KEYCODE;
-            keycode = (uint32_t)code;
+            steps[nsteps++] = (struct key_step){
+                .kind = key_kind,
+                .keycode = keycode,
+                .sym = sym,
+                .modifiers = mods,
+            };
+            mods = 0;
+        }
+        if (!ok || nsteps == 0 || mods != 0) {
+            continue;
+        }
+        if (change_workspace && nsteps != 1) {
+            continue;
         }
 
         char *cmd = rhs;
@@ -263,8 +295,36 @@ bool fbwl_keys_parse_file(const char *path, fbwl_keys_add_binding_fn add_binding
             continue;
         }
 
-        if (add_binding(userdata, key_kind, keycode, sym, mods, action, action_arg, action_cmd, mode)) {
-            added++;
+        if (nsteps == 1) {
+            if (add_binding(userdata, steps[0].kind, steps[0].keycode, steps[0].sym, steps[0].modifiers,
+                    action, action_arg, action_cmd, mode)) {
+                added++;
+            }
+        } else if (!change_workspace) {
+            const uint32_t chain_id = next_chain_id++;
+            char chain_modes[16][64];
+            for (size_t i = 0; i + 1 < nsteps && i < (sizeof(chain_modes) / sizeof(chain_modes[0])); i++) {
+                (void)snprintf(chain_modes[i], sizeof(chain_modes[i]), "__fbwl_chain__%u_%zu", chain_id, i + 1);
+            }
+
+            bool chain_ok = true;
+            for (size_t i = 0; i + 1 < nsteps; i++) {
+                const char *binding_mode = (i == 0) ? mode : chain_modes[i - 1];
+                const char *next_mode = chain_modes[i];
+                if (!add_binding(userdata, steps[i].kind, steps[i].keycode, steps[i].sym, steps[i].modifiers,
+                        FBWL_KEYBIND_KEYMODE, 0, next_mode, binding_mode)) {
+                    chain_ok = false;
+                } else {
+                    added++;
+                }
+            }
+            if (chain_ok) {
+                const char *leaf_mode = chain_modes[nsteps - 2];
+                if (add_binding(userdata, steps[nsteps - 1].kind, steps[nsteps - 1].keycode, steps[nsteps - 1].sym,
+                        steps[nsteps - 1].modifiers, action, action_arg, action_cmd, leaf_mode)) {
+                    added++;
+                }
+            }
         }
     }
 
@@ -285,29 +345,52 @@ static enum fbwl_mousebinding_context parse_mouse_context(const char *token) {
     if (strcasecmp(token, "ondesktop") == 0) {
         return FBWL_MOUSEBIND_DESKTOP;
     }
+    if (strcasecmp(token, "onslit") == 0) {
+        return FBWL_MOUSEBIND_SLIT;
+    }
     if (strcasecmp(token, "onwindow") == 0) {
         return FBWL_MOUSEBIND_WINDOW;
     }
     if (strcasecmp(token, "ontitlebar") == 0) {
         return FBWL_MOUSEBIND_TITLEBAR;
     }
+    if (strcasecmp(token, "ontab") == 0) {
+        return FBWL_MOUSEBIND_TAB;
+    }
     if (strcasecmp(token, "ontoolbar") == 0) {
         return FBWL_MOUSEBIND_TOOLBAR;
     }
-    if (strcasecmp(token, "onwindowborder") == 0 ||
-            strcasecmp(token, "onleftgrip") == 0 ||
-            strcasecmp(token, "onrightgrip") == 0) {
+    if (strcasecmp(token, "onwindowborder") == 0) {
         return FBWL_MOUSEBIND_WINDOW_BORDER;
+    }
+    if (strcasecmp(token, "onleftgrip") == 0) {
+        return FBWL_MOUSEBIND_LEFT_GRIP;
+    }
+    if (strcasecmp(token, "onrightgrip") == 0) {
+        return FBWL_MOUSEBIND_RIGHT_GRIP;
     }
     return FBWL_MOUSEBIND_ANY;
 }
 
-static int parse_mouse_button(const char *token) {
-    if (token == NULL) {
-        return 0;
+static bool parse_mouse_event_and_button(const char *token, enum fbwl_mousebinding_event_kind *out_kind, int *out_button) {
+    if (out_kind != NULL) {
+        *out_kind = FBWL_MOUSEBIND_EVENT_PRESS;
     }
-    if (!starts_with_token(token, "mouse") && !starts_with_token(token, "button") && !starts_with_token(token, "move")) {
-        return 0;
+    if (out_button != NULL) {
+        *out_button = 0;
+    }
+    if (token == NULL) {
+        return false;
+    }
+    enum fbwl_mousebinding_event_kind kind = FBWL_MOUSEBIND_EVENT_PRESS;
+    if (starts_with_token(token, "mouse") || starts_with_token(token, "button")) {
+        kind = FBWL_MOUSEBIND_EVENT_PRESS;
+    } else if (starts_with_token(token, "click")) {
+        kind = FBWL_MOUSEBIND_EVENT_CLICK;
+    } else if (starts_with_token(token, "move")) {
+        kind = FBWL_MOUSEBIND_EVENT_MOVE;
+    } else {
+        return false;
     }
 
     const char *p = token;
@@ -315,17 +398,24 @@ static int parse_mouse_button(const char *token) {
         p++;
     }
     if (*p == '\0') {
-        return 0;
+        return false;
     }
     char *end = NULL;
     long v = strtol(p, &end, 10);
     if (end == p) {
-        return 0;
+        return false;
     }
     if (v < 1 || v > 32) {
-        return 0;
+        return false;
     }
-    return (int)v;
+
+    if (out_kind != NULL) {
+        *out_kind = kind;
+    }
+    if (out_button != NULL) {
+        *out_button = (int)v;
+    }
+    return true;
 }
 
 bool fbwl_keys_parse_file_mouse(const char *path, fbwl_keys_add_mouse_binding_fn add_binding, void *userdata,
@@ -417,8 +507,10 @@ bool fbwl_keys_parse_file_mouse(const char *path, fbwl_keys_add_mouse_binding_fn
         }
 
         enum fbwl_mousebinding_context context = FBWL_MOUSEBIND_ANY;
+        enum fbwl_mousebinding_event_kind event_kind = FBWL_MOUSEBIND_EVENT_PRESS;
         int button = 0;
         uint32_t mods = 0;
+        bool is_double = false;
 
         bool ok = true;
         for (size_t i = 0; i < ntok; i++) {
@@ -434,12 +526,15 @@ bool fbwl_keys_parse_file_mouse(const char *path, fbwl_keys_add_mouse_binding_fn
                 context = c;
                 continue;
             }
-            int b = parse_mouse_button(t);
-            if (b != 0) {
+            enum fbwl_mousebinding_event_kind k = FBWL_MOUSEBIND_EVENT_PRESS;
+            int b = 0;
+            if (parse_mouse_event_and_button(t, &k, &b)) {
                 button = b;
+                event_kind = k;
                 continue;
             }
             if (strcasecmp(t, "double") == 0) {
+                is_double = true;
                 continue;
             }
             if (starts_with_token(t, "on")) {
@@ -452,6 +547,9 @@ bool fbwl_keys_parse_file_mouse(const char *path, fbwl_keys_add_mouse_binding_fn
         }
         if (!ok || button == 0) {
             continue;
+        }
+        if (is_double && event_kind != FBWL_MOUSEBIND_EVENT_PRESS) {
+            is_double = false;
         }
 
         char *cmd = rhs;
@@ -474,7 +572,7 @@ bool fbwl_keys_parse_file_mouse(const char *path, fbwl_keys_add_mouse_binding_fn
             continue;
         }
 
-        if (add_binding(userdata, context, button, mods, action, action_arg, action_cmd, mode)) {
+        if (add_binding(userdata, context, event_kind, button, mods, is_double, action, action_arg, action_cmd, mode)) {
             added++;
         }
     }

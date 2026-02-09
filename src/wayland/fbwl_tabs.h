@@ -36,10 +36,17 @@ bool fbwl_tabs_view_is_active(const struct fbwl_view *view);
 bool fbwl_tabs_attach(struct fbwl_view *view, struct fbwl_view *anchor, const char *reason);
 void fbwl_tabs_detach(struct fbwl_view *view, const char *reason);
 void fbwl_tabs_activate(struct fbwl_view *view, const char *reason);
+bool fbwl_tabs_move_left(struct fbwl_view *view, const char *reason);
+bool fbwl_tabs_move_right(struct fbwl_view *view, const char *reason);
 
 struct fbwl_view *fbwl_tabs_pick_next(const struct fbwl_view *view);
 struct fbwl_view *fbwl_tabs_pick_prev(const struct fbwl_view *view);
 struct fbwl_view *fbwl_tabs_pick_index0(const struct fbwl_view *view, int tab_index0);
+
+// Helpers for implementing UI behaviors without exposing fbwl_tab_group internals.
+size_t fbwl_tabs_group_mapped_count(const struct fbwl_view *view);
+struct fbwl_view *fbwl_tabs_group_mapped_at(const struct fbwl_view *view, size_t tab_index0);
+struct fbwl_view *fbwl_tabs_group_active_view(const struct fbwl_view *view);
 
 void fbwl_tabs_repair(struct fbwl_server *server);
 

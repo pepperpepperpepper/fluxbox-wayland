@@ -35,4 +35,16 @@ void fbwl_ui_osd_show_workspace(struct fbwl_osd_ui *ui,
     struct wlr_scene *scene, struct wlr_scene_tree *layer_top,
     const struct fbwl_decor_theme *decor_theme, struct wlr_output_layout *output_layout,
     int workspace, const char *workspace_name);
+void fbwl_ui_osd_show_attention(struct fbwl_osd_ui *ui,
+    struct wlr_scene *scene, struct wlr_scene_tree *layer_top,
+    const struct fbwl_decor_theme *decor_theme, struct wlr_output_layout *output_layout,
+    const char *title);
+void fbwl_ui_osd_show_window_position(struct fbwl_osd_ui *ui,
+    struct wlr_scene *scene, struct wlr_scene_tree *layer_top,
+    const struct fbwl_decor_theme *decor_theme, struct wlr_output_layout *output_layout,
+    int x, int y);
+void fbwl_ui_osd_show_window_geometry(struct fbwl_osd_ui *ui,
+    struct wlr_scene *scene, struct wlr_scene_tree *layer_top,
+    const struct fbwl_decor_theme *decor_theme, struct wlr_output_layout *output_layout,
+    int width, int height);
 void fbwl_ui_osd_destroy(struct fbwl_osd_ui *ui);

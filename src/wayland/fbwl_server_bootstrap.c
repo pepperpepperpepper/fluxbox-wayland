@@ -37,7 +37,10 @@
 #include "wayland/fbwl_keys_parse.h"
 #include "wayland/fbwl_scene_layers.h"
 #include "wayland/fbwl_server_internal.h"
+#include "wayland/fbwl_string_list.h"
+#include "wayland/fbwl_ui_menu_icon.h"
 #include "wayland/fbwl_style_parse.h"
+#include "wayland/fbwl_ui_menu_search.h"
 #include "wayland/fbwl_util.h"
 
 static int handle_signal(int signo, void *data) {
@@ -47,326 +50,18 @@ static int handle_signal(int signo, void *data) {
     return 0;
 }
 
-static enum fbwl_focus_model parse_focus_model(const char *s) {
-    if (s == NULL) {
-        return FBWL_FOCUS_MODEL_CLICK_TO_FOCUS;
-    }
-    if (strcasecmp(s, "MouseFocus") == 0) {
-        return FBWL_FOCUS_MODEL_MOUSE_FOCUS;
-    }
-    if (strcasecmp(s, "StrictMouseFocus") == 0) {
-        return FBWL_FOCUS_MODEL_STRICT_MOUSE_FOCUS;
-    }
-    return FBWL_FOCUS_MODEL_CLICK_TO_FOCUS;
-}
-
-static const char *focus_model_str(enum fbwl_focus_model model) {
-    switch (model) {
-    case FBWL_FOCUS_MODEL_CLICK_TO_FOCUS:
-        return "ClickToFocus";
-    case FBWL_FOCUS_MODEL_MOUSE_FOCUS:
-        return "MouseFocus";
-    case FBWL_FOCUS_MODEL_STRICT_MOUSE_FOCUS:
-        return "StrictMouseFocus";
-    default:
-        return "ClickToFocus";
-    }
-}
-
-static enum fbwm_window_placement_strategy parse_window_placement(const char *s) {
-    if (s == NULL) {
-        return FBWM_PLACE_ROW_SMART;
-    }
-    if (strcasecmp(s, "RowSmartPlacement") == 0) {
-        return FBWM_PLACE_ROW_SMART;
-    }
-    if (strcasecmp(s, "ColSmartPlacement") == 0) {
-        return FBWM_PLACE_COL_SMART;
-    }
-    if (strcasecmp(s, "CascadePlacement") == 0) {
-        return FBWM_PLACE_CASCADE;
-    }
-    if (strcasecmp(s, "UnderMousePlacement") == 0) {
-        return FBWM_PLACE_UNDER_MOUSE;
-    }
-    if (strcasecmp(s, "RowMinOverlapPlacement") == 0) {
-        return FBWM_PLACE_ROW_MIN_OVERLAP;
-    }
-    if (strcasecmp(s, "ColMinOverlapPlacement") == 0) {
-        return FBWM_PLACE_COL_MIN_OVERLAP;
-    }
-    if (strcasecmp(s, "AutotabPlacement") == 0) {
-        return FBWM_PLACE_AUTOTAB;
-    }
-    return FBWM_PLACE_ROW_SMART;
-}
-
-static const char *window_placement_str(enum fbwm_window_placement_strategy placement) {
-    switch (placement) {
-    case FBWM_PLACE_ROW_SMART:
-        return "RowSmartPlacement";
-    case FBWM_PLACE_COL_SMART:
-        return "ColSmartPlacement";
-    case FBWM_PLACE_CASCADE:
-        return "CascadePlacement";
-    case FBWM_PLACE_UNDER_MOUSE:
-        return "UnderMousePlacement";
-    case FBWM_PLACE_ROW_MIN_OVERLAP:
-        return "RowMinOverlapPlacement";
-    case FBWM_PLACE_COL_MIN_OVERLAP:
-        return "ColMinOverlapPlacement";
-    case FBWM_PLACE_AUTOTAB:
-        return "AutotabPlacement";
-    default:
-        return "RowSmartPlacement";
-    }
-}
-
-static enum fbwl_toolbar_placement parse_toolbar_placement(const char *s) {
-    if (s == NULL) {
-        return FBWL_TOOLBAR_PLACEMENT_BOTTOM_CENTER;
-    }
-    if (strcasecmp(s, "BottomLeft") == 0) {
-        return FBWL_TOOLBAR_PLACEMENT_BOTTOM_LEFT;
-    }
-    if (strcasecmp(s, "BottomCenter") == 0) {
-        return FBWL_TOOLBAR_PLACEMENT_BOTTOM_CENTER;
-    }
-    if (strcasecmp(s, "BottomRight") == 0) {
-        return FBWL_TOOLBAR_PLACEMENT_BOTTOM_RIGHT;
-    }
-    if (strcasecmp(s, "LeftBottom") == 0) {
-        return FBWL_TOOLBAR_PLACEMENT_LEFT_BOTTOM;
-    }
-    if (strcasecmp(s, "LeftCenter") == 0) {
-        return FBWL_TOOLBAR_PLACEMENT_LEFT_CENTER;
-    }
-    if (strcasecmp(s, "LeftTop") == 0) {
-        return FBWL_TOOLBAR_PLACEMENT_LEFT_TOP;
-    }
-    if (strcasecmp(s, "RightBottom") == 0) {
-        return FBWL_TOOLBAR_PLACEMENT_RIGHT_BOTTOM;
-    }
-    if (strcasecmp(s, "RightCenter") == 0) {
-        return FBWL_TOOLBAR_PLACEMENT_RIGHT_CENTER;
-    }
-    if (strcasecmp(s, "RightTop") == 0) {
-        return FBWL_TOOLBAR_PLACEMENT_RIGHT_TOP;
-    }
-    if (strcasecmp(s, "TopLeft") == 0) {
-        return FBWL_TOOLBAR_PLACEMENT_TOP_LEFT;
-    }
-    if (strcasecmp(s, "TopCenter") == 0) {
-        return FBWL_TOOLBAR_PLACEMENT_TOP_CENTER;
-    }
-    if (strcasecmp(s, "TopRight") == 0) {
-        return FBWL_TOOLBAR_PLACEMENT_TOP_RIGHT;
-    }
-    return FBWL_TOOLBAR_PLACEMENT_BOTTOM_CENTER;
-}
-
-static enum fbwl_tab_focus_model parse_tab_focus_model(const char *s) {
-    if (s == NULL) {
-        return FBWL_TAB_FOCUS_CLICK;
-    }
-    if (strcasecmp(s, "MouseTabFocus") == 0) {
-        return FBWL_TAB_FOCUS_MOUSE;
-    }
-    if (strcasecmp(s, "ClickTabFocus") == 0) {
-        return FBWL_TAB_FOCUS_CLICK;
-    }
-    return FBWL_TAB_FOCUS_CLICK;
-}
-
-static const char *tab_focus_model_str(enum fbwl_tab_focus_model model) {
-    switch (model) {
-    case FBWL_TAB_FOCUS_MOUSE:
-        return "MouseTabFocus";
-    case FBWL_TAB_FOCUS_CLICK:
-    default:
-        return "ClickTabFocus";
-    }
-}
-
-static enum fbwl_tabs_attach_area parse_tabs_attach_area(const char *s) {
-    if (s == NULL) {
-        return FBWL_TABS_ATTACH_WINDOW;
-    }
-    if (strcasecmp(s, "Titlebar") == 0) {
-        return FBWL_TABS_ATTACH_TITLEBAR;
-    }
-    if (strcasecmp(s, "Window") == 0) {
-        return FBWL_TABS_ATTACH_WINDOW;
-    }
-    return FBWL_TABS_ATTACH_WINDOW;
-}
-
-static const char *tabs_attach_area_str(enum fbwl_tabs_attach_area area) {
-    switch (area) {
-    case FBWL_TABS_ATTACH_TITLEBAR:
-        return "Titlebar";
-    case FBWL_TABS_ATTACH_WINDOW:
-    default:
-        return "Window";
-    }
-}
-
-static const char *toolbar_placement_str(enum fbwl_toolbar_placement placement) {
-    switch (placement) {
-    case FBWL_TOOLBAR_PLACEMENT_BOTTOM_LEFT:
-        return "BottomLeft";
-    case FBWL_TOOLBAR_PLACEMENT_BOTTOM_CENTER:
-        return "BottomCenter";
-    case FBWL_TOOLBAR_PLACEMENT_BOTTOM_RIGHT:
-        return "BottomRight";
-    case FBWL_TOOLBAR_PLACEMENT_LEFT_BOTTOM:
-        return "LeftBottom";
-    case FBWL_TOOLBAR_PLACEMENT_LEFT_CENTER:
-        return "LeftCenter";
-    case FBWL_TOOLBAR_PLACEMENT_LEFT_TOP:
-        return "LeftTop";
-    case FBWL_TOOLBAR_PLACEMENT_RIGHT_BOTTOM:
-        return "RightBottom";
-    case FBWL_TOOLBAR_PLACEMENT_RIGHT_CENTER:
-        return "RightCenter";
-    case FBWL_TOOLBAR_PLACEMENT_RIGHT_TOP:
-        return "RightTop";
-    case FBWL_TOOLBAR_PLACEMENT_TOP_LEFT:
-        return "TopLeft";
-    case FBWL_TOOLBAR_PLACEMENT_TOP_CENTER:
-        return "TopCenter";
-    case FBWL_TOOLBAR_PLACEMENT_TOP_RIGHT:
-        return "TopRight";
-    default:
-        return "BottomCenter";
-    }
-}
-
-static uint32_t toolbar_tools_default(void) {
-    return FBWL_TOOLBAR_TOOL_WORKSPACES | FBWL_TOOLBAR_TOOL_ICONBAR | FBWL_TOOLBAR_TOOL_SYSTEMTRAY |
-        FBWL_TOOLBAR_TOOL_CLOCK;
-}
-
-static uint32_t parse_toolbar_tools(const char *s) {
-    if (s == NULL || *s == '\0') {
-        return toolbar_tools_default();
-    }
-
-    uint32_t tools = 0;
-    char *copy = strdup(s);
-    if (copy == NULL) {
-        return toolbar_tools_default();
-    }
-
-    char *save = NULL;
-    for (char *tok = strtok_r(copy, ",", &save); tok != NULL; tok = strtok_r(NULL, ",", &save)) {
-        while (*tok != '\0' && isspace((unsigned char)*tok)) {
-            tok++;
-        }
-        char *end = tok + strlen(tok);
-        while (end > tok && isspace((unsigned char)end[-1])) {
-            end--;
-        }
-        *end = '\0';
-        if (*tok == '\0') {
-            continue;
-        }
-
-        for (char *p = tok; *p != '\0'; p++) {
-            *p = (char)tolower((unsigned char)*p);
-        }
-
-        if (strcmp(tok, "workspacename") == 0 || strcmp(tok, "prevworkspace") == 0 || strcmp(tok, "nextworkspace") == 0) {
-            tools |= FBWL_TOOLBAR_TOOL_WORKSPACES;
-        } else if (strcmp(tok, "iconbar") == 0 || strcmp(tok, "prevwindow") == 0 || strcmp(tok, "nextwindow") == 0) {
-            tools |= FBWL_TOOLBAR_TOOL_ICONBAR;
-        } else if (strcmp(tok, "systemtray") == 0) {
-            tools |= FBWL_TOOLBAR_TOOL_SYSTEMTRAY;
-        } else if (strcmp(tok, "clock") == 0) {
-            tools |= FBWL_TOOLBAR_TOOL_CLOCK;
-        } else if (strncmp(tok, "button.", 7) == 0) {
-            // not implemented yet
-        }
-    }
-
-    free(copy);
-    if (tools == 0) {
-        tools = toolbar_tools_default();
-    }
-    return tools;
-}
-
-static enum fbwm_row_placement_direction parse_row_dir(const char *s) {
-    if (s != NULL && strcasecmp(s, "RightToLeft") == 0) {
-        return FBWM_ROW_RIGHT_TO_LEFT;
-    }
-    return FBWM_ROW_LEFT_TO_RIGHT;
-}
-
-static const char *row_dir_str(enum fbwm_row_placement_direction dir) {
-    return dir == FBWM_ROW_RIGHT_TO_LEFT ? "RightToLeft" : "LeftToRight";
-}
-
-static enum fbwm_col_placement_direction parse_col_dir(const char *s) {
-    if (s != NULL && strcasecmp(s, "BottomToTop") == 0) {
-        return FBWM_COL_BOTTOM_TO_TOP;
-    }
-    return FBWM_COL_TOP_TO_BOTTOM;
-}
-
-static const char *col_dir_str(enum fbwm_col_placement_direction dir) {
-    return dir == FBWM_COL_BOTTOM_TO_TOP ? "BottomToTop" : "TopToBottom";
-}
-
-static char *trim_inplace(char *s) {
-    if (s == NULL) {
-        return NULL;
-    }
-    while (*s != '\0' && isspace((unsigned char)*s)) {
-        s++;
-    }
-    if (*s == '\0') {
-        return s;
-    }
-    char *end = s + strlen(s) - 1;
-    while (end > s && isspace((unsigned char)*end)) {
-        *end = '\0';
-        end--;
-    }
-    return s;
-}
-
-static void apply_workspace_names_from_init(struct fbwm_core *wm, const char *csv) {
-    if (wm == NULL || csv == NULL) {
-        return;
-    }
-
-    fbwm_core_clear_workspace_names(wm);
-
-    char *tmp = strdup(csv);
-    if (tmp == NULL) {
-        return;
-    }
-
-    char *saveptr = NULL;
-    char *tok = strtok_r(tmp, ",", &saveptr);
-    int idx = 0;
-    while (tok != NULL && idx < 1000) {
-        char *name = trim_inplace(tok);
-        if (name != NULL && *name != '\0') {
-            (void)fbwm_core_set_workspace_name(wm, idx, name);
-            idx++;
-        }
-        tok = strtok_r(NULL, ",", &saveptr);
-    }
-
-    free(tmp);
-}
-
 static bool server_keybindings_add_from_keys_file(void *userdata, enum fbwl_keybinding_key_kind key_kind,
         uint32_t keycode, xkb_keysym_t sym, uint32_t modifiers, enum fbwl_keybinding_action action, int arg,
         const char *cmd, const char *mode) {
     struct fbwl_server *server = userdata;
+    if (key_kind == FBWL_KEYBIND_PLACEHOLDER) {
+        return fbwl_keybindings_add_placeholder(&server->keybindings, &server->keybinding_count, modifiers,
+            action, arg, cmd, mode);
+    }
+    if (key_kind == FBWL_KEYBIND_CHANGE_WORKSPACE) {
+        return fbwl_keybindings_add_change_workspace(&server->keybindings, &server->keybinding_count,
+            action, arg, cmd, mode);
+    }
     if (key_kind == FBWL_KEYBIND_KEYCODE) {
         return fbwl_keybindings_add_keycode(&server->keybindings, &server->keybinding_count, keycode, modifiers,
             action, arg, cmd, mode);
@@ -374,11 +69,37 @@ static bool server_keybindings_add_from_keys_file(void *userdata, enum fbwl_keyb
     return fbwl_keybindings_add(&server->keybindings, &server->keybinding_count, sym, modifiers, action, arg, cmd, mode);
 }
 
+static bool cmd_contains_startmoving(const char *s) {
+    if (s == NULL) {
+        return false;
+    }
+    const char *needle = "startmoving";
+    for (const char *p = s; *p != '\0'; p++) {
+        const char *h = p;
+        const char *n = needle;
+        while (*h != '\0' && *n != '\0' && tolower((unsigned char)*h) == *n) {
+            h++;
+            n++;
+        }
+        if (*n == '\0') {
+            return true;
+        }
+    }
+    return false;
+}
+
 static bool server_mousebindings_add_from_keys_file(void *userdata, enum fbwl_mousebinding_context context,
-        int button, uint32_t modifiers, enum fbwl_keybinding_action action, int arg, const char *cmd, const char *mode) {
+        enum fbwl_mousebinding_event_kind event_kind, int button, uint32_t modifiers, bool is_double,
+        enum fbwl_keybinding_action action, int arg, const char *cmd, const char *mode) {
     struct fbwl_server *server = userdata;
-    return fbwl_mousebindings_add(&server->mousebindings, &server->mousebinding_count, context, button, modifiers,
-        action, arg, cmd, mode);
+    if (server != NULL && server->ignore_border && context == FBWL_MOUSEBIND_WINDOW_BORDER) {
+        if (action == FBWL_KEYBIND_START_MOVING || (action == FBWL_KEYBIND_MACRO && cmd_contains_startmoving(cmd))) {
+            wlr_log(WLR_INFO, "Keys: ignoring StartMoving on window border (session.ignoreBorder=true)");
+            return false;
+        }
+    }
+    return fbwl_mousebindings_add(&server->mousebindings, &server->mousebinding_count, context, event_kind, button,
+        modifiers, is_double, action, arg, cmd, mode);
 }
 
 static void server_new_layer_surface(struct wl_listener *listener, void *data) {
@@ -437,6 +158,32 @@ bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_
     server->startup_cmd = opts->startup_cmd;
     server->terminal_cmd = opts->terminal_cmd;
     server->has_pointer = false;
+    server->ignore_border = false;
+    server->force_pseudo_transparency = false;
+    server->double_click_interval_ms = 250;
+    server->opaque_move = true;
+    server->opaque_resize = false;
+    server->opaque_resize_delay_ms = 50;
+    server->full_maximization = false;
+    server->max_ignore_increment = true;
+    server->max_disable_move = false;
+    server->max_disable_resize = false;
+    server->workspace_warping = true;
+    server->workspace_warping_horizontal = true;
+    server->workspace_warping_vertical = true;
+    server->workspace_warping_horizontal_offset = 1;
+    server->workspace_warping_vertical_offset = 1;
+    server->show_window_position = false;
+    server->edge_snap_threshold_px = 10;
+    server->edge_resize_snap_threshold_px = 0;
+    server->colors_per_channel = 4;
+    server->cache_life_minutes = 5;
+    server->cache_max_kb = 200;
+    server->config_version = 0;
+    free(server->group_file);
+    server->group_file = NULL;
+    server->last_button_time_msec = 0;
+    server->last_button = 0;
     free(server->key_mode);
     server->key_mode = NULL;
     fbwl_ipc_init(&server->ipc);
@@ -450,24 +197,61 @@ bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_
         .auto_raise_delay_ms = 250,
         .click_raises = true,
         .focus_new_windows = true,
+        .no_focus_while_typing_delay_ms = 0,
+        .focus_same_head = false,
+        .demands_attention_timeout_ms = 500,
+        .allow_remote_actions = true,
     };
+    server->titlebar_left_len = 1;
+    server->titlebar_left[0] = FBWL_DECOR_HIT_BTN_STICK;
+    server->titlebar_right_len = 4;
+    server->titlebar_right[0] = FBWL_DECOR_HIT_BTN_SHADE;
+    server->titlebar_right[1] = FBWL_DECOR_HIT_BTN_MIN;
+    server->titlebar_right[2] = FBWL_DECOR_HIT_BTN_MAX;
+    server->titlebar_right[3] = FBWL_DECOR_HIT_BTN_CLOSE;
     server->focus_reason = FBWL_FOCUS_REASON_NONE;
     server->auto_raise_timer = NULL;
     server->auto_raise_pending_view = NULL;
+    server->window_alpha_defaults_configured = false;
+    server->window_alpha_default_focused = 255;
+    server->window_alpha_default_unfocused = 255;
+    server->default_deco_enabled = true;
 
     server->toolbar_ui.enabled = true;
     server->toolbar_ui.placement = FBWL_TOOLBAR_PLACEMENT_BOTTOM_CENTER;
+    server->toolbar_ui.on_head = 0;
+    server->toolbar_ui.layer_num = 4;
     server->toolbar_ui.width_percent = 100;
     server->toolbar_ui.height_override = 0;
-    server->toolbar_ui.tools = toolbar_tools_default();
+    server->toolbar_ui.tools = fbwl_toolbar_tools_default();
+    snprintf(server->toolbar_ui.strftime_format, sizeof(server->toolbar_ui.strftime_format), "%s", "%H:%M");
     server->toolbar_ui.auto_hide = false;
     server->toolbar_ui.auto_raise = false;
+    server->toolbar_ui.max_over = false;
     server->toolbar_ui.hidden = false;
+    server->toolbar_ui.alpha = 255;
+    snprintf(server->toolbar_ui.iconbar_mode, sizeof(server->toolbar_ui.iconbar_mode), "%s", "{static groups} (workspace)");
+    server->toolbar_ui.iconbar_alignment = FBWL_ICONBAR_ALIGN_RELATIVE;
+    server->toolbar_ui.iconbar_icon_width_px = 128;
+    server->toolbar_ui.iconbar_icon_text_padding_px = 10;
+    server->toolbar_ui.iconbar_use_pixmap = true;
+    snprintf(server->toolbar_ui.iconbar_iconified_prefix, sizeof(server->toolbar_ui.iconbar_iconified_prefix), "%s", "( ");
+    snprintf(server->toolbar_ui.iconbar_iconified_suffix, sizeof(server->toolbar_ui.iconbar_iconified_suffix), "%s", " )");
+    // Default tool ordering (parity with Fluxbox/X11 toolbar.tools ordering semantics).
+    (void)server_toolbar_ui_load_button_tools(server, NULL, 0);
+    server->toolbar_ui.systray_pin_left = NULL;
+    server->toolbar_ui.systray_pin_left_len = 0;
+    server->toolbar_ui.systray_pin_right = NULL;
+    server->toolbar_ui.systray_pin_right_len = 0;
     server->toolbar_ui.hovered = false;
     server->toolbar_ui.auto_pending = 0;
 
+    fbwl_ui_slit_init(&server->slit_ui);
+
     server->menu_ui.env = (struct fbwl_ui_menu_env){0};
+    server->menu_ui.alpha = 255;
     server->menu_ui.menu_delay_ms = 200;
+    server->menu_ui.search_mode = FBWL_MENU_SEARCH_ITEMSTART;
     server->menu_ui.submenu_timer = NULL;
     server->menu_ui.hovered_idx = -1;
     server->menu_ui.submenu_pending_idx = 0;
@@ -499,6 +283,11 @@ bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_
     server->osd_ui.visible = false;
     server->osd_ui.last_workspace = 0;
     server->osd_ui.hide_timer = wl_event_loop_add_timer(loop, server_osd_hide_timer, server);
+
+    server->move_osd_ui.enabled = true;
+    server->move_osd_ui.visible = false;
+    server->move_osd_ui.last_workspace = 0;
+    server->move_osd_ui.hide_timer = NULL;
 
     server->backend = wlr_backend_autocreate(loop, NULL);
     if (server->backend == NULL) {
@@ -606,12 +395,16 @@ bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_
     }
 
     fbwm_core_init(&server->wm);
+    fbwm_core_set_head_count(&server->wm, 1);
+    fbwm_core_set_refocus_filter(&server->wm, server_refocus_candidate_allowed, server);
     int workspaces = opts->workspaces;
     const bool workspaces_set = opts->workspaces_set;
     const char *keys_file = opts->keys_file;
     const char *apps_file = opts->apps_file;
     const char *style_file = opts->style_file;
     const char *menu_file = opts->menu_file;
+    const char *window_menu_file = NULL;
+    const char *slitlist_file = NULL;
     const char *config_dir = opts->config_dir;
 
     server->workspaces_override = workspaces_set;
@@ -632,7 +425,10 @@ bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_
     char *keys_file_owned = NULL;
     char *apps_file_owned = NULL;
     char *style_file_owned = NULL;
+    char *style_overlay_file_owned = NULL;
     char *menu_file_owned = NULL;
+    char *window_menu_file_owned = NULL;
+    char *slitlist_file_owned = NULL;
 
     if (style_file != NULL) {
         style_file_owned = fbwl_resolve_config_path(NULL, style_file);
@@ -650,126 +446,235 @@ bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_
         struct fbwl_resource_db init = {0};
         (void)fbwl_resource_db_load_init(&init, config_dir);
 
-        server->focus.model = parse_focus_model(fbwl_resource_db_get(&init, "session.screen0.focusModel"));
         bool bool_val = false;
         int int_val = 0;
-        if (fbwl_resource_db_get_bool(&init, "session.screen0.autoRaise", &bool_val)) {
-            server->focus.auto_raise = bool_val;
+
+        fbwl_server_load_screen_configs(server, &init);
+
+        if (fbwl_resource_db_get_bool(&init, "session.ignoreBorder", &bool_val)) {
+            server->ignore_border = bool_val;
         }
-        if (fbwl_resource_db_get_int(&init, "session.autoRaiseDelay", &int_val) && int_val >= 0) {
-            server->focus.auto_raise_delay_ms = int_val;
+        if (fbwl_resource_db_get_bool(&init, "session.forcePseudoTransparency", &bool_val)) {
+            server->force_pseudo_transparency = bool_val;
         }
-        if (fbwl_resource_db_get_bool(&init, "session.screen0.clickRaises", &bool_val)) {
-            server->focus.click_raises = bool_val;
+        if (fbwl_resource_db_get_int(&init, "session.colorsPerChannel", &int_val) && int_val > 0 && int_val < 64) {
+            server->colors_per_channel = int_val;
         }
-        if (fbwl_resource_db_get_bool(&init, "session.screen0.focusNewWindows", &bool_val)) {
-            server->focus.focus_new_windows = bool_val;
+        if (fbwl_resource_db_get_int(&init, "session.cacheLife", &int_val) && int_val >= 0) {
+            server->cache_life_minutes = int_val;
+        }
+        if (fbwl_resource_db_get_int(&init, "session.cacheMax", &int_val) && int_val >= 0) {
+            server->cache_max_kb = int_val;
+        }
+        if (fbwl_resource_db_get_int(&init, "session.configVersion", &int_val)) {
+            server->config_version = int_val;
+        }
+        const char *menu_search = fbwl_resource_db_get(&init, "session.menuSearch");
+        if (menu_search != NULL) {
+            server->menu_ui.search_mode = fbwl_menu_search_mode_parse(menu_search);
+        }
+        char *group_file = fbwl_resource_db_resolve_path(&init, config_dir, "session.groupFile");
+        if (group_file != NULL) {
+            free(server->group_file);
+            server->group_file = group_file;
+        }
+        if (fbwl_resource_db_get_int(&init, "session.doubleClickInterval", &int_val) &&
+                int_val >= 0 && int_val < 60000) {
+            server->double_click_interval_ms = int_val;
+        }
+        const struct fbwl_screen_config *s0 = fbwl_server_screen_config(server, 0);
+        if (s0 != NULL) {
+            server->focus = s0->focus;
+            server->edge_snap_threshold_px = s0->edge_snap_threshold_px;
+            server->edge_resize_snap_threshold_px = s0->edge_resize_snap_threshold_px;
+            server->opaque_move = s0->opaque_move;
+            server->opaque_resize = s0->opaque_resize;
+            server->opaque_resize_delay_ms = s0->opaque_resize_delay_ms;
+            server->full_maximization = s0->full_maximization;
+            server->max_ignore_increment = s0->max_ignore_increment;
+            server->max_disable_move = s0->max_disable_move;
+            server->max_disable_resize = s0->max_disable_resize;
+            server->workspace_warping = s0->workspace_warping;
+            server->workspace_warping_horizontal = s0->workspace_warping_horizontal;
+            server->workspace_warping_vertical = s0->workspace_warping_vertical;
+            server->workspace_warping_horizontal_offset = s0->workspace_warping_horizontal_offset;
+            server->workspace_warping_vertical_offset = s0->workspace_warping_vertical_offset;
+            server->show_window_position = s0->show_window_position;
+            server->menu_ui.menu_delay_ms = s0->menu.delay_ms;
+            server->menu_ui.alpha = s0->menu.alpha;
+            server->tabs = s0->tabs;
+            server->toolbar_ui.on_head = s0->toolbar.on_head;
+            server->slit_ui.on_head = s0->slit.on_head;
+            fbwm_core_set_window_placement(&server->wm, s0->placement_strategy);
+            fbwm_core_set_row_placement_direction(&server->wm, s0->placement_row_dir);
+            fbwm_core_set_col_placement_direction(&server->wm, s0->placement_col_dir);
+        }
+
+        const size_t toolbar_screen =
+            (size_t)(server->toolbar_ui.on_head >= 0 ? server->toolbar_ui.on_head : 0);
+        const struct fbwl_screen_config *tb_cfg = fbwl_server_screen_config(server, toolbar_screen);
+        if (tb_cfg != NULL) {
+            server->toolbar_ui.enabled = tb_cfg->toolbar.enabled;
+            server->toolbar_ui.placement = tb_cfg->toolbar.placement;
+            server->toolbar_ui.layer_num = tb_cfg->toolbar.layer_num;
+            server->toolbar_ui.width_percent = tb_cfg->toolbar.width_percent;
+            server->toolbar_ui.height_override = tb_cfg->toolbar.height_override;
+            server->toolbar_ui.tools = tb_cfg->toolbar.tools;
+            server->toolbar_ui.auto_hide = tb_cfg->toolbar.auto_hide;
+            server->toolbar_ui.auto_raise = tb_cfg->toolbar.auto_raise;
+            server->toolbar_ui.max_over = tb_cfg->toolbar.max_over;
+            server->toolbar_ui.alpha = tb_cfg->toolbar.alpha;
+            strncpy(server->toolbar_ui.strftime_format, tb_cfg->toolbar.strftime_format, sizeof(server->toolbar_ui.strftime_format));
+            server->toolbar_ui.strftime_format[sizeof(server->toolbar_ui.strftime_format) - 1] = '\0';
+
+            strncpy(server->toolbar_ui.iconbar_mode, tb_cfg->iconbar.mode, sizeof(server->toolbar_ui.iconbar_mode));
+            server->toolbar_ui.iconbar_mode[sizeof(server->toolbar_ui.iconbar_mode) - 1] = '\0';
+            server->toolbar_ui.iconbar_alignment = tb_cfg->iconbar.alignment;
+            server->toolbar_ui.iconbar_icon_width_px = tb_cfg->iconbar.icon_width_px;
+            server->toolbar_ui.iconbar_icon_text_padding_px = tb_cfg->iconbar.icon_text_padding_px;
+            server->toolbar_ui.iconbar_use_pixmap = tb_cfg->iconbar.use_pixmap;
+            strncpy(server->toolbar_ui.iconbar_iconified_prefix, tb_cfg->iconbar.iconified_prefix,
+                sizeof(server->toolbar_ui.iconbar_iconified_prefix));
+            server->toolbar_ui.iconbar_iconified_prefix[sizeof(server->toolbar_ui.iconbar_iconified_prefix) - 1] = '\0';
+            strncpy(server->toolbar_ui.iconbar_iconified_suffix, tb_cfg->iconbar.iconified_suffix,
+                sizeof(server->toolbar_ui.iconbar_iconified_suffix));
+            server->toolbar_ui.iconbar_iconified_suffix[sizeof(server->toolbar_ui.iconbar_iconified_suffix) - 1] = '\0';
+        }
+        if (server->toolbar_ui.tools == 0) {
+            server->toolbar_ui.tools = fbwl_toolbar_tools_default();
+        }
+        (void)server_toolbar_ui_load_button_tools(server, &init, toolbar_screen);
+        server->toolbar_ui.hidden = false;
+
+        const size_t slit_screen =
+            (size_t)(server->slit_ui.on_head >= 0 ? server->slit_ui.on_head : 0);
+        const struct fbwl_screen_config *sl_cfg = fbwl_server_screen_config(server, slit_screen);
+        if (sl_cfg != NULL) {
+            server->slit_ui.placement = sl_cfg->slit.placement;
+            server->slit_ui.layer_num = sl_cfg->slit.layer_num;
+            server->slit_ui.auto_hide = sl_cfg->slit.auto_hide;
+            server->slit_ui.auto_raise = sl_cfg->slit.auto_raise;
+            server->slit_ui.max_over = sl_cfg->slit.max_over;
+            server->slit_ui.accept_kde_dockapps = sl_cfg->slit.accept_kde_dockapps;
+            server->slit_ui.alpha = sl_cfg->slit.alpha;
+            server->slit_ui.direction = sl_cfg->slit.direction;
+        }
+        server->slit_ui.hidden = false;
+
+        server->window_alpha_defaults_configured = false;
+        server->window_alpha_default_focused = 255;
+        server->window_alpha_default_unfocused = 255;
+        if (fbwl_resource_db_get_int(&init, "session.screen0.window.focus.alpha", &int_val)) {
+            if (int_val < 0) {
+                int_val = 0;
+            } else if (int_val > 255) {
+                int_val = 255;
+            }
+            server->window_alpha_default_focused = (uint8_t)int_val;
+            server->window_alpha_defaults_configured = true;
+        }
+        if (fbwl_resource_db_get_int(&init, "session.screen0.window.unfocus.alpha", &int_val)) {
+            if (int_val < 0) {
+                int_val = 0;
+            } else if (int_val > 255) {
+                int_val = 255;
+            }
+            server->window_alpha_default_unfocused = (uint8_t)int_val;
+            server->window_alpha_defaults_configured = true;
         }
 
         const char *workspace_names = fbwl_resource_db_get(&init, "session.screen0.workspaceNames");
         if (workspace_names != NULL) {
-            apply_workspace_names_from_init(&server->wm, workspace_names);
+            fbwl_apply_workspace_names_from_init(&server->wm, workspace_names);
         }
 
-        const char *placement = fbwl_resource_db_get(&init, "session.screen0.windowPlacement");
-        if (placement != NULL) {
-            fbwm_core_set_window_placement(&server->wm, parse_window_placement(placement));
+        const char *pin_left = fbwl_resource_db_get_screen(&init, toolbar_screen, "systray.pinLeft");
+        if (pin_left == NULL) {
+            pin_left = fbwl_resource_db_get_screen(&init, toolbar_screen, "pinLeft");
         }
-        const char *row_dir = fbwl_resource_db_get(&init, "session.screen0.rowPlacementDirection");
-        if (row_dir != NULL) {
-            fbwm_core_set_row_placement_direction(&server->wm, parse_row_dir(row_dir));
-        }
-        const char *col_dir = fbwl_resource_db_get(&init, "session.screen0.colPlacementDirection");
-        if (col_dir != NULL) {
-            fbwm_core_set_col_placement_direction(&server->wm, parse_col_dir(col_dir));
-        }
+        (void)fbwl_string_list_set(&server->toolbar_ui.systray_pin_left, &server->toolbar_ui.systray_pin_left_len,
+            pin_left);
 
-        if (fbwl_resource_db_get_bool(&init, "session.screen0.toolbar.visible", &bool_val)) {
-            server->toolbar_ui.enabled = bool_val;
+        const char *pin_right = fbwl_resource_db_get_screen(&init, toolbar_screen, "systray.pinRight");
+        if (pin_right == NULL) {
+            pin_right = fbwl_resource_db_get_screen(&init, toolbar_screen, "pinRight");
         }
-        if (fbwl_resource_db_get_bool(&init, "session.screen0.toolbar.autoHide", &bool_val)) {
-            server->toolbar_ui.auto_hide = bool_val;
-        }
-        if (fbwl_resource_db_get_bool(&init, "session.screen0.toolbar.autoRaise", &bool_val)) {
-            server->toolbar_ui.auto_raise = bool_val;
-        }
-        if (fbwl_resource_db_get_int(&init, "session.screen0.toolbar.widthPercent", &int_val)) {
-            if (int_val < 1) {
-                int_val = 1;
-            }
-            if (int_val > 100) {
-                int_val = 100;
-            }
-            server->toolbar_ui.width_percent = int_val;
-        }
-        if (fbwl_resource_db_get_int(&init, "session.screen0.toolbar.height", &int_val) && int_val >= 0) {
-            server->toolbar_ui.height_override = int_val;
-        }
-        const char *toolbar_placement = fbwl_resource_db_get(&init, "session.screen0.toolbar.placement");
-        if (toolbar_placement != NULL) {
-            server->toolbar_ui.placement = parse_toolbar_placement(toolbar_placement);
-        }
-        const char *toolbar_tools = fbwl_resource_db_get(&init, "session.screen0.toolbar.tools");
-        if (toolbar_tools != NULL) {
-            server->toolbar_ui.tools = parse_toolbar_tools(toolbar_tools);
-        }
-        if (server->toolbar_ui.tools == 0) {
-            server->toolbar_ui.tools = toolbar_tools_default();
-        }
-        server->toolbar_ui.hidden = false;
+        (void)fbwl_string_list_set(&server->toolbar_ui.systray_pin_right, &server->toolbar_ui.systray_pin_right_len,
+            pin_right);
 
-        if (fbwl_resource_db_get_int(&init, "session.screen0.menuDelay", &int_val) && int_val >= 0) {
-            server->menu_ui.menu_delay_ms = int_val;
+        const char *titlebar_left = fbwl_resource_db_get(&init, "session.screen0.titlebar.left");
+        if (titlebar_left == NULL) {
+            titlebar_left = fbwl_resource_db_get(&init, "session.titlebar.left");
         }
+        (void)fbwl_titlebar_buttons_parse(titlebar_left, server->titlebar_left, FBWL_TITLEBAR_BUTTONS_MAX,
+            &server->titlebar_left_len);
 
-        if (fbwl_resource_db_get_bool(&init, "session.screen0.tabs.intitlebar", &bool_val)) {
-            server->tabs.intitlebar = bool_val;
+        const char *titlebar_right = fbwl_resource_db_get(&init, "session.screen0.titlebar.right");
+        if (titlebar_right == NULL) {
+            titlebar_right = fbwl_resource_db_get(&init, "session.titlebar.right");
         }
-        if (fbwl_resource_db_get_bool(&init, "session.screen0.tabs.maxOver", &bool_val)) {
-            server->tabs.max_over = bool_val;
-        }
-        if (fbwl_resource_db_get_bool(&init, "session.screen0.tabs.usePixmap", &bool_val)) {
-            server->tabs.use_pixmap = bool_val;
-        }
-        const char *tab_place = fbwl_resource_db_get(&init, "session.screen0.tab.placement");
-        if (tab_place != NULL) {
-            server->tabs.placement = parse_toolbar_placement(tab_place);
-        }
-        if (fbwl_resource_db_get_int(&init, "session.screen0.tab.width", &int_val) && int_val >= 0) {
-            server->tabs.width_px = int_val;
-        }
-        if (fbwl_resource_db_get_int(&init, "session.tabPadding", &int_val) && int_val >= 0) {
-            server->tabs.padding_px = int_val;
-        }
-        const char *attach_area = fbwl_resource_db_get(&init, "session.tabsAttachArea");
-        if (attach_area != NULL) {
-            server->tabs.attach_area = parse_tabs_attach_area(attach_area);
-        }
-        const char *tab_focus = fbwl_resource_db_get(&init, "session.screen0.tabFocusModel");
-        if (tab_focus != NULL) {
-            server->tabs.focus_model = parse_tab_focus_model(tab_focus);
+        (void)fbwl_titlebar_buttons_parse(titlebar_right, server->titlebar_right, FBWL_TITLEBAR_BUTTONS_MAX,
+            &server->titlebar_right_len);
+
+        const char *default_deco = fbwl_resource_db_get(&init, "session.screen0.defaultDeco");
+        if (default_deco != NULL) {
+            server->default_deco_enabled = strcasecmp(default_deco, "NONE") != 0;
         }
 
         wlr_log(WLR_INFO,
-            "Init: focusModel=%s autoRaise=%d autoRaiseDelay=%d clickRaises=%d focusNewWindows=%d windowPlacement=%s rowDir=%s colDir=%s",
-            focus_model_str(server->focus.model),
+            "Init: focusModel=%s autoRaise=%d autoRaiseDelay=%d clickRaises=%d focusNewWindows=%d noFocusWhileTypingDelay=%d focusSameHead=%d demandsAttentionTimeout=%d allowRemoteActions=%d windowPlacement=%s rowDir=%s colDir=%s",
+            fbwl_focus_model_str(server->focus.model),
             server->focus.auto_raise ? 1 : 0,
             server->focus.auto_raise_delay_ms,
             server->focus.click_raises ? 1 : 0,
             server->focus.focus_new_windows ? 1 : 0,
-            window_placement_str(fbwm_core_window_placement(&server->wm)),
-            row_dir_str(fbwm_core_row_placement_direction(&server->wm)),
-            col_dir_str(fbwm_core_col_placement_direction(&server->wm)));
+            server->focus.no_focus_while_typing_delay_ms,
+            server->focus.focus_same_head ? 1 : 0,
+            server->focus.demands_attention_timeout_ms,
+            server->focus.allow_remote_actions ? 1 : 0,
+            fbwl_window_placement_str(fbwm_core_window_placement(&server->wm)),
+            fbwl_row_dir_str(fbwm_core_row_placement_direction(&server->wm)),
+            fbwl_col_dir_str(fbwm_core_col_placement_direction(&server->wm)));
+        wlr_log(WLR_INFO,
+            "Init: globals ignoreBorder=%d forcePseudoTransparency=%d configVersion=%d cacheLife=%d cacheMax=%d colorsPerChannel=%d groupFile=%s",
+            server->ignore_border ? 1 : 0,
+            server->force_pseudo_transparency ? 1 : 0,
+            server->config_version,
+            server->cache_life_minutes,
+            server->cache_max_kb,
+            server->colors_per_channel,
+            server->group_file != NULL ? server->group_file : "(null)");
+        if (server->force_pseudo_transparency) {
+            wlr_log(WLR_INFO, "Init: session.forcePseudoTransparency is X11-only and ignored on Wayland");
+        }
+        if (server->group_file != NULL) {
+            wlr_log(WLR_INFO, "Init: session.groupFile is deprecated; grouping uses apps file (ignoring %s)", server->group_file);
+        }
 
         wlr_log(WLR_INFO,
-            "Init: toolbar visible=%d placement=%s autoHide=%d autoRaise=%d widthPercent=%d height=%d tools=0x%x",
+            "Init: toolbar visible=%d placement=%s onhead=%d layer=%d autoHide=%d autoRaise=%d maxOver=%d widthPercent=%d height=%d tools=0x%x",
             server->toolbar_ui.enabled ? 1 : 0,
-            toolbar_placement_str(server->toolbar_ui.placement),
+            fbwl_toolbar_placement_str(server->toolbar_ui.placement),
+            server->toolbar_ui.on_head + 1,
+            server->toolbar_ui.layer_num,
             server->toolbar_ui.auto_hide ? 1 : 0,
             server->toolbar_ui.auto_raise ? 1 : 0,
+            server->toolbar_ui.max_over ? 1 : 0,
             server->toolbar_ui.width_percent,
             server->toolbar_ui.height_override,
             server->toolbar_ui.tools);
+
+        wlr_log(WLR_INFO,
+            "Init: slit placement=%s onhead=%d layer=%d autoHide=%d autoRaise=%d maxOver=%d alpha=%u dir=%s acceptKdeDockapps=%d",
+            fbwl_toolbar_placement_str(server->slit_ui.placement),
+            server->slit_ui.on_head + 1,
+            server->slit_ui.layer_num,
+            server->slit_ui.auto_hide ? 1 : 0,
+            server->slit_ui.auto_raise ? 1 : 0,
+            server->slit_ui.max_over ? 1 : 0,
+            (unsigned)server->slit_ui.alpha,
+            fbwl_slit_direction_str(server->slit_ui.direction),
+            server->slit_ui.accept_kde_dockapps ? 1 : 0);
 
         wlr_log(WLR_INFO, "Init: menuDelay=%d", server->menu_ui.menu_delay_ms);
 
@@ -778,11 +683,14 @@ bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_
             server->tabs.intitlebar ? 1 : 0,
             server->tabs.max_over ? 1 : 0,
             server->tabs.use_pixmap ? 1 : 0,
-            toolbar_placement_str(server->tabs.placement),
+            fbwl_toolbar_placement_str(server->tabs.placement),
             server->tabs.width_px,
             server->tabs.padding_px,
-            tabs_attach_area_str(server->tabs.attach_area),
-            tab_focus_model_str(server->tabs.focus_model));
+            fbwl_tabs_attach_area_str(server->tabs.attach_area),
+            fbwl_tab_focus_model_str(server->tabs.focus_model));
+        wlr_log(WLR_INFO, "Init: defaultDeco=%s mapped_ssd=%d",
+            default_deco != NULL ? default_deco : "NORMAL",
+            server->default_deco_enabled ? 1 : 0);
 
         if (!workspaces_set) {
             int ws = 0;
@@ -808,13 +716,32 @@ bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_
             }
         }
 
+        style_overlay_file_owned = fbwl_resource_db_resolve_path(&init, config_dir, "session.styleOverlay");
+
         if (menu_file == NULL) {
             menu_file_owned = fbwl_resource_db_discover_path(&init, config_dir, "session.menuFile", "menu");
             menu_file = menu_file_owned;
         }
 
+        window_menu_file_owned = fbwl_resource_db_discover_path(&init, config_dir, "session.screen0.windowMenu", "windowmenu");
+        if (window_menu_file_owned == NULL) {
+            window_menu_file_owned = fbwl_resource_db_discover_path(&init, config_dir, "session.windowMenu", "windowmenu");
+        }
+        window_menu_file = window_menu_file_owned;
+
+        slitlist_file_owned = fbwl_resource_db_resolve_path(&init, config_dir, "session.slitlistFile");
+        if (slitlist_file_owned != NULL) {
+            slitlist_file = slitlist_file_owned;
+        } else {
+            slitlist_file_owned = fbwl_path_join(config_dir, "slitlist");
+            slitlist_file = slitlist_file_owned;
+        }
+
         fbwl_resource_db_free(&init);
     }
+
+    fbwl_ui_menu_icon_cache_configure(server->cache_life_minutes, server->cache_max_kb);
+
     fbwm_core_set_workspace_count(&server->wm, workspaces);
     fbwl_keybindings_add_defaults(&server->keybindings, &server->keybinding_count, server->terminal_cmd);
     free(server->keys_file);
@@ -823,21 +750,33 @@ bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_
     server->apps_file = apps_file != NULL ? strdup(apps_file) : NULL;
     free(server->style_file);
     server->style_file = style_file != NULL ? strdup(style_file) : NULL;
+    free(server->style_overlay_file);
+    server->style_overlay_file = style_overlay_file_owned != NULL ? strdup(style_overlay_file_owned) : NULL;
     if (keys_file != NULL) {
         (void)fbwl_keys_parse_file(keys_file, server_keybindings_add_from_keys_file, server, NULL);
         (void)fbwl_keys_parse_file_mouse(keys_file, server_mousebindings_add_from_keys_file, server, NULL);
     }
     if (apps_file != NULL) {
-        (void)fbwl_apps_rules_load_file(&server->apps_rules, &server->apps_rule_count, apps_file);
+        bool rewrite_safe = false;
+        if (fbwl_apps_rules_load_file(&server->apps_rules, &server->apps_rule_count, apps_file, &rewrite_safe)) {
+            server->apps_rules_generation++;
+            server->apps_rules_rewrite_safe = rewrite_safe;
+        } else {
+            server->apps_rules_rewrite_safe = false;
+        }
     }
 
     if (style_file != NULL) {
         (void)fbwl_style_load_file(&server->decor_theme, style_file);
     }
+    if (server->style_overlay_file != NULL && fbwl_file_exists(server->style_overlay_file)) {
+        (void)fbwl_style_load_file(&server->decor_theme, server->style_overlay_file);
+    }
 
     free(keys_file_owned);
     free(apps_file_owned);
     free(style_file_owned);
+    free(style_overlay_file_owned);
 
     if (menu_file != NULL) {
         free(server->menu_file);
@@ -851,8 +790,17 @@ bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_
     }
     free(menu_file_owned);
 
+    free(server->window_menu_file);
+    server->window_menu_file = window_menu_file != NULL ? strdup(window_menu_file) : NULL;
+    free(window_menu_file_owned);
+    free(server->slitlist_file);
+    server->slitlist_file = slitlist_file != NULL ? strdup(slitlist_file) : NULL;
+    free(slitlist_file_owned);
+
     server_menu_create_window(server);
     server_toolbar_ui_rebuild(server);
+    (void)fbwl_ui_slit_set_order_file(&server->slit_ui, server->slitlist_file);
+    server_slit_ui_rebuild(server);
 
     server->xdg_shell = wlr_xdg_shell_create(server->wl_display, 3);
     server->new_xdg_toplevel.notify = server_new_xdg_toplevel;

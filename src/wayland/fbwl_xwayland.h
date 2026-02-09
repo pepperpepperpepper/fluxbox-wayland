@@ -18,6 +18,9 @@ struct wlr_scene_tree;
 struct wlr_xwayland_surface;
 struct wlr_xwayland_surface_configure_event;
 
+void fbwl_xwayland_apply_size_hints(const struct wlr_xwayland_surface *xsurface, int *width, int *height,
+        bool make_fit);
+
 struct fbwl_xwayland_hooks {
     void *userdata;
     void (*apply_workspace_visibility)(void *userdata, const char *why);
@@ -39,8 +42,10 @@ void fbwl_xwayland_handle_new_surface(struct fbwl_server *server, struct wlr_xwa
         wl_notify_func_t request_configure_fn,
         wl_notify_func_t request_activate_fn,
         wl_notify_func_t request_close_fn,
+        wl_notify_func_t request_demands_attention_fn,
         wl_notify_func_t set_title_fn,
         wl_notify_func_t set_class_fn,
+        wl_notify_func_t set_hints_fn,
         struct wlr_foreign_toplevel_manager_v1 *foreign_toplevel_mgr,
         const struct fbwl_view_foreign_toplevel_handlers *foreign_handlers);
 
@@ -94,4 +99,3 @@ void fbwl_xwayland_handle_surface_set_class(struct fbwl_view *view,
 void fbwl_xwayland_handle_surface_destroy(struct fbwl_view *view,
         struct fbwm_core *wm,
         const struct fbwl_xwayland_hooks *hooks);
-

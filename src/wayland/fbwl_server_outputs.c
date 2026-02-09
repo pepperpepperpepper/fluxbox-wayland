@@ -5,14 +5,20 @@
 #include "wayland/fbwl_output_power.h"
 #include "wayland/fbwl_scene_layers.h"
 #include "wayland/fbwl_screen_map.h"
+#include "wayland/fbwl_ui_text.h"
 #include "wayland/fbwl_view.h"
 
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <strings.h>
+#include <sys/stat.h>
 
 #include <wayland-server-core.h>
 #include <wlr/backend.h>
+#include <wlr/interfaces/wlr_buffer.h>
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_output_management_v1.h>
 #include <wlr/types/wlr_output_power_management_v1.h>
@@ -39,6 +45,66 @@ static uint32_t rgb24_from_rgba(const float rgba[4]) {
     return (r << 16) | (g << 8) | b;
 }
 
+static bool wallpaper_path_is_regular_file(const char *path) {
+    if (path == NULL || path[0] == '\0') {
+        return false;
+    }
+
+    struct stat st;
+    if (stat(path, &st) != 0) {
+        return false;
+    }
+    return S_ISREG(st.st_mode);
+}
+
+static struct wlr_buffer *wallpaper_buffer_from_png_path(const char *path) {
+    if (!wallpaper_path_is_regular_file(path)) {
+        return NULL;
+    }
+
+    cairo_surface_t *loaded = cairo_image_surface_create_from_png(path);
+    if (loaded == NULL || cairo_surface_status(loaded) != CAIRO_STATUS_SUCCESS) {
+        if (loaded != NULL) {
+            cairo_surface_destroy(loaded);
+        }
+        return NULL;
+    }
+
+    const int w = cairo_image_surface_get_width(loaded);
+    const int h = cairo_image_surface_get_height(loaded);
+    if (w < 1 || h < 1 || w > 8192 || h > 8192) {
+        cairo_surface_destroy(loaded);
+        return NULL;
+    }
+
+    cairo_surface_t *surface = loaded;
+    if (cairo_image_surface_get_format(loaded) != CAIRO_FORMAT_ARGB32) {
+        cairo_surface_t *converted = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, w, h);
+        if (converted == NULL || cairo_surface_status(converted) != CAIRO_STATUS_SUCCESS) {
+            cairo_surface_destroy(loaded);
+            if (converted != NULL) {
+                cairo_surface_destroy(converted);
+            }
+            return NULL;
+        }
+
+        cairo_t *cr = cairo_create(converted);
+        cairo_set_source_surface(cr, loaded, 0, 0);
+        cairo_paint(cr);
+        cairo_destroy(cr);
+
+        cairo_surface_destroy(loaded);
+        surface = converted;
+    }
+
+    struct wlr_buffer *buf = fbwl_cairo_buffer_create(surface);
+    if (buf == NULL) {
+        cairo_surface_destroy(surface);
+        return NULL;
+    }
+    return buf;
+}
+
 static void server_background_update_output(struct fbwl_server *server, struct fbwl_output *output) {
     if (server == NULL || output == NULL || server->output_layout == NULL || server->layer_background == NULL ||
             output->wlr_output == NULL) {
@@ -49,11 +115,47 @@ static void server_background_update_output(struct fbwl_server *server, struct f
     wlr_output_layout_get_box(server->output_layout, output->wlr_output, &box);
 
     if (box.width < 1 || box.height < 1) {
+        if (output->background_image != NULL) {
+            wlr_scene_node_destroy(&output->background_image->node);
+            output->background_image = NULL;
+        }
         if (output->background_rect != NULL) {
             wlr_scene_node_destroy(&output->background_rect->node);
             output->background_rect = NULL;
         }
         return;
+    }
+
+    if (server->wallpaper_buf != NULL) {
+        if (output->background_image == NULL) {
+            output->background_image = wlr_scene_buffer_create(server->layer_background, server->wallpaper_buf);
+            if (output->background_image == NULL) {
+                wlr_log(WLR_ERROR, "Background: failed to create wallpaper buffer");
+            }
+        } else {
+            wlr_scene_buffer_set_buffer(output->background_image, server->wallpaper_buf);
+        }
+
+        if (output->background_image != NULL) {
+            wlr_scene_buffer_set_dest_size(output->background_image, box.width, box.height);
+            wlr_scene_node_set_position(&output->background_image->node, box.x, box.y);
+            wlr_scene_node_lower_to_bottom(&output->background_image->node);
+
+            if (output->background_rect != NULL) {
+                wlr_scene_node_destroy(&output->background_rect->node);
+                output->background_rect = NULL;
+            }
+
+            wlr_log(WLR_INFO, "Background: wallpaper output name=%s x=%d y=%d w=%d h=%d path=%s",
+                output->wlr_output->name != NULL ? output->wlr_output->name : "(unnamed)",
+                box.x, box.y, box.width, box.height, server->wallpaper_path != NULL ? server->wallpaper_path : "");
+            return;
+        }
+    }
+
+    if (output->background_image != NULL) {
+        wlr_scene_node_destroy(&output->background_image->node);
+        output->background_image = NULL;
     }
 
     if (output->background_rect == NULL) {
@@ -88,6 +190,49 @@ static void server_background_update_all(struct fbwl_server *server) {
     }
 }
 
+bool server_wallpaper_set(struct fbwl_server *server, const char *path) {
+    if (server == NULL) {
+        return false;
+    }
+
+    const char *p = path != NULL ? path : "";
+    if (p[0] == '\0' || strcasecmp(p, "none") == 0 || strcasecmp(p, "clear") == 0) {
+        free(server->wallpaper_path);
+        server->wallpaper_path = NULL;
+        if (server->wallpaper_buf != NULL) {
+            wlr_buffer_drop(server->wallpaper_buf);
+            server->wallpaper_buf = NULL;
+        }
+        server_background_update_all(server);
+        wlr_log(WLR_INFO, "Background: wallpaper cleared");
+        return true;
+    }
+
+    struct wlr_buffer *buf = wallpaper_buffer_from_png_path(p);
+    if (buf == NULL) {
+        wlr_log(WLR_ERROR, "Background: failed to load wallpaper path=%s", p);
+        return false;
+    }
+
+    char *dup = strdup(p);
+    if (dup == NULL) {
+        wlr_buffer_drop(buf);
+        return false;
+    }
+
+    free(server->wallpaper_path);
+    server->wallpaper_path = dup;
+
+    if (server->wallpaper_buf != NULL) {
+        wlr_buffer_drop(server->wallpaper_buf);
+    }
+    server->wallpaper_buf = buf;
+
+    server_background_update_all(server);
+    wlr_log(WLR_INFO, "Background: wallpaper set path=%s", server->wallpaper_path);
+    return true;
+}
+
 static void server_output_management_arrange_layers_on_output(void *userdata, struct wlr_output *wlr_output) {
     struct fbwl_server *server = userdata;
     if (server == NULL) {
@@ -95,6 +240,22 @@ static void server_output_management_arrange_layers_on_output(void *userdata, st
     }
     fbwl_scene_layers_arrange_layer_surfaces_on_output(server->output_layout, &server->outputs, &server->layer_surfaces,
         wlr_output);
+}
+
+static void server_update_head_count(struct fbwl_server *server, const char *why) {
+    if (server == NULL) {
+        return;
+    }
+    if (server->output_layout == NULL) {
+        fbwm_core_set_head_count(&server->wm, 1);
+        return;
+    }
+    size_t heads = fbwl_screen_map_count(server->output_layout, &server->outputs);
+    if (heads < 1) {
+        heads = 1;
+    }
+    fbwm_core_set_head_count(&server->wm, heads);
+    wlr_log(WLR_INFO, "Workspace: heads=%zu reason=%s", heads, why != NULL ? why : "(null)");
 }
 
 static void server_output_manager_test(struct wl_listener *listener, void *data) {
@@ -124,7 +285,9 @@ static void server_output_manager_apply(struct wl_listener *listener, void *data
         fbwl_output_manager_update(server->output_manager, &server->outputs, server->output_layout);
         server_background_update_all(server);
         fbwl_screen_map_log(server->output_layout, &server->outputs, "output-management-apply");
+        server_update_head_count(server, "output-management-apply");
         server_toolbar_ui_update_position(server);
+        server_slit_ui_update_position(server);
         server_cmd_dialog_ui_update_position(server);
         server_osd_ui_update_position(server);
     } else {
@@ -159,7 +322,9 @@ static void server_output_destroyed(void *userdata, struct wlr_output *wlr_outpu
 
     fbwl_output_manager_update(server->output_manager, &server->outputs, server->output_layout);
     fbwl_screen_map_log(server->output_layout, &server->outputs, "output-destroy");
+    server_update_head_count(server, "output-destroy");
     server_toolbar_ui_update_position(server);
+    server_slit_ui_update_position(server);
     server_cmd_dialog_ui_update_position(server);
     server_osd_ui_update_position(server);
 }
@@ -182,7 +347,9 @@ static void server_new_output(struct wl_listener *listener, void *data) {
         wlr_output);
     fbwl_output_manager_update(server->output_manager, &server->outputs, server->output_layout);
     fbwl_screen_map_log(server->output_layout, &server->outputs, "new-output");
+    server_update_head_count(server, "new-output");
     server_toolbar_ui_update_position(server);
+    server_slit_ui_update_position(server);
     server_cmd_dialog_ui_update_position(server);
     server_osd_ui_update_position(server);
 }

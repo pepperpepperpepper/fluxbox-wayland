@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #include <wayland-server-core.h>
@@ -25,8 +26,12 @@ struct fbwl_seat_keyboard_hooks {
     bool (*cmd_dialog_is_open)(void *userdata);
     bool (*cmd_dialog_handle_key)(void *userdata, xkb_keysym_t sym, uint32_t modifiers);
 
+    bool (*grab_handle_key)(void *userdata, xkb_keysym_t sym, uint32_t modifiers);
+
     bool (*shortcuts_inhibited)(void *userdata);
     bool (*keybindings_handle)(void *userdata, uint32_t keycode, xkb_keysym_t sym, uint32_t modifiers);
+
+    void (*notify_key_to_client)(void *userdata, const xkb_keysym_t *syms, size_t nsyms, uint32_t modifiers);
 };
 
 void fbwl_seat_add_input_device(struct wlr_seat *seat, struct wlr_cursor *cursor,

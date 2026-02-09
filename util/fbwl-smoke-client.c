@@ -241,7 +241,7 @@ static const struct xdg_toplevel_listener xdg_toplevel_listener = {
 
 static void usage(const char *argv0) {
     fprintf(stderr,
-        "Usage: %s [--socket NAME] [--timeout-ms MS] [--title TITLE] [--app-id APPID] [--stay-ms MS] [--xdg-decoration]\n",
+        "Usage: %s [--socket NAME] [--timeout-ms MS] [--title TITLE] [--app-id APPID] [--stay-ms MS] [--width PX] [--height PX] [--xdg-decoration]\n",
         argv0);
 }
 
@@ -287,6 +287,8 @@ int main(int argc, char **argv) {
     const char *title = "fbwl-smoke-client";
     const char *app_id = NULL;
     int stay_ms = 0;
+    int init_width = 32;
+    int init_height = 32;
     bool want_xdg_decoration = false;
 
     static const struct option options[] = {
@@ -296,6 +298,8 @@ int main(int argc, char **argv) {
         {"app-id", required_argument, NULL, 4},
         {"stay-ms", required_argument, NULL, 5},
         {"xdg-decoration", no_argument, NULL, 6},
+        {"width", required_argument, NULL, 7},
+        {"height", required_argument, NULL, 8},
         {"help", no_argument, NULL, 'h'},
         {0, 0, 0, 0},
     };
@@ -320,6 +324,12 @@ int main(int argc, char **argv) {
             break;
         case 6:
             want_xdg_decoration = true;
+            break;
+        case 7:
+            init_width = atoi(optarg);
+            break;
+        case 8:
+            init_height = atoi(optarg);
             break;
         case 'h':
         default:
@@ -392,8 +402,14 @@ int main(int argc, char **argv) {
         }
         zxdg_toplevel_decoration_v1_set_mode(app.decoration, ZXDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
     }
-    app.current_width = 32;
-    app.current_height = 32;
+    if (init_width < 1) {
+        init_width = 1;
+    }
+    if (init_height < 1) {
+        init_height = 1;
+    }
+    app.current_width = init_width;
+    app.current_height = init_height;
 
     wl_surface_commit(app.surface);
     wl_display_flush(app.display);

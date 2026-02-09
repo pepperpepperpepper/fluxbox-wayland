@@ -12,6 +12,7 @@
 #include <wlr/types/wlr_foreign_toplevel_management_v1.h>
 #include <wlr/types/wlr_keyboard.h>
 #include <wlr/types/wlr_pointer.h>
+#include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_seat.h>
 #include <wlr/types/wlr_xcursor_manager.h>
@@ -22,12 +23,250 @@
 
 #include "wayland/fbwl_apps_remember.h"
 #include "wayland/fbwl_cursor.h"
+#include "wayland/fbwl_output.h"
+#include "wayland/fbwl_screen_map.h"
 #include "wayland/fbwl_server_internal.h"
 #include "wayland/fbwl_tabs.h"
 #include "wayland/fbwl_util.h"
 #include "wayland/fbwl_view.h"
+#include "wayland/fbwl_view_attention.h"
 
-static struct fbwl_ui_toolbar_env toolbar_ui_env(struct fbwl_server *server);
+static bool output_layout_extents(const struct fbwl_server *server, struct wlr_box *out) {
+    if (out == NULL) {
+        return false;
+    }
+    *out = (struct wlr_box){0};
+    if (server == NULL || server->output_layout == NULL) {
+        return false;
+    }
+
+    bool have = false;
+    struct fbwl_output *output;
+    wl_list_for_each(output, &server->outputs, link) {
+        if (output == NULL || output->wlr_output == NULL) {
+            continue;
+        }
+        struct wlr_box box = {0};
+        wlr_output_layout_get_box(server->output_layout, output->wlr_output, &box);
+        if (box.width < 1 || box.height < 1) {
+            continue;
+        }
+        if (!have) {
+            *out = box;
+            have = true;
+            continue;
+        }
+        int x1 = box.x;
+        int y1 = box.y;
+        int x2 = box.x + box.width;
+        int y2 = box.y + box.height;
+        int ox1 = out->x;
+        int oy1 = out->y;
+        int ox2 = out->x + out->width;
+        int oy2 = out->y + out->height;
+        if (x1 < ox1) {
+            ox1 = x1;
+        }
+        if (y1 < oy1) {
+            oy1 = y1;
+        }
+        if (x2 > ox2) {
+            ox2 = x2;
+        }
+        if (y2 > oy2) {
+            oy2 = y2;
+        }
+        out->x = ox1;
+        out->y = oy1;
+        out->width = ox2 - ox1;
+        out->height = oy2 - oy1;
+    }
+
+    return have;
+}
+
+void server_grab_update(struct fbwl_server *server) {
+    if (server == NULL) {
+        return;
+    }
+
+    int moved_x = 0;
+    int moved_y = 0;
+    if (server->cursor != NULL) {
+        const int cx = (int)server->cursor->x;
+        const int cy = (int)server->cursor->y;
+        if (server->grab.last_cursor_valid) {
+            moved_x = cx - server->grab.last_cursor_x;
+            moved_y = cy - server->grab.last_cursor_y;
+        }
+        server->grab.last_cursor_valid = true;
+        server->grab.last_cursor_x = cx;
+        server->grab.last_cursor_y = cy;
+    }
+
+    const struct fbwl_screen_config *cfg = NULL;
+    if (server->grab.view != NULL) {
+        cfg = fbwl_server_screen_config_for_view(server, server->grab.view);
+    } else if (server->cursor != NULL) {
+        cfg = fbwl_server_screen_config_at(server, server->cursor->x, server->cursor->y);
+    }
+
+    const int edge_snap_px = cfg != NULL ? cfg->edge_snap_threshold_px : server->edge_snap_threshold_px;
+    const int edge_resize_snap_px =
+        cfg != NULL ? cfg->edge_resize_snap_threshold_px : server->edge_resize_snap_threshold_px;
+    const bool opaque_move = cfg != NULL ? cfg->opaque_move : server->opaque_move;
+    const bool opaque_resize = cfg != NULL ? cfg->opaque_resize : server->opaque_resize;
+    const int opaque_resize_delay_ms =
+        cfg != NULL ? cfg->opaque_resize_delay_ms : server->opaque_resize_delay_ms;
+    const bool workspace_warping = cfg != NULL ? cfg->workspace_warping : server->workspace_warping;
+    const bool workspace_warping_horizontal =
+        cfg != NULL ? cfg->workspace_warping_horizontal : server->workspace_warping_horizontal;
+    const bool workspace_warping_vertical =
+        cfg != NULL ? cfg->workspace_warping_vertical : server->workspace_warping_vertical;
+    const int workspace_warping_horizontal_offset =
+        cfg != NULL ? cfg->workspace_warping_horizontal_offset : server->workspace_warping_horizontal_offset;
+    const int workspace_warping_vertical_offset =
+        cfg != NULL ? cfg->workspace_warping_vertical_offset : server->workspace_warping_vertical_offset;
+    const bool show_window_position = cfg != NULL ? cfg->show_window_position : server->show_window_position;
+
+    fbwl_grab_update(&server->grab, server->cursor, server->output_layout, &server->outputs,
+        edge_snap_px, edge_resize_snap_px,
+        opaque_move, opaque_resize, opaque_resize_delay_ms);
+
+    if (server->grab.mode == FBWL_CURSOR_MOVE &&
+            workspace_warping &&
+            (moved_x != 0 || moved_y != 0)) {
+        const int ws_count = fbwm_core_workspace_count(&server->wm);
+        if (ws_count > 1 && server->cursor != NULL) {
+            struct wlr_box layout = {0};
+            if (output_layout_extents(server, &layout) && layout.width > 0 && layout.height > 0) {
+                const int cx = (int)server->cursor->x;
+                const int cy = (int)server->cursor->y;
+                const size_t head = fbwl_server_screen_index_at(server, cx, cy);
+                const int cur_ws = fbwm_core_workspace_current_for_head(&server->wm, head);
+                int new_ws = cur_ws;
+                int warp_pad = edge_snap_px;
+                if (warp_pad < 0) {
+                    warp_pad = 0;
+                }
+
+                const int right_edge = layout.x + layout.width - warp_pad - 1;
+                const int left_edge = layout.x + warp_pad;
+                const int bottom_edge = layout.y + layout.height - warp_pad - 1;
+                const int top_edge = layout.y + warp_pad;
+
+                int warp_x = cx;
+                int warp_y = cy;
+
+                if (moved_x != 0 && workspace_warping_horizontal) {
+                    int off = workspace_warping_horizontal_offset;
+                    if (off < 1) {
+                        off = 1;
+                    }
+                    off %= ws_count;
+                    if (off < 1) {
+                        off = 1;
+                    }
+
+                    if (cx >= right_edge && moved_x > 0) {
+                        new_ws = (cur_ws + off) % ws_count;
+                        warp_x = layout.x;
+                    } else if (cx <= left_edge && moved_x < 0) {
+                        new_ws = (cur_ws + ws_count - off) % ws_count;
+                        warp_x = layout.x + layout.width - 1;
+                    }
+                }
+
+                if (moved_y != 0 && workspace_warping_vertical) {
+                    int off = workspace_warping_vertical_offset;
+                    if (off < 1) {
+                        off = 1;
+                    }
+                    off %= ws_count;
+                    if (off < 1) {
+                        off = 1;
+                    }
+
+                    if (cy >= bottom_edge && moved_y > 0) {
+                        new_ws = (cur_ws + off) % ws_count;
+                        warp_y = layout.y;
+                    } else if (cy <= top_edge && moved_y < 0) {
+                        new_ws = (cur_ws + ws_count - off) % ws_count;
+                        warp_y = layout.y + layout.height - 1;
+                    }
+                }
+
+                if (new_ws != cur_ws) {
+                    struct fbwl_view *view = server->grab.view;
+                    if (view != NULL && opaque_move) {
+                        if (server->wm.focused != &view->wm_view) {
+                            fbwm_core_focus_view(&server->wm, &view->wm_view);
+                        }
+                        fbwm_core_move_focused_to_workspace(&server->wm, new_ws);
+                    }
+                    server_workspace_switch_on_head(server, head, new_ws, "warp");
+
+                    if (warp_x < layout.x) {
+                        warp_x = layout.x;
+                    }
+                    if (warp_x > layout.x + layout.width - 1) {
+                        warp_x = layout.x + layout.width - 1;
+                    }
+                    if (warp_y < layout.y) {
+                        warp_y = layout.y;
+                    }
+                    if (warp_y > layout.y + layout.height - 1) {
+                        warp_y = layout.y + layout.height - 1;
+                    }
+
+                    if (warp_x != cx || warp_y != cy) {
+                        (void)wlr_cursor_warp(server->cursor, NULL, warp_x, warp_y);
+                        server->pointer_constraints.phys_valid = true;
+                        server->pointer_constraints.phys_x = server->cursor->x;
+                        server->pointer_constraints.phys_y = server->cursor->y;
+                    }
+
+                    server->grab.grab_x = server->cursor->x;
+                    server->grab.grab_y = server->cursor->y;
+                    if (view != NULL) {
+                        server->grab.view_x = opaque_move ? view->x : server->grab.pending_x;
+                        server->grab.view_y = opaque_move ? view->y : server->grab.pending_y;
+                    }
+                    server->grab.last_cursor_valid = true;
+                    server->grab.last_cursor_x = (int)server->cursor->x;
+                    server->grab.last_cursor_y = (int)server->cursor->y;
+                }
+            }
+        }
+    }
+
+    if (show_window_position && server->scene != NULL && server->grab.view != NULL) {
+        struct fbwl_view *view = server->grab.view;
+        if (server->grab.mode == FBWL_CURSOR_MOVE) {
+            int pos_x = server->grab.pending_x;
+            int pos_y = server->grab.pending_y;
+            if (view->decor_enabled && !view->fullscreen) {
+                const int border = server->decor_theme.border_width;
+                const int title_h = server->decor_theme.title_height;
+                if (border > 0) {
+                    pos_x -= border;
+                    pos_y -= border;
+                }
+                if (title_h > 0) {
+                    pos_y -= title_h;
+                }
+            }
+            fbwl_ui_osd_show_window_position(&server->move_osd_ui, server->scene, server->layer_top,
+                &server->decor_theme, server->output_layout, pos_x, pos_y);
+        } else if (server->grab.mode == FBWL_CURSOR_RESIZE) {
+            fbwl_ui_osd_show_window_geometry(&server->move_osd_ui, server->scene, server->layer_top,
+                &server->decor_theme, server->output_layout, server->grab.pending_w, server->grab.pending_h);
+        }
+    } else if (server->move_osd_ui.visible) {
+        fbwl_ui_osd_hide(&server->move_osd_ui, show_window_position ? "no-view" : "disabled");
+    }
+}
+
 
 static void session_lock_clear_keyboard_focus(void *userdata) {
     clear_keyboard_focus(userdata);
@@ -82,6 +321,55 @@ static void raise_view(struct fbwl_view *view, const char *why) {
         why != NULL ? why : "(null)");
 }
 
+bool server_focus_request_allowed(struct fbwl_server *server, struct fbwl_view *view, enum fbwl_focus_reason reason,
+        const char *why) {
+    if (server == NULL || view == NULL) {
+        return false;
+    }
+    if (reason != FBWL_FOCUS_REASON_MAP && reason != FBWL_FOCUS_REASON_ACTIVATE) {
+        return true;
+    }
+
+    const struct fbwl_screen_config *cfg = fbwl_server_screen_config_for_view(server, view);
+    const int typing_delay_ms =
+        cfg != NULL ? cfg->focus.no_focus_while_typing_delay_ms : server->focus.no_focus_while_typing_delay_ms;
+    const int attention_timeout_ms =
+        cfg != NULL ? cfg->focus.demands_attention_timeout_ms : server->focus.demands_attention_timeout_ms;
+
+    const struct fbwl_view *cur = server->focused_view;
+
+    if (cur != NULL && cur != view && (cur->focus_protection & FBWL_APPS_FOCUS_PROTECT_LOCK)) {
+        wlr_log(WLR_INFO, "Focus: blocked by lock target=%s", fbwl_view_display_title(view));
+        fbwl_view_attention_request(view, attention_timeout_ms, &server->decor_theme,
+            why != NULL ? why : "lock");
+        return false;
+    }
+    if (view->focus_protection & FBWL_APPS_FOCUS_PROTECT_DENY) {
+        wlr_log(WLR_INFO, "Focus: blocked by deny target=%s", fbwl_view_display_title(view));
+        fbwl_view_attention_request(view, attention_timeout_ms, &server->decor_theme,
+            why != NULL ? why : "deny");
+        return false;
+    }
+
+    if (cur != NULL && cur != view && typing_delay_ms > 0) {
+        const bool same_group = cur->tab_group != NULL && cur->tab_group == view->tab_group;
+        if (!same_group) {
+            const uint64_t now = fbwl_now_msec();
+            if (cur->last_typing_time_msec != 0 &&
+                    now - cur->last_typing_time_msec < (uint64_t)typing_delay_ms) {
+                wlr_log(WLR_INFO, "Focus: blocked by typing delay target=%s delay=%d",
+                    fbwl_view_display_title(view),
+                    typing_delay_ms);
+                fbwl_view_attention_request(view, attention_timeout_ms, &server->decor_theme,
+                    why != NULL ? why : "typing-delay");
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
 void focus_view(struct fbwl_view *view) {
     if (view == NULL) {
         return;
@@ -91,16 +379,17 @@ void focus_view(struct fbwl_view *view) {
     if (server != NULL && fbwl_session_lock_is_locked(&server->session_lock)) {
         return;
     }
-    if (server != NULL && (server->focus_reason == FBWL_FOCUS_REASON_MAP || server->focus_reason == FBWL_FOCUS_REASON_ACTIVATE)) { const struct fbwl_view *cur = server->focused_view; if (cur != NULL && cur != view && (cur->focus_protection & FBWL_APPS_FOCUS_PROTECT_LOCK)) { wlr_log(WLR_INFO, "Focus: blocked by lock target=%s", fbwl_view_display_title(view)); return; } if (view->focus_protection & FBWL_APPS_FOCUS_PROTECT_DENY) { wlr_log(WLR_INFO, "Focus: blocked by deny target=%s", fbwl_view_display_title(view)); return; } }
 
     fbwl_tabs_activate(view, "focus");
     struct wlr_seat *seat = server->seat;
 
     struct wlr_surface *surface = fbwl_view_wlr_surface(view);
     struct wlr_surface *prev_surface = seat->keyboard_state.focused_surface;
-    if (prev_surface == surface) {
+    if (server->focused_view == view && prev_surface == surface) {
         return;
     }
+
+    fbwl_view_attention_clear(view, &server->decor_theme, "focus");
 
     wlr_log(WLR_INFO, "Focus: %s (%s)",
         fbwl_view_title(view) != NULL ? fbwl_view_title(view) : "(no-title)",
@@ -128,12 +417,15 @@ void focus_view(struct fbwl_view *view) {
         }
     }
 
-    if (!server->focus.auto_raise) {
+    const struct fbwl_screen_config *cfg = fbwl_server_screen_config_for_view(server, view);
+    const bool auto_raise = cfg != NULL ? cfg->focus.auto_raise : server->focus.auto_raise;
+    const int auto_raise_delay_ms = cfg != NULL ? cfg->focus.auto_raise_delay_ms : server->focus.auto_raise_delay_ms;
+    if (!auto_raise) {
         server->auto_raise_pending_view = NULL;
-    } else if (server->focus_reason == FBWL_FOCUS_REASON_POINTER_MOTION && server->focus.auto_raise_delay_ms > 0) {
+    } else if (server->focus_reason == FBWL_FOCUS_REASON_POINTER_MOTION && auto_raise_delay_ms > 0) {
         server->auto_raise_pending_view = view;
         if (server->auto_raise_timer != NULL) {
-            wl_event_source_timer_update(server->auto_raise_timer, server->focus.auto_raise_delay_ms);
+            wl_event_source_timer_update(server->auto_raise_timer, auto_raise_delay_ms);
         }
     } else {
         server->auto_raise_pending_view = NULL;
@@ -164,7 +456,9 @@ int server_auto_raise_timer(void *data) {
     }
 
     struct fbwl_view *view = server->auto_raise_pending_view;
-    if (view != NULL && server->focus.auto_raise && server->focused_view == view) {
+    const struct fbwl_screen_config *cfg = fbwl_server_screen_config_for_view(server, view);
+    const bool auto_raise = cfg != NULL ? cfg->focus.auto_raise : server->focus.auto_raise;
+    if (view != NULL && auto_raise && server->focused_view == view) {
         raise_view(view, "autoRaiseDelay");
     }
     server->auto_raise_pending_view = NULL;
@@ -202,950 +496,6 @@ void clear_keyboard_focus(struct fbwl_server *server) {
     wlr_seat_keyboard_clear_focus(server->seat);
     server_text_input_update_focus(server, NULL);
     server_update_shortcuts_inhibitor(server);
-}
-
-static void server_osd_ui_show_workspace(struct fbwl_server *server, int workspace);
-
-void apply_workspace_visibility(struct fbwl_server *server, const char *why) {
-    const int cur = fbwm_core_workspace_current(&server->wm);
-    wlr_log(WLR_INFO, "Workspace: apply current=%d reason=%s", cur + 1, why != NULL ? why : "(null)");
-
-    if (server->osd_ui.enabled) {
-        if (server->osd_ui.last_workspace != cur) {
-            server->osd_ui.last_workspace = cur;
-            server_osd_ui_show_workspace(server, cur);
-        }
-    } else {
-        server->osd_ui.last_workspace = cur;
-    }
-
-    fbwl_tabs_repair(server);
-
-    for (struct fbwm_view *wm_view = server->wm.views.next;
-            wm_view != &server->wm.views;
-            wm_view = wm_view->next) {
-        struct fbwl_view *view = wm_view->userdata;
-        if (view == NULL || view->scene_tree == NULL) {
-            continue;
-        }
-
-        const bool visible_ws = fbwm_core_view_is_visible(&server->wm, wm_view);
-        const bool visible = visible_ws && fbwl_tabs_view_is_active(view);
-        wlr_scene_node_set_enabled(&view->scene_tree->node, visible);
-
-        const char *title = NULL;
-        if (wm_view->ops != NULL && wm_view->ops->title != NULL) {
-            title = wm_view->ops->title(wm_view);
-        }
-        wlr_log(WLR_INFO, "Workspace: view=%s ws=%d visible=%d",
-            title != NULL ? title : "(no-title)", wm_view->workspace + 1, visible ? 1 : 0);
-    }
-
-    server_toolbar_ui_rebuild(server);
-
-    if (server->wm.focused == NULL) {
-        clear_keyboard_focus(server);
-    }
-}
-
-void view_set_minimized(struct fbwl_view *view, bool minimized, const char *why) {
-    if (view == NULL || view->server == NULL) {
-        return;
-    }
-
-    if (minimized == view->minimized) {
-        if (view->type == FBWL_VIEW_XDG && view->xdg_toplevel->base->initialized) {
-            wlr_xdg_surface_schedule_configure(view->xdg_toplevel->base);
-        }
-        return;
-    }
-
-    view->minimized = minimized;
-    if (view->type == FBWL_VIEW_XWAYLAND && view->xwayland_surface != NULL) {
-        wlr_xwayland_surface_set_minimized(view->xwayland_surface, minimized);
-    }
-    if (view->foreign_toplevel != NULL) {
-        wlr_foreign_toplevel_handle_v1_set_minimized(view->foreign_toplevel, minimized);
-    }
-    wlr_log(WLR_INFO, "Minimize: %s %s reason=%s",
-        fbwl_view_display_title(view),
-        minimized ? "on" : "off",
-        why != NULL ? why : "(null)");
-
-    if (view->type == FBWL_VIEW_XDG && view->xdg_toplevel->base->initialized) {
-        wlr_xdg_surface_schedule_configure(view->xdg_toplevel->base);
-    }
-
-    apply_workspace_visibility(view->server, minimized ? "minimize-on" : "minimize-off");
-
-    if (minimized) {
-        fbwm_core_refocus(&view->server->wm);
-        if (view->server->wm.focused == NULL) {
-            clear_keyboard_focus(view->server);
-        }
-        return;
-    }
-
-    if (fbwm_core_view_is_visible(&view->server->wm, &view->wm_view)) {
-        fbwm_core_focus_view(&view->server->wm, &view->wm_view);
-        return;
-    }
-
-    fbwm_core_refocus(&view->server->wm);
-    if (view->server->wm.focused == NULL) {
-        clear_keyboard_focus(view->server);
-    }
-}
-
-static uint32_t server_keyboard_modifiers(struct fbwl_server *server) {
-    struct wlr_keyboard *keyboard = wlr_seat_get_keyboard(server->seat);
-    return keyboard != NULL ? wlr_keyboard_get_modifiers(keyboard) : 0;
-}
-
-static void cursor_grab_update(void *userdata) {
-    struct fbwl_server *server = userdata;
-    if (server == NULL) {
-        return;
-    }
-    fbwl_grab_update(&server->grab, server->cursor);
-}
-
-static bool cursor_menu_is_open(void *userdata) {
-    const struct fbwl_server *server = userdata;
-    return server != NULL && server->menu_ui.open;
-}
-
-static ssize_t cursor_menu_index_at(void *userdata, int lx, int ly) {
-    const struct fbwl_server *server = userdata;
-    if (server == NULL) {
-        return -1;
-    }
-    return server_menu_ui_index_at(&server->menu_ui, lx, ly);
-}
-
-static void cursor_menu_set_selected(void *userdata, size_t idx) {
-    struct fbwl_server *server = userdata;
-    if (server == NULL) {
-        return;
-    }
-    server_menu_ui_set_selected(server, idx);
-}
-
-struct fbwl_cursor_menu_hooks server_cursor_menu_hooks(struct fbwl_server *server) {
-    return (struct fbwl_cursor_menu_hooks){
-        .userdata = server,
-        .is_open = cursor_menu_is_open,
-        .index_at = cursor_menu_index_at,
-        .set_selected = cursor_menu_set_selected,
-    };
-}
-
-void server_cursor_motion(struct wl_listener *listener, void *data) {
-    struct fbwl_server *server = wl_container_of(listener, server, cursor_motion);
-    struct wlr_pointer_motion_event *event = data;
-    fbwl_idle_notify_activity(&server->idle);
-    const struct fbwl_cursor_menu_hooks hooks = server_cursor_menu_hooks(server);
-    fbwl_cursor_handle_motion(server->cursor, server->cursor_mgr, server->scene, server->seat,
-        server->pointer_constraints.relative_pointer_mgr,
-        server->pointer_constraints.constraints,
-        &server->pointer_constraints.active,
-        &server->pointer_constraints.phys_valid, &server->pointer_constraints.phys_x, &server->pointer_constraints.phys_y,
-        server->grab.mode, cursor_grab_update, server,
-        &hooks, event);
-
-    if (server->focus.model != FBWL_FOCUS_MODEL_CLICK_TO_FOCUS &&
-            server->grab.mode == FBWL_CURSOR_PASSTHROUGH &&
-            !server->cmd_dialog_ui.open &&
-            !server->menu_ui.open) {
-        double sx = 0, sy = 0;
-        struct wlr_surface *surface = NULL;
-        struct fbwl_view *view = fbwl_view_at(server->scene, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
-        if (view != NULL && view != server->focused_view) {
-            const enum fbwl_focus_reason prev_reason = server->focus_reason;
-            server->focus_reason = FBWL_FOCUS_REASON_POINTER_MOTION;
-            fbwm_core_focus_view(&server->wm, &view->wm_view);
-            server->focus_reason = prev_reason;
-        }
-    }
-
-    {
-        const struct fbwl_ui_toolbar_env env = toolbar_ui_env(server);
-        fbwl_ui_toolbar_handle_motion(&server->toolbar_ui, &env,
-            (int)server->cursor->x, (int)server->cursor->y, server->focus.auto_raise_delay_ms);
-    }
-
-    if (server->menu_ui.open) {
-        fbwl_ui_menu_handle_motion(&server->menu_ui, (int)server->cursor->x, (int)server->cursor->y);
-    }
-}
-
-void server_cursor_motion_absolute(struct wl_listener *listener, void *data) {
-    struct fbwl_server *server = wl_container_of(listener, server, cursor_motion_absolute);
-    struct wlr_pointer_motion_absolute_event *event = data;
-    fbwl_idle_notify_activity(&server->idle);
-    const struct fbwl_cursor_menu_hooks hooks = server_cursor_menu_hooks(server);
-    fbwl_cursor_handle_motion_absolute(server->cursor, server->cursor_mgr, server->scene, server->seat,
-        server->pointer_constraints.relative_pointer_mgr,
-        server->pointer_constraints.constraints,
-        &server->pointer_constraints.active,
-        &server->pointer_constraints.phys_valid, &server->pointer_constraints.phys_x, &server->pointer_constraints.phys_y,
-        server->grab.mode, cursor_grab_update, server,
-        &hooks, event);
-
-    if (server->focus.model != FBWL_FOCUS_MODEL_CLICK_TO_FOCUS &&
-            server->grab.mode == FBWL_CURSOR_PASSTHROUGH &&
-            !server->cmd_dialog_ui.open &&
-            !server->menu_ui.open) {
-        double sx = 0, sy = 0;
-        struct wlr_surface *surface = NULL;
-        struct fbwl_view *view = fbwl_view_at(server->scene, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
-        if (view != NULL && view != server->focused_view) {
-            const enum fbwl_focus_reason prev_reason = server->focus_reason;
-            server->focus_reason = FBWL_FOCUS_REASON_POINTER_MOTION;
-            fbwm_core_focus_view(&server->wm, &view->wm_view);
-            server->focus_reason = prev_reason;
-        }
-    }
-
-    {
-        const struct fbwl_ui_toolbar_env env = toolbar_ui_env(server);
-        fbwl_ui_toolbar_handle_motion(&server->toolbar_ui, &env,
-            (int)server->cursor->x, (int)server->cursor->y, server->focus.auto_raise_delay_ms);
-    }
-
-    if (server->menu_ui.open) {
-        fbwl_ui_menu_handle_motion(&server->menu_ui, (int)server->cursor->x, (int)server->cursor->y);
-    }
-}
-
-static void server_menu_ui_open_root(struct fbwl_server *server, int x, int y);
-static void server_menu_ui_open_window(struct fbwl_server *server, struct fbwl_view *view, int x, int y);
-
-static int fluxbox_mouse_button_from_event(uint32_t button) {
-    switch (button) {
-    case BTN_LEFT:
-        return 1;
-    case BTN_MIDDLE:
-        return 2;
-    case BTN_RIGHT:
-        return 3;
-    default:
-        return 0;
-    }
-}
-
-static enum fbwl_mousebinding_context mousebinding_context_at(struct fbwl_server *server,
-        struct fbwl_view *view, struct wlr_surface *surface) {
-    if (server != NULL && server->toolbar_ui.enabled && !server->toolbar_ui.hidden) {
-        const int x = server->toolbar_ui.x;
-        const int y = server->toolbar_ui.y;
-        const int w = server->toolbar_ui.width;
-        const int h = server->toolbar_ui.height;
-        const int cx = (int)server->cursor->x;
-        const int cy = (int)server->cursor->y;
-        if (cx >= x && cy >= y && cx < x + w && cy < y + h) {
-            return FBWL_MOUSEBIND_TOOLBAR;
-        }
-    }
-
-    if (view == NULL && surface == NULL) {
-        return FBWL_MOUSEBIND_DESKTOP;
-    }
-    if (view == NULL) {
-        return FBWL_MOUSEBIND_ANY;
-    }
-    if (surface != NULL) {
-        return FBWL_MOUSEBIND_WINDOW;
-    }
-
-    const struct fbwl_decor_hit hit =
-        fbwl_view_decor_hit_test(view, server != NULL ? &server->decor_theme : NULL, server->cursor->x, server->cursor->y);
-    if (hit.kind == FBWL_DECOR_HIT_TITLEBAR) {
-        return FBWL_MOUSEBIND_TITLEBAR;
-    }
-    if (hit.kind == FBWL_DECOR_HIT_RESIZE) {
-        return FBWL_MOUSEBIND_WINDOW_BORDER;
-    }
-    return FBWL_MOUSEBIND_WINDOW;
-}
-
-static int fluxbox_mouse_button_from_axis(const struct wlr_pointer_axis_event *event) {
-    if (event == NULL) {
-        return 0;
-    }
-    if (event->orientation != WL_POINTER_AXIS_VERTICAL_SCROLL) {
-        return 0;
-    }
-
-    double delta = event->delta;
-    if (event->delta_discrete != 0) {
-        delta = (double)event->delta_discrete;
-    }
-
-    if (delta < 0) {
-        return 4;
-    }
-    if (delta > 0) {
-        return 5;
-    }
-    return 0;
-}
-
-void server_cursor_button(struct wl_listener *listener, void *data) {
-    struct fbwl_server *server = wl_container_of(listener, server, cursor_button);
-    struct wlr_pointer_button_event *event = data;
-    fbwl_idle_notify_activity(&server->idle);
-
-    if (server->grab.mode != FBWL_CURSOR_PASSTHROUGH) {
-        if (event->state == WL_POINTER_BUTTON_STATE_RELEASED &&
-                event->button == server->grab.button) {
-            struct fbwl_view *view = server->grab.view;
-            if (view != NULL && server->grab.mode == FBWL_CURSOR_MOVE) {
-                wlr_log(WLR_INFO, "Move: %s x=%d y=%d",
-                    fbwl_view_display_title(view),
-                    view->x, view->y);
-            }
-            if (view != NULL && server->grab.mode == FBWL_CURSOR_RESIZE) {
-                wlr_log(WLR_INFO, "Resize: %s w=%d h=%d",
-                    fbwl_view_display_title(view),
-                    server->grab.last_w, server->grab.last_h);
-            }
-            fbwl_grab_end(&server->grab);
-        }
-        return;
-    }
-
-    if (event->state == WL_POINTER_BUTTON_STATE_PRESSED) {
-        if (server->cmd_dialog_ui.open) {
-            server_cmd_dialog_ui_close(server, "pointer");
-            return;
-        }
-
-        if (server->menu_ui.open) {
-            if (server_menu_ui_handle_click(server,
-                    (int)server->cursor->x, (int)server->cursor->y, event->button)) {
-                return;
-            }
-        }
-
-        if (server_toolbar_ui_handle_click(server,
-                (int)server->cursor->x, (int)server->cursor->y, event->button)) {
-            return;
-        }
-
-        double sx = 0, sy = 0;
-        struct wlr_surface *surface = NULL;
-        struct fbwl_view *view = fbwl_view_at(server->scene, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
-        wlr_log(WLR_INFO, "Pointer press at %.1f,%.1f hit=%s",
-            server->cursor->x, server->cursor->y,
-            view != NULL ? fbwl_view_display_title(view) : "(none)");
-
-        const uint32_t modifiers = server_keyboard_modifiers(server);
-        const bool alt = (modifiers & WLR_MODIFIER_ALT) != 0;
-
-        const int fb_button = fluxbox_mouse_button_from_event(event->button);
-        if (fb_button != 0) {
-            struct fbwl_keybindings_hooks hooks = keybindings_hooks(server);
-            hooks.button = event->button;
-            hooks.cursor_x = (int)server->cursor->x;
-            hooks.cursor_y = (int)server->cursor->y;
-
-            const enum fbwl_mousebinding_context ctx = mousebinding_context_at(server, view, surface);
-            struct fbwl_view *target = (ctx == FBWL_MOUSEBIND_DESKTOP || ctx == FBWL_MOUSEBIND_TOOLBAR) ? NULL : view;
-
-            if (fbwl_mousebindings_handle(server->mousebindings, server->mousebinding_count, ctx,
-                    fb_button, modifiers, target, &hooks)) {
-                return;
-            }
-        }
-
-        if (view == NULL && surface == NULL && event->button == BTN_RIGHT) {
-            server_menu_ui_open_root(server, (int)server->cursor->x, (int)server->cursor->y);
-            return;
-        }
-
-        if (alt && view != NULL && (event->button == BTN_LEFT || event->button == BTN_RIGHT)) {
-            const enum fbwl_focus_reason prev_reason = server->focus_reason;
-            server->focus_reason = FBWL_FOCUS_REASON_POINTER_CLICK;
-            fbwm_core_focus_view(&server->wm, &view->wm_view);
-            server->focus_reason = prev_reason;
-            raise_view(view, "alt-grab");
-
-            server->grab.view = view;
-            if (event->button == BTN_LEFT) {
-                fbwl_grab_begin_move(&server->grab, view, server->cursor, event->button);
-            } else {
-                fbwl_grab_begin_resize(&server->grab, view, server->cursor, event->button,
-                    WLR_EDGE_RIGHT | WLR_EDGE_BOTTOM);
-            }
-            return;
-        }
-
-        if (view != NULL && surface == NULL && event->button == BTN_RIGHT) {
-            const struct fbwl_decor_hit hit =
-                fbwl_view_decor_hit_test(view, &server->decor_theme, server->cursor->x, server->cursor->y);
-            if (hit.kind == FBWL_DECOR_HIT_TITLEBAR) {
-                const enum fbwl_focus_reason prev_reason = server->focus_reason;
-                server->focus_reason = FBWL_FOCUS_REASON_POINTER_CLICK;
-                fbwm_core_focus_view(&server->wm, &view->wm_view);
-                server->focus_reason = prev_reason;
-                raise_view(view, "titlebar-menu");
-                server_menu_ui_open_window(server, view, (int)server->cursor->x, (int)server->cursor->y);
-                return;
-            }
-        }
-
-        if (view != NULL && surface == NULL && event->button == BTN_LEFT) {
-            const struct fbwl_decor_hit hit =
-                fbwl_view_decor_hit_test(view, &server->decor_theme, server->cursor->x, server->cursor->y);
-            if (hit.kind != FBWL_DECOR_HIT_NONE) {
-                const enum fbwl_focus_reason prev_reason = server->focus_reason;
-                server->focus_reason = FBWL_FOCUS_REASON_POINTER_CLICK;
-                fbwm_core_focus_view(&server->wm, &view->wm_view);
-                server->focus_reason = prev_reason;
-                raise_view(view, "decor");
-
-                if (hit.kind == FBWL_DECOR_HIT_TITLEBAR) {
-                    fbwl_grab_begin_move(&server->grab, view, server->cursor, event->button);
-                    return;
-                }
-                if (hit.kind == FBWL_DECOR_HIT_RESIZE) {
-                    fbwl_grab_begin_resize(&server->grab, view, server->cursor, event->button, hit.edges);
-                    return;
-                }
-                if (hit.kind == FBWL_DECOR_HIT_BTN_CLOSE) {
-                    if (view->type == FBWL_VIEW_XDG) {
-                        wlr_xdg_toplevel_send_close(view->xdg_toplevel);
-                    } else if (view->type == FBWL_VIEW_XWAYLAND) {
-                        wlr_xwayland_surface_close(view->xwayland_surface);
-                    }
-                    return;
-                }
-                if (hit.kind == FBWL_DECOR_HIT_BTN_MAX) {
-                    fbwl_view_set_maximized(view, !view->maximized, server->output_layout, &server->outputs);
-                    return;
-                }
-                if (hit.kind == FBWL_DECOR_HIT_BTN_MIN) {
-                    view_set_minimized(view, !view->minimized, "decor-button");
-                    return;
-                }
-            }
-        }
-
-        if (view != NULL) {
-            const bool click_raises_anywhere = server->focus.click_raises;
-            bool click_raises = click_raises_anywhere;
-            if (!click_raises_anywhere && surface == NULL) {
-                const struct fbwl_decor_hit hit =
-                    fbwl_view_decor_hit_test(view, &server->decor_theme, server->cursor->x, server->cursor->y);
-                click_raises = hit.kind != FBWL_DECOR_HIT_NONE;
-            }
-
-            const enum fbwl_focus_reason prev_reason = server->focus_reason;
-            server->focus_reason = FBWL_FOCUS_REASON_POINTER_CLICK;
-            fbwm_core_focus_view(&server->wm, &view->wm_view);
-            server->focus_reason = prev_reason;
-            if (click_raises) {
-                raise_view(view, "click");
-            }
-        }
-    }
-
-    wlr_seat_pointer_notify_button(server->seat, event->time_msec,
-        event->button, event->state);
-}
-
-void server_cursor_axis(struct wl_listener *listener, void *data) {
-    struct fbwl_server *server = wl_container_of(listener, server, cursor_axis);
-    struct wlr_pointer_axis_event *event = data;
-    fbwl_idle_notify_activity(&server->idle);
-
-    if (server->grab.mode == FBWL_CURSOR_PASSTHROUGH &&
-            !server->cmd_dialog_ui.open) {
-        const int fb_button = fluxbox_mouse_button_from_axis(event);
-        if (fb_button != 0) {
-            double sx = 0, sy = 0;
-            struct wlr_surface *surface = NULL;
-            struct fbwl_view *view =
-                fbwl_view_at(server->scene, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
-
-            struct fbwl_keybindings_hooks hooks = keybindings_hooks(server);
-            hooks.button = 0;
-            hooks.cursor_x = (int)server->cursor->x;
-            hooks.cursor_y = (int)server->cursor->y;
-
-            const uint32_t modifiers = server_keyboard_modifiers(server);
-            const enum fbwl_mousebinding_context ctx = mousebinding_context_at(server, view, surface);
-            struct fbwl_view *target = (ctx == FBWL_MOUSEBIND_DESKTOP || ctx == FBWL_MOUSEBIND_TOOLBAR) ? NULL : view;
-
-            if (fbwl_mousebindings_handle(server->mousebindings, server->mousebinding_count, ctx,
-                    fb_button, modifiers, target, &hooks)) {
-                return;
-            }
-        }
-    }
-
-    wlr_seat_pointer_notify_axis(server->seat, event->time_msec,
-        event->orientation, event->delta, event->delta_discrete, event->source,
-        event->relative_direction);
-}
-
-void server_cursor_frame(struct wl_listener *listener, void *data) {
-    (void)data;
-    struct fbwl_server *server = wl_container_of(listener, server, cursor_frame);
-    wlr_seat_pointer_notify_frame(server->seat);
-}
-
-static void toolbar_ui_apply_workspace_visibility(void *userdata, const char *why) {
-    struct fbwl_server *server = userdata;
-    apply_workspace_visibility(server, why);
-}
-
-static void toolbar_ui_view_set_minimized(void *userdata, struct fbwl_view *view, bool minimized, const char *why) {
-    (void)userdata;
-    view_set_minimized(view, minimized, why);
-}
-
-static struct fbwl_ui_toolbar_env toolbar_ui_env(struct fbwl_server *server) {
-    return (struct fbwl_ui_toolbar_env){
-        .scene = server != NULL ? server->scene : NULL,
-        .layer_top = server != NULL ? server->layer_top : NULL,
-        .output_layout = server != NULL ? server->output_layout : NULL,
-        .outputs = server != NULL ? &server->outputs : NULL,
-        .wl_display = server != NULL ? server->wl_display : NULL,
-        .wm = server != NULL ? &server->wm : NULL,
-        .decor_theme = server != NULL ? &server->decor_theme : NULL,
-        .focused_view = server != NULL ? server->focused_view : NULL,
-#ifdef HAVE_SYSTEMD
-        .sni = server != NULL ? &server->sni : NULL,
-#endif
-    };
-}
-
-static struct fbwl_ui_toolbar_hooks toolbar_ui_hooks(struct fbwl_server *server) {
-    return (struct fbwl_ui_toolbar_hooks){
-        .userdata = server,
-        .apply_workspace_visibility = toolbar_ui_apply_workspace_visibility,
-        .view_set_minimized = toolbar_ui_view_set_minimized,
-    };
-}
-
-void server_toolbar_ui_rebuild(struct fbwl_server *server) {
-    if (server == NULL) {
-        return;
-    }
-
-    const struct fbwl_ui_toolbar_env env = toolbar_ui_env(server);
-    fbwl_ui_toolbar_rebuild(&server->toolbar_ui, &env);
-}
-
-#ifdef HAVE_SYSTEMD
-void server_sni_on_change(void *userdata) {
-    server_toolbar_ui_rebuild(userdata);
-}
-#endif
-
-void server_toolbar_ui_update_position(struct fbwl_server *server) {
-    if (server == NULL) {
-        return;
-    }
-
-    const struct fbwl_ui_toolbar_env env = toolbar_ui_env(server);
-    fbwl_ui_toolbar_update_position(&server->toolbar_ui, &env);
-}
-
-void server_toolbar_ui_update_iconbar_focus(struct fbwl_server *server) {
-    if (server == NULL) {
-        return;
-    }
-
-    fbwl_ui_toolbar_update_iconbar_focus(&server->toolbar_ui, &server->decor_theme, server->focused_view);
-}
-
-bool server_toolbar_ui_handle_click(struct fbwl_server *server, int lx, int ly, uint32_t button) {
-    if (server == NULL) {
-        return false;
-    }
-
-    const struct fbwl_ui_toolbar_env env = toolbar_ui_env(server);
-    const struct fbwl_ui_toolbar_hooks hooks = toolbar_ui_hooks(server);
-    return fbwl_ui_toolbar_handle_click(&server->toolbar_ui, &env, &hooks, lx, ly, button);
-}
-
-void server_cmd_dialog_ui_update_position(struct fbwl_server *server) {
-    if (server == NULL || server->output_layout == NULL) {
-        return;
-    }
-    fbwl_ui_cmd_dialog_update_position(&server->cmd_dialog_ui, server->output_layout);
-}
-
-void server_cmd_dialog_ui_close(struct fbwl_server *server, const char *why) {
-    if (server == NULL) {
-        return;
-    }
-    fbwl_ui_cmd_dialog_close(&server->cmd_dialog_ui, why);
-}
-
-static void server_menu_ui_close(struct fbwl_server *server, const char *why);
-
-void server_cmd_dialog_ui_open(struct fbwl_server *server) {
-    if (server == NULL || server->scene == NULL) {
-        return;
-    }
-
-    server_menu_ui_close(server, "cmd-dialog-open");
-    fbwl_ui_cmd_dialog_open(&server->cmd_dialog_ui, server->scene, server->layer_overlay,
-        &server->decor_theme, server->output_layout);
-}
-
-bool server_cmd_dialog_ui_handle_key(struct fbwl_server *server, xkb_keysym_t sym, uint32_t modifiers) {
-    if (server == NULL) {
-        return false;
-    }
-    return fbwl_ui_cmd_dialog_handle_key(&server->cmd_dialog_ui, sym, modifiers);
-}
-
-static void server_osd_ui_hide(struct fbwl_server *server, const char *why) {
-    if (server == NULL) {
-        return;
-    }
-    fbwl_ui_osd_hide(&server->osd_ui, why);
-}
-
-int server_osd_hide_timer(void *data) {
-    struct fbwl_server *server = data;
-    server_osd_ui_hide(server, "timer");
-    return 0;
-}
-
-void server_osd_ui_update_position(struct fbwl_server *server) {
-    if (server == NULL || server->output_layout == NULL) {
-        return;
-    }
-    fbwl_ui_osd_update_position(&server->osd_ui, server->output_layout);
-}
-
-static void server_osd_ui_show_workspace(struct fbwl_server *server, int workspace) {
-    if (server == NULL || server->scene == NULL) {
-        return;
-    }
-    const char *name = fbwm_core_workspace_name(&server->wm, workspace);
-    fbwl_ui_osd_show_workspace(&server->osd_ui, server->scene, server->layer_top,
-        &server->decor_theme, server->output_layout, workspace, name);
-}
-
-void server_osd_ui_destroy(struct fbwl_server *server) {
-    if (server == NULL) {
-        return;
-    }
-    fbwl_ui_osd_destroy(&server->osd_ui);
-}
-
-static void menu_ui_spawn(void *userdata, const char *cmd) {
-    (void)userdata;
-    fbwl_spawn(cmd);
-}
-
-static void menu_ui_terminate(void *userdata) {
-    struct fbwl_server *server = userdata;
-    if (server == NULL) {
-        return;
-    }
-    wl_display_terminate(server->wl_display);
-}
-
-static void menu_ui_view_close(void *userdata, struct fbwl_view *view) {
-    (void)userdata;
-    if (view == NULL) {
-        return;
-    }
-    if (view->type == FBWL_VIEW_XDG) {
-        wlr_xdg_toplevel_send_close(view->xdg_toplevel);
-    } else if (view->type == FBWL_VIEW_XWAYLAND) {
-        wlr_xwayland_surface_close(view->xwayland_surface);
-    }
-}
-
-static void menu_ui_view_set_minimized(void *userdata, struct fbwl_view *view, bool minimized, const char *why) {
-    (void)userdata;
-    view_set_minimized(view, minimized, why);
-}
-
-static void menu_ui_view_set_maximized(void *userdata, struct fbwl_view *view, bool maximized) {
-    struct fbwl_server *server = userdata;
-    if (server == NULL) {
-        return;
-    }
-    fbwl_view_set_maximized(view, maximized, server->output_layout, &server->outputs);
-}
-
-static void menu_ui_view_set_fullscreen(void *userdata, struct fbwl_view *view, bool fullscreen) {
-    struct fbwl_server *server = userdata;
-    if (server == NULL) {
-        return;
-    }
-    fbwl_view_set_fullscreen(view, fullscreen, server->output_layout, &server->outputs,
-        server->layer_normal, server->layer_fullscreen, NULL);
-}
-
-static void menu_ui_workspace_switch(void *userdata, int workspace0) {
-    struct fbwl_server *server = userdata;
-    if (server == NULL) {
-        return;
-    }
-    fbwm_core_workspace_switch(&server->wm, workspace0);
-    apply_workspace_visibility(server, "menu-workspace");
-}
-
-static struct fbwl_ui_menu_env menu_ui_env(struct fbwl_server *server) {
-    return (struct fbwl_ui_menu_env){
-        .scene = server != NULL ? server->scene : NULL,
-        .layer_overlay = server != NULL ? server->layer_overlay : NULL,
-        .decor_theme = server != NULL ? &server->decor_theme : NULL,
-        .wl_display = server != NULL ? server->wl_display : NULL,
-    };
-}
-
-static struct fbwl_ui_menu_hooks menu_ui_hooks(struct fbwl_server *server) {
-    return (struct fbwl_ui_menu_hooks){
-        .userdata = server,
-        .spawn = menu_ui_spawn,
-        .terminate = menu_ui_terminate,
-        .view_close = menu_ui_view_close,
-        .view_set_minimized = menu_ui_view_set_minimized,
-        .view_set_maximized = menu_ui_view_set_maximized,
-        .view_set_fullscreen = menu_ui_view_set_fullscreen,
-        .workspace_switch = menu_ui_workspace_switch,
-    };
-}
-
-static void server_menu_ui_close(struct fbwl_server *server, const char *why) {
-    if (server == NULL) {
-        return;
-    }
-    fbwl_ui_menu_close(&server->menu_ui, why);
-}
-
-static void server_menu_ui_open_root(struct fbwl_server *server, int x, int y) {
-    if (server == NULL) {
-        return;
-    }
-    if (server->root_menu == NULL) {
-        server_menu_create_default(server);
-    }
-    if (server->root_menu == NULL) {
-        return;
-    }
-
-    const struct fbwl_ui_menu_env env = menu_ui_env(server);
-    fbwl_ui_menu_open_root(&server->menu_ui, &env, server->root_menu, x, y);
-}
-
-static void server_menu_ui_open_window(struct fbwl_server *server, struct fbwl_view *view, int x, int y) {
-    if (server == NULL || view == NULL) {
-        return;
-    }
-    if (server->window_menu == NULL) {
-        server_menu_create_window(server);
-    }
-    if (server->window_menu == NULL) {
-        return;
-    }
-
-    const struct fbwl_ui_menu_env env = menu_ui_env(server);
-    fbwl_ui_menu_open_window(&server->menu_ui, &env, server->window_menu, view, x, y);
-}
-
-ssize_t server_menu_ui_index_at(const struct fbwl_menu_ui *ui, int lx, int ly) {
-    return fbwl_ui_menu_index_at(ui, lx, ly);
-}
-
-void server_menu_ui_set_selected(struct fbwl_server *server, size_t idx) {
-    if (server == NULL) {
-        return;
-    }
-    fbwl_ui_menu_set_selected(&server->menu_ui, idx);
-}
-
-bool server_menu_ui_handle_keypress(struct fbwl_server *server, xkb_keysym_t sym) {
-    if (server == NULL) {
-        return false;
-    }
-    const struct fbwl_ui_menu_env env = menu_ui_env(server);
-    const struct fbwl_ui_menu_hooks hooks = menu_ui_hooks(server);
-    return fbwl_ui_menu_handle_keypress(&server->menu_ui, &env, &hooks, sym);
-}
-
-bool server_menu_ui_handle_click(struct fbwl_server *server, int lx, int ly, uint32_t button) {
-    if (server == NULL) {
-        return false;
-    }
-    const struct fbwl_ui_menu_env env = menu_ui_env(server);
-    const struct fbwl_ui_menu_hooks hooks = menu_ui_hooks(server);
-    return fbwl_ui_menu_handle_click(&server->menu_ui, &env, &hooks, lx, ly, button);
-}
-
-void server_menu_free(struct fbwl_server *server) {
-    if (server == NULL) {
-        return;
-    }
-    server_menu_ui_close(server, "free");
-    fbwl_menu_free(server->root_menu);
-    server->root_menu = NULL;
-    fbwl_menu_free(server->window_menu);
-    server->window_menu = NULL;
-    fbwl_menu_free(server->workspace_menu);
-    server->workspace_menu = NULL;
-    free(server->menu_file);
-    server->menu_file = NULL;
-}
-
-static void keybindings_terminate(void *userdata) {
-    struct fbwl_server *server = userdata;
-    if (server == NULL || server->wl_display == NULL) {
-        return;
-    }
-    wl_display_terminate(server->wl_display);
-}
-
-static void keybindings_spawn(void *userdata, const char *cmd) {
-    (void)userdata;
-    fbwl_spawn(cmd);
-}
-
-static void keybindings_command_dialog_open(void *userdata) {
-    struct fbwl_server *server = userdata;
-    server_cmd_dialog_ui_open(server);
-}
-
-static void keybindings_reconfigure(void *userdata) {
-    struct fbwl_server *server = userdata;
-    server_reconfigure(server);
-}
-
-static void keybindings_key_mode_set(void *userdata, const char *mode) {
-    fbwl_server_key_mode_set(userdata, mode);
-}
-
-static void keybindings_menu_open_root(void *userdata, int x, int y) {
-    struct fbwl_server *server = userdata;
-    server_menu_ui_open_root(server, x, y);
-}
-
-static void keybindings_menu_open_workspace(void *userdata, int x, int y) {
-    struct fbwl_server *server = userdata;
-    server_menu_ui_open_workspace(server, x, y);
-}
-
-static void keybindings_menu_open_window(void *userdata, struct fbwl_view *view, int x, int y) {
-    struct fbwl_server *server = userdata;
-    server_menu_ui_open_window(server, view, x, y);
-}
-
-static void keybindings_menu_close(void *userdata, const char *why) {
-    struct fbwl_server *server = userdata;
-    server_menu_ui_close(server, why);
-}
-
-static void keybindings_apply_workspace_visibility(void *userdata, const char *why) {
-    struct fbwl_server *server = userdata;
-    apply_workspace_visibility(server, why);
-}
-
-static void keybindings_view_close(void *userdata, struct fbwl_view *view, bool force) {
-    (void)userdata;
-    (void)force;
-    if (view == NULL) {
-        return;
-    }
-    if (view->type == FBWL_VIEW_XDG && view->xdg_toplevel != NULL) {
-        wlr_xdg_toplevel_send_close(view->xdg_toplevel);
-    } else if (view->type == FBWL_VIEW_XWAYLAND && view->xwayland_surface != NULL) {
-        wlr_xwayland_surface_close(view->xwayland_surface);
-    }
-}
-
-static void keybindings_view_raise(void *userdata, struct fbwl_view *view, const char *why) {
-    (void)userdata;
-    raise_view(view, why);
-}
-
-static void keybindings_view_lower(void *userdata, struct fbwl_view *view, const char *why) {
-    (void)userdata;
-    if (view == NULL || view->scene_tree == NULL) {
-        return;
-    }
-    wlr_scene_node_lower_to_bottom(&view->scene_tree->node);
-    wlr_log(WLR_INFO, "Lower: %s reason=%s",
-        fbwl_view_display_title(view),
-        why != NULL ? why : "(null)");
-}
-
-static void keybindings_grab_begin_move(void *userdata, struct fbwl_view *view, uint32_t button) {
-    struct fbwl_server *server = userdata;
-    if (server == NULL || server->cursor == NULL || view == NULL) {
-        return;
-    }
-    fbwl_grab_begin_move(&server->grab, view, server->cursor, button);
-}
-
-static void keybindings_grab_begin_resize(void *userdata, struct fbwl_view *view, uint32_t button, uint32_t edges) {
-    struct fbwl_server *server = userdata;
-    if (server == NULL || server->cursor == NULL || view == NULL) {
-        return;
-    }
-    fbwl_grab_begin_resize(&server->grab, view, server->cursor, button, edges);
-}
-
-static void keybindings_view_set_maximized(void *userdata, struct fbwl_view *view, bool maximized) {
-    struct fbwl_server *server = userdata;
-    if (server == NULL) {
-        return;
-    }
-    fbwl_view_set_maximized(view, maximized, server->output_layout, &server->outputs);
-}
-
-static void keybindings_view_set_fullscreen(void *userdata, struct fbwl_view *view, bool fullscreen) {
-    struct fbwl_server *server = userdata;
-    if (server == NULL) {
-        return;
-    }
-    fbwl_view_set_fullscreen(view, fullscreen, server->output_layout, &server->outputs,
-        server->layer_normal, server->layer_fullscreen, NULL);
-}
-
-static void keybindings_view_set_minimized(void *userdata, struct fbwl_view *view, bool minimized, const char *why) {
-    (void)userdata;
-    view_set_minimized(view, minimized, why);
-}
-
-struct fbwl_keybindings_hooks keybindings_hooks(struct fbwl_server *server) {
-    return (struct fbwl_keybindings_hooks){
-        .userdata = server,
-        .wm = server != NULL ? &server->wm : NULL,
-        .key_mode = server != NULL ? server->key_mode : NULL,
-        .key_mode_set = keybindings_key_mode_set,
-        .terminate = keybindings_terminate,
-        .spawn = keybindings_spawn,
-        .command_dialog_open = keybindings_command_dialog_open,
-        .reconfigure = keybindings_reconfigure,
-        .apply_workspace_visibility = keybindings_apply_workspace_visibility,
-        .view_close = keybindings_view_close,
-        .view_set_maximized = keybindings_view_set_maximized,
-        .view_set_fullscreen = keybindings_view_set_fullscreen,
-        .view_set_minimized = keybindings_view_set_minimized,
-        .view_raise = keybindings_view_raise,
-        .view_lower = keybindings_view_lower,
-        .menu_open_root = keybindings_menu_open_root,
-        .menu_open_workspace = keybindings_menu_open_workspace,
-        .menu_open_window = keybindings_menu_open_window,
-        .menu_close = keybindings_menu_close,
-        .grab_begin_move = keybindings_grab_begin_move,
-        .grab_begin_resize = keybindings_grab_begin_resize,
-        .cursor_x = server != NULL && server->cursor != NULL ? (int)server->cursor->x : 0,
-        .cursor_y = server != NULL && server->cursor != NULL ? (int)server->cursor->y : 0,
-        .button = 0,
-    };
 }
 
 static struct wlr_scene_tree *apps_rule_layer_tree(struct fbwl_server *server, int layer) {
@@ -1203,6 +553,15 @@ void server_apps_rules_apply_pre_map(struct fbwl_view *view,
 
     struct fbwl_server *server = view->server;
 
+    if (rule->set_focus_hidden) {
+        view->focus_hidden_override_set = true;
+        view->focus_hidden_override = rule->focus_hidden;
+    }
+    if (rule->set_icon_hidden) {
+        view->icon_hidden_override_set = true;
+        view->icon_hidden_override = rule->icon_hidden;
+    }
+
     if (rule->group_id > 0) {
         view->apps_group_id = rule->group_id;
         if (view->tab_group == NULL) {
@@ -1214,10 +573,14 @@ void server_apps_rules_apply_pre_map(struct fbwl_view *view,
     }
 
     if (rule->set_decor) {
+        view->decor_forced = true;
         fbwl_view_decor_set_enabled(view, rule->decor_enabled);
     }
 
-    if (rule->set_alpha) { fbwl_view_set_alpha(view, (uint8_t)rule->alpha_focused, (uint8_t)rule->alpha_unfocused, "apps"); }
+    if (rule->set_alpha) {
+        fbwl_view_set_alpha(view, (uint8_t)rule->alpha_focused, (uint8_t)rule->alpha_unfocused, "apps");
+        view->alpha_is_default = false;
+    }
     if (rule->set_focus_protection) { view->focus_protection = rule->focus_protection; }
 
     if (rule->set_layer) {
@@ -1248,7 +611,13 @@ void server_apps_rules_apply_pre_map(struct fbwl_view *view,
     if (rule->set_workspace && rule->set_jump && rule->jump) {
         const int count = fbwm_core_workspace_count(&server->wm);
         if (rule->workspace >= 0 && rule->workspace < count) {
-            fbwm_core_workspace_switch(&server->wm, rule->workspace);
+            size_t head = 0;
+            if (rule->set_head && rule->head >= 0) {
+                head = (size_t)rule->head;
+            } else if (server->cursor != NULL) {
+                head = fbwl_server_screen_index_at(server, server->cursor->x, server->cursor->y);
+            }
+            server_workspace_switch_on_head(server, head, rule->workspace, "apps-jump");
         }
     }
 
@@ -1262,7 +631,7 @@ void server_apps_rules_apply_post_map(struct fbwl_view *view,
     }
 
     if (rule->set_maximized) {
-        fbwl_view_set_maximized(view, rule->maximized, view->server->output_layout, &view->server->outputs);
+        fbwl_view_set_maximized_axes(view, rule->maximized_h, rule->maximized_v, view->server->output_layout, &view->server->outputs);
     }
     if (rule->set_fullscreen) {
         fbwl_view_set_fullscreen(view, rule->fullscreen, view->server->output_layout, &view->server->outputs,
@@ -1273,5 +642,358 @@ void server_apps_rules_apply_post_map(struct fbwl_view *view,
     }
     if (rule->set_minimized) {
         view_set_minimized(view, rule->minimized, "apps");
+    }
+}
+
+static bool apps_anchor_is_right(enum fbwl_apps_rule_anchor anchor) {
+    switch (anchor) {
+    case FBWL_APPS_ANCHOR_TOPRIGHT:
+    case FBWL_APPS_ANCHOR_RIGHT:
+    case FBWL_APPS_ANCHOR_BOTTOMRIGHT:
+        return true;
+    default:
+        return false;
+    }
+}
+
+static bool apps_anchor_is_bottom(enum fbwl_apps_rule_anchor anchor) {
+    switch (anchor) {
+    case FBWL_APPS_ANCHOR_BOTTOMLEFT:
+    case FBWL_APPS_ANCHOR_BOTTOM:
+    case FBWL_APPS_ANCHOR_BOTTOMRIGHT:
+        return true;
+    default:
+        return false;
+    }
+}
+
+static void apps_anchor_screen_ref(const struct wlr_box *box, enum fbwl_apps_rule_anchor anchor,
+        int *out_x, int *out_y) {
+    if (out_x != NULL) {
+        *out_x = 0;
+    }
+    if (out_y != NULL) {
+        *out_y = 0;
+    }
+    if (box == NULL || out_x == NULL || out_y == NULL) {
+        return;
+    }
+
+    const int left = box->x;
+    const int right = box->x + box->width;
+    const int top = box->y;
+    const int bottom = box->y + box->height;
+    const int cx = box->x + box->width / 2;
+    const int cy = box->y + box->height / 2;
+
+    switch (anchor) {
+    case FBWL_APPS_ANCHOR_TOPLEFT:
+        *out_x = left;
+        *out_y = top;
+        return;
+    case FBWL_APPS_ANCHOR_LEFT:
+        *out_x = left;
+        *out_y = cy;
+        return;
+    case FBWL_APPS_ANCHOR_BOTTOMLEFT:
+        *out_x = left;
+        *out_y = bottom;
+        return;
+    case FBWL_APPS_ANCHOR_TOP:
+        *out_x = cx;
+        *out_y = top;
+        return;
+    case FBWL_APPS_ANCHOR_CENTER:
+        *out_x = cx;
+        *out_y = cy;
+        return;
+    case FBWL_APPS_ANCHOR_BOTTOM:
+        *out_x = cx;
+        *out_y = bottom;
+        return;
+    case FBWL_APPS_ANCHOR_TOPRIGHT:
+        *out_x = right;
+        *out_y = top;
+        return;
+    case FBWL_APPS_ANCHOR_RIGHT:
+        *out_x = right;
+        *out_y = cy;
+        return;
+    case FBWL_APPS_ANCHOR_BOTTOMRIGHT:
+        *out_x = right;
+        *out_y = bottom;
+        return;
+    default:
+        *out_x = left;
+        *out_y = top;
+        return;
+    }
+}
+
+static void apps_anchor_window_ref(int w, int h, enum fbwl_apps_rule_anchor anchor, int *out_x, int *out_y) {
+    if (out_x != NULL) {
+        *out_x = 0;
+    }
+    if (out_y != NULL) {
+        *out_y = 0;
+    }
+    if (out_x == NULL || out_y == NULL) {
+        return;
+    }
+
+    const int left = 0;
+    const int right = w;
+    const int top = 0;
+    const int bottom = h;
+    const int cx = w / 2;
+    const int cy = h / 2;
+
+    switch (anchor) {
+    case FBWL_APPS_ANCHOR_TOPLEFT:
+        *out_x = left;
+        *out_y = top;
+        return;
+    case FBWL_APPS_ANCHOR_LEFT:
+        *out_x = left;
+        *out_y = cy;
+        return;
+    case FBWL_APPS_ANCHOR_BOTTOMLEFT:
+        *out_x = left;
+        *out_y = bottom;
+        return;
+    case FBWL_APPS_ANCHOR_TOP:
+        *out_x = cx;
+        *out_y = top;
+        return;
+    case FBWL_APPS_ANCHOR_CENTER:
+        *out_x = cx;
+        *out_y = cy;
+        return;
+    case FBWL_APPS_ANCHOR_BOTTOM:
+        *out_x = cx;
+        *out_y = bottom;
+        return;
+    case FBWL_APPS_ANCHOR_TOPRIGHT:
+        *out_x = right;
+        *out_y = top;
+        return;
+    case FBWL_APPS_ANCHOR_RIGHT:
+        *out_x = right;
+        *out_y = cy;
+        return;
+    case FBWL_APPS_ANCHOR_BOTTOMRIGHT:
+        *out_x = right;
+        *out_y = bottom;
+        return;
+    default:
+        *out_x = left;
+        *out_y = top;
+        return;
+    }
+}
+
+static int percent_from_pixels(int px, int base) {
+    if (base <= 0) {
+        return 0;
+    }
+
+    const long num = (long)px * 100L;
+    if (num >= 0) {
+        return (int)((num + base / 2) / base);
+    }
+    return (int)((num - base / 2) / base);
+}
+
+void server_apps_rules_save_on_close(struct fbwl_view *view) {
+    if (view == NULL || view->server == NULL) {
+        return;
+    }
+
+    struct fbwl_server *server = view->server;
+    if (server->apps_file == NULL || *server->apps_file == '\0') {
+        return;
+    }
+    if (!server->apps_rules_rewrite_safe) {
+        wlr_log(WLR_INFO, "Apps: save-on-close skipped (apps file not rewrite-safe): %s",
+            server->apps_file);
+        return;
+    }
+    if (server->apps_rules == NULL || server->apps_rule_count == 0) {
+        return;
+    }
+
+    size_t rule_idx = 0;
+    struct fbwl_apps_rule *rule = NULL;
+
+    if (view->apps_rule_index_valid &&
+            view->apps_rules_generation == server->apps_rules_generation &&
+            view->apps_rule_index < server->apps_rule_count) {
+        rule_idx = view->apps_rule_index;
+        rule = &server->apps_rules[rule_idx];
+    } else {
+        const char *app_id = fbwl_view_app_id(view);
+        const char *instance = NULL;
+        if (view->type == FBWL_VIEW_XWAYLAND && view->xwayland_surface != NULL) {
+            instance = view->xwayland_surface->instance;
+        } else {
+            instance = app_id;
+        }
+        const char *title = fbwl_view_title(view);
+        const struct fbwl_apps_rule *matched = fbwl_apps_rules_match(server->apps_rules, server->apps_rule_count,
+            app_id, instance, title, &rule_idx);
+        if (matched == NULL || rule_idx >= server->apps_rule_count) {
+            return;
+        }
+        rule = &server->apps_rules[rule_idx];
+    }
+
+    if (rule == NULL || !rule->set_save_on_close || !rule->save_on_close) {
+        return;
+    }
+
+    int gx = view->x;
+    int gy = view->y;
+    int gw = fbwl_view_current_width(view);
+    int gh = fbwl_view_current_height(view);
+    if ((view->fullscreen || view->maximized || view->maximized_h || view->maximized_v) &&
+            view->saved_w > 0 && view->saved_h > 0) {
+        gx = view->saved_x;
+        gy = view->saved_y;
+        gw = view->saved_w;
+        gh = view->saved_h;
+    }
+
+    if (gw < 1 || gh < 1) {
+        return;
+    }
+
+    struct wlr_output *out = NULL;
+    if (server->output_layout != NULL) {
+        const double cx = (double)gx + (double)gw / 2.0;
+        const double cy = (double)gy + (double)gh / 2.0;
+        out = wlr_output_layout_output_at(server->output_layout, cx, cy);
+        if (out == NULL) {
+            out = wlr_output_layout_get_center_output(server->output_layout);
+        }
+    }
+
+    struct wlr_box screen = {0};
+    if (server->output_layout != NULL) {
+        fbwl_view_get_output_usable_box(view, server->output_layout, &server->outputs, out, &screen);
+        if (screen.width < 1 || screen.height < 1) {
+            fbwl_view_get_output_box(view, server->output_layout, out, &screen);
+        }
+    }
+
+    if (rule->set_workspace) {
+        rule->workspace = view->wm_view.workspace;
+    }
+    if (rule->set_sticky) {
+        rule->sticky = view->wm_view.sticky;
+    }
+    if (rule->set_focus_hidden && view->focus_hidden_override_set) {
+        rule->focus_hidden = view->focus_hidden_override;
+    }
+    if (rule->set_icon_hidden && view->icon_hidden_override_set) {
+        rule->icon_hidden = view->icon_hidden_override;
+    }
+    if (rule->set_minimized) {
+        rule->minimized = view->minimized;
+    }
+    if (rule->set_maximized) {
+        rule->maximized_h = view->maximized_h; rule->maximized_v = view->maximized_v;
+    }
+    if (rule->set_fullscreen) {
+        rule->fullscreen = view->fullscreen;
+    }
+    if (rule->set_shaded) {
+        rule->shaded = view->shaded;
+    }
+    if (rule->set_alpha) {
+        rule->alpha_focused = view->alpha_focused;
+        rule->alpha_unfocused = view->alpha_unfocused;
+    }
+    if (rule->set_focus_protection) {
+        rule->focus_protection = view->focus_protection;
+    }
+    if (rule->set_decor) {
+        rule->decor_enabled = view->decor_enabled;
+    }
+
+    if (rule->set_head && out != NULL && server->output_layout != NULL) {
+        bool found = false;
+        size_t head = fbwl_screen_map_screen_for_output(server->output_layout, &server->outputs, out, &found);
+        if (found) {
+            rule->head = (int)head;
+        }
+    }
+
+    if (screen.width > 0 && screen.height > 0) {
+        if (rule->set_dimensions) {
+            if (rule->width_percent) {
+                rule->width = percent_from_pixels(gw, screen.width);
+            } else {
+                rule->width = gw;
+            }
+            if (rule->height_percent) {
+                rule->height = percent_from_pixels(gh, screen.height);
+            } else {
+                rule->height = gh;
+            }
+        }
+
+        if (rule->set_position) {
+            const struct fbwl_decor_theme *theme = &server->decor_theme;
+            const int border = view->decor_enabled ? theme->border_width : 0;
+            const int title_h = view->decor_enabled ? theme->title_height : 0;
+
+            const int frame_left = view->decor_enabled ? border : 0;
+            const int frame_top = view->decor_enabled ? title_h + border : 0;
+            int frame_w = gw;
+            int frame_h = gh;
+            if (view->decor_enabled) {
+                frame_w += 2 * border;
+                frame_h += title_h + 2 * border;
+            }
+
+            const int frame_x = gx - frame_left;
+            const int frame_y = gy - frame_top;
+
+            const enum fbwl_apps_rule_anchor anchor = rule->position_anchor;
+            int wx = 0;
+            int wy = 0;
+            apps_anchor_window_ref(frame_w, frame_h, anchor, &wx, &wy);
+            int sx = 0;
+            int sy = 0;
+            apps_anchor_screen_ref(&screen, anchor, &sx, &sy);
+
+            const int x_off_px = frame_x + wx - sx;
+            const int y_off_px = frame_y + wy - sy;
+
+            const int store_x_px = apps_anchor_is_right(anchor) ? -x_off_px : x_off_px;
+            const int store_y_px = apps_anchor_is_bottom(anchor) ? -y_off_px : y_off_px;
+
+            if (rule->x_percent) {
+                rule->x = percent_from_pixels(store_x_px, screen.width);
+            } else {
+                rule->x = store_x_px;
+            }
+
+            if (rule->y_percent) {
+                rule->y = percent_from_pixels(store_y_px, screen.height);
+            } else {
+                rule->y = store_y_px;
+            }
+        }
+    }
+
+    if (fbwl_apps_rules_save_file(server->apps_rules, server->apps_rule_count, server->apps_file)) {
+        wlr_log(WLR_INFO, "Apps: save-on-close wrote %s rule=%zu title=%s app_id=%s",
+            server->apps_file,
+            rule_idx,
+            fbwl_view_title(view) != NULL ? fbwl_view_title(view) : "(no-title)",
+            fbwl_view_app_id(view) != NULL ? fbwl_view_app_id(view) : "(no-app-id)");
+    } else {
+        wlr_log(WLR_ERROR, "Apps: save-on-close failed to write %s", server->apps_file);
     }
 }

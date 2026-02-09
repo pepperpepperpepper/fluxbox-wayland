@@ -14,7 +14,8 @@ typedef bool (*fbwl_keys_add_binding_fn)(void *userdata, enum fbwl_keybinding_ke
     const char *cmd, const char *mode);
 
 typedef bool (*fbwl_keys_add_mouse_binding_fn)(void *userdata, enum fbwl_mousebinding_context context,
-    int button, uint32_t modifiers, enum fbwl_keybinding_action action, int arg, const char *cmd, const char *mode);
+    enum fbwl_mousebinding_event_kind event_kind, int button, uint32_t modifiers, bool is_double,
+    enum fbwl_keybinding_action action, int arg, const char *cmd, const char *mode);
 
 bool fbwl_keys_parse_file(const char *path, fbwl_keys_add_binding_fn add_binding, void *userdata,
     size_t *out_added);

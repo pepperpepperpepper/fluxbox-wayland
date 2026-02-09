@@ -79,10 +79,10 @@ void fbwl_ui_osd_update_position(struct fbwl_osd_ui *ui, struct wlr_output_layou
     wlr_scene_node_set_position(&ui->tree->node, ui->x, ui->y);
 }
 
-void fbwl_ui_osd_show_workspace(struct fbwl_osd_ui *ui,
+static void fbwl_ui_osd_show_text(struct fbwl_osd_ui *ui,
         struct wlr_scene *scene, struct wlr_scene_tree *layer_top,
         const struct fbwl_decor_theme *decor_theme, struct wlr_output_layout *output_layout,
-        int workspace, const char *workspace_name) {
+        const char *msg, int hide_ms) {
     if (ui == NULL || scene == NULL || decor_theme == NULL) {
         return;
     }
@@ -122,6 +122,35 @@ void fbwl_ui_osd_show_workspace(struct fbwl_osd_ui *ui,
     }
     ui->visible = true;
 
+    const float fg[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+    struct wlr_buffer *buf = fbwl_text_buffer_create(msg != NULL ? msg : "", ui->width, ui->height, 8, fg,
+        decor_theme->window_font);
+    if (buf != NULL) {
+        if (ui->label != NULL) {
+            wlr_scene_buffer_set_buffer(ui->label, buf);
+        }
+        wlr_buffer_drop(buf);
+    }
+
+    if (hide_ms >= 0 && ui->hide_timer != NULL) {
+        wl_event_source_timer_update(ui->hide_timer, hide_ms);
+    }
+
+    fbwl_ui_osd_update_position(ui, output_layout);
+    wlr_scene_node_raise_to_top(&ui->tree->node);
+}
+
+void fbwl_ui_osd_show_workspace(struct fbwl_osd_ui *ui,
+        struct wlr_scene *scene, struct wlr_scene_tree *layer_top,
+        const struct fbwl_decor_theme *decor_theme, struct wlr_output_layout *output_layout,
+        int workspace, const char *workspace_name) {
+    if (ui == NULL || scene == NULL || decor_theme == NULL) {
+        return;
+    }
+    if (!ui->enabled) {
+        return;
+    }
+
     char msg[256];
     if (workspace_name != NULL && *workspace_name != '\0') {
         if (snprintf(msg, sizeof(msg), "Workspace %d: %s", workspace + 1, workspace_name) < 0) {
@@ -130,23 +159,58 @@ void fbwl_ui_osd_show_workspace(struct fbwl_osd_ui *ui,
     } else if (snprintf(msg, sizeof(msg), "Workspace %d", workspace + 1) < 0) {
         msg[0] = '\0';
     }
-
-    const float fg[4] = {1.0f, 1.0f, 1.0f, 1.0f};
-    struct wlr_buffer *buf = fbwl_text_buffer_create(msg, ui->width, ui->height, 8, fg);
-    if (buf != NULL) {
-        if (ui->label != NULL) {
-            wlr_scene_buffer_set_buffer(ui->label, buf);
-        }
-        wlr_buffer_drop(buf);
-    }
-
-    if (ui->hide_timer != NULL) {
-        wl_event_source_timer_update(ui->hide_timer, 600);
-    }
-
-    fbwl_ui_osd_update_position(ui, output_layout);
-    wlr_scene_node_raise_to_top(&ui->tree->node);
+    fbwl_ui_osd_show_text(ui, scene, layer_top, decor_theme, output_layout, msg, 600);
     wlr_log(WLR_INFO, "OSD: show workspace=%d", workspace + 1);
+}
+
+void fbwl_ui_osd_show_attention(struct fbwl_osd_ui *ui,
+        struct wlr_scene *scene, struct wlr_scene_tree *layer_top,
+        const struct fbwl_decor_theme *decor_theme, struct wlr_output_layout *output_layout,
+        const char *title) {
+    if (ui == NULL || scene == NULL || decor_theme == NULL) {
+        return;
+    }
+    if (!ui->enabled) {
+        return;
+    }
+
+    char msg[256];
+    const char *t = title != NULL ? title : "";
+    if (snprintf(msg, sizeof(msg), "Attention: %s", t) < 0) {
+        msg[0] = '\0';
+    }
+    fbwl_ui_osd_show_text(ui, scene, layer_top, decor_theme, output_layout, msg, 600);
+    wlr_log(WLR_INFO, "OSD: show attention title=%s", title != NULL ? title : "(null)");
+}
+
+void fbwl_ui_osd_show_window_position(struct fbwl_osd_ui *ui,
+        struct wlr_scene *scene, struct wlr_scene_tree *layer_top,
+        const struct fbwl_decor_theme *decor_theme, struct wlr_output_layout *output_layout,
+        int x, int y) {
+    if (ui == NULL) {
+        return;
+    }
+    char msg[64];
+    if (snprintf(msg, sizeof(msg), "%d x %d", x, y) < 0) {
+        msg[0] = '\0';
+    }
+    fbwl_ui_osd_show_text(ui, scene, layer_top, decor_theme, output_layout, msg, -1);
+    wlr_log(WLR_INFO, "OSD: show windowposition x=%d y=%d", x, y);
+}
+
+void fbwl_ui_osd_show_window_geometry(struct fbwl_osd_ui *ui,
+        struct wlr_scene *scene, struct wlr_scene_tree *layer_top,
+        const struct fbwl_decor_theme *decor_theme, struct wlr_output_layout *output_layout,
+        int width, int height) {
+    if (ui == NULL) {
+        return;
+    }
+    char msg[64];
+    if (snprintf(msg, sizeof(msg), "%d x %d", width, height) < 0) {
+        msg[0] = '\0';
+    }
+    fbwl_ui_osd_show_text(ui, scene, layer_top, decor_theme, output_layout, msg, -1);
+    wlr_log(WLR_INFO, "OSD: show windowgeometry w=%d h=%d", width, height);
 }
 
 void fbwl_ui_osd_destroy(struct fbwl_osd_ui *ui) {

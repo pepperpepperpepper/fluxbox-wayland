@@ -14,6 +14,7 @@
 
 static void usage(const char *argv0) {
     printf("Usage: %s [--watcher NAME] [--item-path PATH] [--stay-ms MS]\n", argv0);
+    printf("          [--id ID]\n");
     printf("          [--activate-mark FILE] [--secondary-activate-mark FILE] [--context-menu-mark FILE]\n");
     printf("          [--icon-rgba #RRGGBB[AA]] [--icon-size N] [--icon-name NAME]\n");
     printf("          [--icon-theme-path PATH]\n");
@@ -29,6 +30,7 @@ static void usage(const char *argv0) {
 
 struct item_service {
     const char *item_path;
+    const char *id;
     const char *activate_mark;
     const char *secondary_activate_mark;
     const char *context_menu_mark;
@@ -321,12 +323,24 @@ static int item_prop_status(sd_bus *bus, const char *path, const char *interface
     return sd_bus_message_append(reply, "s", svc != NULL && svc->status != NULL ? svc->status : "Active");
 }
 
+static int item_prop_id(sd_bus *bus, const char *path, const char *interface, const char *property,
+        sd_bus_message *reply, void *userdata, sd_bus_error *ret_error) {
+    (void)bus;
+    (void)path;
+    (void)interface;
+    (void)property;
+    (void)ret_error;
+    struct item_service *svc = userdata;
+    return sd_bus_message_append(reply, "s", svc != NULL && svc->id != NULL ? svc->id : "");
+}
+
 static const sd_bus_vtable item_vtable[] = {
     SD_BUS_VTABLE_START(0),
     SD_BUS_METHOD("Activate", "ii", "", item_method_activate, SD_BUS_VTABLE_UNPRIVILEGED),
     SD_BUS_METHOD("SecondaryActivate", "ii", "", item_method_secondary_activate, SD_BUS_VTABLE_UNPRIVILEGED),
     SD_BUS_METHOD("ContextMenu", "ii", "", item_method_context_menu, SD_BUS_VTABLE_UNPRIVILEGED),
     SD_BUS_PROPERTY("Status", "s", item_prop_status, 0, 0),
+    SD_BUS_PROPERTY("Id", "s", item_prop_id, 0, 0),
     SD_BUS_PROPERTY("IconName", "s", item_prop_icon_name, 0, 0),
     SD_BUS_PROPERTY("IconThemePath", "s", item_prop_icon_theme_path, 0, 0),
     SD_BUS_PROPERTY("IconPixmap", "a(iiay)", item_prop_icon_pixmap, 0, 0),
@@ -440,6 +454,7 @@ static int alloc_solid_argb(uint8_t **out_argb, size_t *out_len, int *out_w, int
 int main(int argc, char **argv) {
     const char *watcher_name = "org.kde.StatusNotifierWatcher";
     const char *item_path = "/fbwl/TestItem";
+    const char *item_id = "";
     int stay_ms = 0;
     const char *activate_mark = NULL;
     const char *secondary_activate_mark = NULL;
@@ -478,6 +493,7 @@ int main(int argc, char **argv) {
         {"overlay-icon-rgba", required_argument, NULL, 17},
         {"overlay-icon-size", required_argument, NULL, 18},
         {"overlay-icon-name", required_argument, NULL, 19},
+        {"id", required_argument, NULL, 20},
         {"help", no_argument, NULL, 'h'},
         {0, 0, 0, 0},
     };
@@ -563,6 +579,9 @@ int main(int argc, char **argv) {
         case 19:
             overlay_icon_name = optarg;
             break;
+        case 20:
+            item_id = optarg;
+            break;
         case 'h':
         default:
             usage(argv[0]);
@@ -582,6 +601,7 @@ int main(int argc, char **argv) {
 
     struct item_service svc = {
         .item_path = item_path,
+        .id = item_id,
         .activate_mark = activate_mark,
         .secondary_activate_mark = secondary_activate_mark,
         .context_menu_mark = context_menu_mark,

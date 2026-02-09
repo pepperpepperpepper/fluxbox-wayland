@@ -23,6 +23,8 @@ struct fbwl_sni_item {
     struct wl_list link;
     struct fbwl_sni_watcher *watcher;
     char *id;
+    // StatusNotifierItem "Id" property (stable-ish identifier, used for pinLeft/pinRight sorting).
+    char *item_id;
     char *service;
     char *owner;
     char *path;
@@ -44,6 +46,7 @@ struct fbwl_sni_item {
     sd_bus_slot *slot_get_overlay_icon;
     sd_bus_slot *slot_get_overlay_icon_name;
     sd_bus_slot *slot_get_status;
+    sd_bus_slot *slot_get_item_id;
     sd_bus_slot *slot_props_changed;
     sd_bus_slot *slot_new_icon;
     sd_bus_slot *slot_new_attention_icon;
@@ -75,4 +78,3 @@ void fbwl_sni_send_item_action(struct fbwl_sni_watcher *watcher, const char *id,
     const char *method, const char *action, int x, int y);
 
 #endif
-

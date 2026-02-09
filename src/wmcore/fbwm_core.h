@@ -11,6 +11,7 @@ struct fbwm_view_ops {
     void (*focus)(struct fbwm_view *view);
     bool (*is_mapped)(const struct fbwm_view *view);
     bool (*get_box)(const struct fbwm_view *view, struct fbwm_box *out);
+    int (*head)(const struct fbwm_view *view);
     const char *(*title)(const struct fbwm_view *view);
     const char *(*app_id)(const struct fbwm_view *view);
 };
@@ -25,6 +26,9 @@ struct fbwm_view {
     int workspace;
     bool sticky;
 };
+
+typedef bool (*fbwm_core_refocus_filter_fn)(void *userdata, const struct fbwm_view *candidate,
+        const struct fbwm_view *reference);
 
 enum fbwm_window_placement_strategy {
     FBWM_PLACE_ROW_SMART = 0,
@@ -50,7 +54,14 @@ struct fbwm_core {
     struct fbwm_view views;
     struct fbwm_view *focused;
 
+    fbwm_core_refocus_filter_fn refocus_filter;
+    void *refocus_filter_userdata;
+
     int workspace_current;
+    int workspace_prev;
+    int *workspace_current_by_head;
+    int *workspace_prev_by_head;
+    size_t workspace_current_by_head_len;
     int workspace_count;
     char **workspace_names;
     size_t workspace_names_len;
@@ -72,7 +83,10 @@ void fbwm_core_view_map(struct fbwm_core *core, struct fbwm_view *view);
 void fbwm_core_view_unmap(struct fbwm_core *core, struct fbwm_view *view);
 void fbwm_core_view_destroy(struct fbwm_core *core, struct fbwm_view *view);
 
+void fbwm_core_set_refocus_filter(struct fbwm_core *core, fbwm_core_refocus_filter_fn filter, void *userdata);
+
 void fbwm_core_focus_view(struct fbwm_core *core, struct fbwm_view *view);
+void fbwm_core_focus_view_with_reason(struct fbwm_core *core, struct fbwm_view *view, const char *why);
 void fbwm_core_focus_next(struct fbwm_core *core);
 void fbwm_core_focus_prev(struct fbwm_core *core);
 void fbwm_core_refocus(struct fbwm_core *core);
@@ -80,9 +94,14 @@ void fbwm_core_refocus(struct fbwm_core *core);
 void fbwm_core_set_workspace_count(struct fbwm_core *core, int count);
 int fbwm_core_workspace_count(const struct fbwm_core *core);
 int fbwm_core_workspace_current(const struct fbwm_core *core);
+void fbwm_core_set_head_count(struct fbwm_core *core, size_t head_count);
+size_t fbwm_core_head_count(const struct fbwm_core *core);
+int fbwm_core_workspace_current_for_head(const struct fbwm_core *core, size_t head);
+int fbwm_core_workspace_prev_for_head(const struct fbwm_core *core, size_t head);
 void fbwm_core_clear_workspace_names(struct fbwm_core *core);
 bool fbwm_core_set_workspace_name(struct fbwm_core *core, int workspace, const char *name);
 const char *fbwm_core_workspace_name(const struct fbwm_core *core, int workspace);
+size_t fbwm_core_workspace_names_len(const struct fbwm_core *core);
 
 enum fbwm_window_placement_strategy fbwm_core_window_placement(const struct fbwm_core *core);
 void fbwm_core_set_window_placement(struct fbwm_core *core, enum fbwm_window_placement_strategy strategy);
@@ -93,6 +112,7 @@ void fbwm_core_set_col_placement_direction(struct fbwm_core *core, enum fbwm_col
 
 bool fbwm_core_view_is_visible(const struct fbwm_core *core, const struct fbwm_view *view);
 void fbwm_core_workspace_switch(struct fbwm_core *core, int workspace);
+void fbwm_core_workspace_switch_on_head(struct fbwm_core *core, size_t head, int workspace);
 void fbwm_core_move_focused_to_workspace(struct fbwm_core *core, int workspace);
 
 void fbwm_core_place_next(struct fbwm_core *core, const struct fbwm_output *output,

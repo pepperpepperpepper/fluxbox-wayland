@@ -50,13 +50,22 @@ if [[ "$WS" -lt 2 ]]; then
   exit 1
 fi
 
-# Click workspace 2 via toolbar (index 1).
-CLICK_X=$((X0 + CELL_W + CELL_W / 2))
+tool_line="$(rg 'Toolbar: tool tok=nextworkspace ' "$LOG" | tail -n 1)"
+if [[ "$tool_line" =~ lx=([-0-9]+)\ w=([0-9]+) ]]; then
+  TB_LX="${BASH_REMATCH[1]}"
+  TB_W="${BASH_REMATCH[2]}"
+else
+  echo "failed to parse Toolbar: tool tok=nextworkspace line: $tool_line" >&2
+  exit 1
+fi
+
+# Click the "nextworkspace" tool button to go to workspace 2.
+CLICK_X=$((X0 + TB_LX + TB_W / 2))
 CLICK_Y=$((Y0 + H / 2))
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" click "$CLICK_X" "$CLICK_Y"
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Toolbar: click workspace=2'
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Workspace: apply current=2 reason=toolbar'
+tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Toolbar: click tool=nextworkspace cmd=nextworkspace'
+tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Workspace: apply current=2 reason=switch-next'
 
 echo "ok: toolbar smoke passed (socket=$SOCKET log=$LOG)"

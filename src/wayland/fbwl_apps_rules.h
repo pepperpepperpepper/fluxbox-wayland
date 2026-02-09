@@ -38,7 +38,16 @@ struct fbwl_apps_rule {
     struct fbwl_apps_rule_match instance;
     struct fbwl_apps_rule_match title;
 
+    int match_limit;
+    int match_count;
+
     int group_id;
+
+    bool set_focus_hidden;
+    bool focus_hidden;
+
+    bool set_icon_hidden;
+    bool icon_hidden;
 
     bool set_workspace;
     int workspace;
@@ -58,6 +67,9 @@ struct fbwl_apps_rule {
     int height;
     bool height_percent;
 
+    bool set_ignore_size_hints;
+    bool ignore_size_hints;
+
     bool set_position;
     enum fbwl_apps_rule_anchor position_anchor;
     int x;
@@ -69,13 +81,17 @@ struct fbwl_apps_rule {
     bool minimized;
 
     bool set_maximized;
-    bool maximized;
+    bool maximized_h;
+    bool maximized_v;
 
     bool set_fullscreen;
     bool fullscreen;
 
     bool set_shaded;
     bool shaded;
+
+    bool set_tab;
+    bool tab;
 
     bool set_alpha;
     int alpha_focused;
@@ -89,11 +105,17 @@ struct fbwl_apps_rule {
 
     bool set_layer;
     int layer;
+
+    bool set_save_on_close;
+    bool save_on_close;
 };
 
 void fbwl_apps_rules_free(struct fbwl_apps_rule **rules, size_t *rule_count);
 
-bool fbwl_apps_rules_load_file(struct fbwl_apps_rule **rules, size_t *rule_count, const char *path);
+bool fbwl_apps_rules_load_file(struct fbwl_apps_rule **rules, size_t *rule_count, const char *path,
+    bool *rewrite_safe_out);
+
+bool fbwl_apps_rules_save_file(const struct fbwl_apps_rule *rules, size_t rule_count, const char *path);
 
 const struct fbwl_apps_rule *fbwl_apps_rules_match(const struct fbwl_apps_rule *rules, size_t rule_count,
     const char *app_id, const char *instance, const char *title, size_t *rule_index_out);

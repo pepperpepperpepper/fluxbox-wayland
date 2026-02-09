@@ -30,14 +30,17 @@ static void fbwl_xdg_activation_request_activate(struct wl_listener *listener, v
     }
 
     struct fbwl_server *server = state->server;
-    const enum fbwl_focus_reason prev_reason = server != NULL ? server->focus_reason : FBWL_FOCUS_REASON_NONE;
-    if (server != NULL) {
-        server->focus_reason = FBWL_FOCUS_REASON_ACTIVATE;
+    if (server == NULL) {
+        fbwm_core_focus_view(state->wm, &view->wm_view);
+        return;
     }
-    fbwm_core_focus_view(state->wm, &view->wm_view);
-    if (server != NULL) {
-        server->focus_reason = prev_reason;
+
+    const enum fbwl_focus_reason prev_reason = server->focus_reason;
+    server->focus_reason = FBWL_FOCUS_REASON_ACTIVATE;
+    if (server_focus_request_allowed(server, view, FBWL_FOCUS_REASON_ACTIVATE, "activate")) {
+        fbwm_core_focus_view(state->wm, &view->wm_view);
     }
+    server->focus_reason = prev_reason;
 }
 
 bool fbwl_xdg_activation_init(struct fbwl_xdg_activation_state *state, struct wl_display *display,

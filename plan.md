@@ -360,7 +360,7 @@ Suggested compatibility targets:
   - “Mod1/Mod4/Control/Shift” come from `xkbcommon` state, not X keycodes.
   - Current implementation: optional `--keys FILE` loader with a minimal subset:
     - `Mod1/Mod4/Control/Shift` modifiers, `KEYSYM` (via `xkb_keysym_from_name`), `:COMMAND ...`
-    - Supported commands: `ExecCommand`, `Exit`, `NextWindow`, `Maximize`, `Fullscreen`, `Minimize`/`Iconify`, `Workspace N`, `SendToWorkspace N`, `TakeToWorkspace N`
+    - Supported commands: `ExecCommand`, `Exit`, `Reconfigure`, `KeyMode`, `NextWindow`/`PrevWindow`, `NextTab`/`PrevTab`/`Tab N`, `Maximize`/`MaximizeHorizontal`/`MaximizeVertical`, `Fullscreen`, `Minimize`/`Iconify`, workspace and move/take variants (`Workspace N`, `Next/PrevWorkspace`, `SendTo*`, `TakeTo*`), stacking/layer (`Raise`/`Lower`/`RaiseLayer`/`LowerLayer`/`SetLayer`), menus (`WindowMenu`/`RootMenu`/`WorkspaceMenu`/`HideMenu(s)`), `StartMoving`/`StartResizing`, and `MacroCmd`.
 - `~/.fluxbox/menu`: keep; menu entries are just process spawns.
 - `~/.fluxbox/apps` (“Remember” rules): keep; extend matching:
   - Wayland: `app_id` and title
@@ -561,7 +561,7 @@ Acceptance:
 - SSH/terminal-only:
   - Scripted check: `scripts/fbwl-smoke-menu.sh` (loads a Fluxbox-style `menu` file via `--menu`, opens the root menu via a background right-click, selects an `[exec]` entry, and asserts the exec side effect + `Menu:` logs).
   - Scripted check: `scripts/fbwl-smoke-window-menu.sh` (right-clicks a decorated titlebar, selects `Close`, and asserts `Menu: open-window` + `Menu: window-close` logs and that the client exits).
-  - Scripted check: `scripts/fbwl-smoke-toolbar.sh` (clicks workspace 2 in the internal toolbar and asserts `Toolbar: click workspace=2` + `Workspace: apply current=2 reason=toolbar` logs).
+  - Scripted check: `scripts/fbwl-smoke-toolbar.sh` (clicks the `nextworkspace` tool button in the internal toolbar and asserts `Toolbar: click tool=nextworkspace cmd=nextworkspace` + `Workspace: apply current=2 reason=switch-next` logs).
   - Scripted check: `scripts/fbwl-smoke-iconbar.sh` (spawns two toplevels, clicks the iconbar entry for the non-focused one, and asserts `Toolbar: click iconbar` + `Focus:` logs).
   - Scripted check: `scripts/fbwl-smoke-command-dialog.sh` (opens the internal command dialog via `Alt+F2`, types `touch …`, presses Enter, and asserts `CmdDialog:` logs + marker file creation).
   - Scripted check: `scripts/fbwl-smoke-osd.sh` (switches to workspace 2 and asserts `OSD: show workspace=2` and timer-based hide).
@@ -679,7 +679,7 @@ Implications:
 
 Iteration loop (after code changes):
 ```sh
-make -j"$(nproc)" fluxbox-wayland fluxbox-remote fbwl-smoke-client fbwl-clipboard-client fbwl-cursor-shape-client fbwl-data-control-client fbwl-dnd-client fbwl-presentation-time-client fbwl-primary-selection-client fbwl-relptr-client fbwl-screencopy-client fbwl-export-dmabuf-client fbwl-output-management-client fbwl-output-power-client fbwl-xdg-output-client fbwl-viewporter-client fbwl-fractional-scale-client fbwl-text-input-client fbwl-input-method-client fbwl-xdg-activation-client fbwl-xdg-decoration-client fbwl-idle-client fbwl-session-lock-client fbwl-shortcuts-inhibit-client fbwl-single-pixel-buffer-client fbwl-remote fbwl-input-injector fbwl-foreign-toplevel-client fbwl-layer-shell-client fbx11-smoke-client fbwl-sni-item-client fbwl-xdp-portal-client util/startfluxbox-wayland
+make -j"$(nproc)" fluxbox-wayland fluxbox-remote fbwl-smoke-client fbwl-clipboard-client fbwl-cursor-shape-client fbwl-data-control-client fbwl-dnd-client fbwl-presentation-time-client fbwl-primary-selection-client fbwl-relptr-client fbwl-screencopy-client fbwl-export-dmabuf-client fbwl-output-management-client fbwl-output-power-client fbwl-xdg-output-client fbwl-viewporter-client fbwl-fractional-scale-client fbwl-text-input-client fbwl-input-method-client fbwl-xdg-activation-client fbwl-xdg-decoration-client fbwl-idle-client fbwl-session-lock-client fbwl-shortcuts-inhibit-client fbwl-single-pixel-buffer-client fbwl-remote fbwl-input-injector fbwl-foreign-toplevel-client fbwl-layer-shell-client fbx11-smoke-client fbx11-xembed-tray-client fbwl-sni-item-client fbwl-xdp-portal-client util/startfluxbox-wayland
 scripts/fbwl-smoke-all.sh
 ```
 
@@ -710,7 +710,7 @@ sudo pacman -S --needed base-devel git pkgconf autoconf automake libtool gettext
 ```sh
 ./autogen.sh
 ./configure --enable-wayland
-make -j"$(nproc)" fluxbox-wayland fluxbox-remote fbwl-smoke-client fbwl-clipboard-client fbwl-cursor-shape-client fbwl-data-control-client fbwl-dnd-client fbwl-presentation-time-client fbwl-primary-selection-client fbwl-relptr-client fbwl-screencopy-client fbwl-export-dmabuf-client fbwl-output-management-client fbwl-output-power-client fbwl-xdg-output-client fbwl-viewporter-client fbwl-fractional-scale-client fbwl-text-input-client fbwl-input-method-client fbwl-xdg-activation-client fbwl-xdg-decoration-client fbwl-idle-client fbwl-session-lock-client fbwl-shortcuts-inhibit-client fbwl-single-pixel-buffer-client fbwl-remote fbwl-input-injector fbwl-foreign-toplevel-client fbwl-layer-shell-client fbx11-smoke-client fbwl-sni-item-client fbwl-xdp-portal-client util/startfluxbox-wayland
+make -j"$(nproc)" fluxbox-wayland fluxbox-remote fbwl-smoke-client fbwl-clipboard-client fbwl-cursor-shape-client fbwl-data-control-client fbwl-dnd-client fbwl-presentation-time-client fbwl-primary-selection-client fbwl-relptr-client fbwl-screencopy-client fbwl-export-dmabuf-client fbwl-output-management-client fbwl-output-power-client fbwl-xdg-output-client fbwl-viewporter-client fbwl-fractional-scale-client fbwl-text-input-client fbwl-input-method-client fbwl-xdg-activation-client fbwl-xdg-decoration-client fbwl-idle-client fbwl-session-lock-client fbwl-shortcuts-inhibit-client fbwl-single-pixel-buffer-client fbwl-remote fbwl-input-injector fbwl-foreign-toplevel-client fbwl-layer-shell-client fbx11-smoke-client fbx11-xembed-tray-client fbwl-sni-item-client fbwl-xdp-portal-client util/startfluxbox-wayland
 
 scripts/fbwl-smoke-all.sh
 
@@ -725,6 +725,7 @@ scripts/fbwl-smoke-xvfb-tray.sh
 scripts/fbwl-smoke-xvfb-xwayland.sh
 scripts/fbwl-smoke-xvfb-portal.sh
 scripts/fbwl-smoke-xwayland.sh
+scripts/fbwl-smoke-xembed-tray.sh
 scripts/fbwl-smoke-ipc.sh
 scripts/fbwl-smoke-startfluxbox-wayland.sh
 scripts/fbwl-smoke-fluxbox-remote.sh
@@ -759,8 +760,10 @@ scripts/fbwl-smoke-ssd.sh
 scripts/fbwl-smoke-style.sh
 scripts/fbwl-smoke-menu.sh
 scripts/fbwl-smoke-window-menu.sh
+scripts/fbwl-smoke-clientmenu-usepixmap.sh
 scripts/fbwl-smoke-toolbar.sh
 scripts/fbwl-smoke-iconbar.sh
+scripts/fbwl-smoke-iconbar-resources.sh
 scripts/fbwl-smoke-command-dialog.sh
 scripts/fbwl-smoke-osd.sh
 scripts/fbwl-smoke-idle.sh
@@ -775,6 +778,7 @@ scripts/fbwl-smoke-apps-rules.sh
 scripts/fbwl-smoke-apps-rules-xwayland.sh
 scripts/fbwl-smoke-move-resize.sh
 scripts/fbwl-smoke-workspaces.sh
+scripts/fbwl-smoke-maximize-axis-toggle.sh
 scripts/fbwl-smoke-maximize-fullscreen.sh
 scripts/fbwl-smoke-minimize-foreign.sh
 scripts/fbwl-smoke-layer-shell.sh
@@ -1251,8 +1255,11 @@ Mitigation:
 - [x] Start capturing screenshots for key UX features during the Xvfb “kitchen sink” run (`scripts/fbwl-smoke-xvfb-kitchen-sink.sh`).
 - [x] Re-run `scripts/fbwl-smoke-ci.sh` to validate.
 - [x] Push changes.
-- [x] Published report (latest, uses `weston-terminal`): https://tmp.uh-oh.wtf/fluxbox-wayland/smoke-report/94b1f2b5/20260125-203918/index.html
-- [x] Published report (older example): https://tmp.uh-oh.wtf/fluxbox-wayland/smoke-report/d6b6fc11/20260125-092055/index.html
+- [x] Published report (latest, 2026-02-01, uses `weston-terminal`): https://tmp.uh-oh.wtf/fluxbox-wayland/smoke-report/4691e2dc/20260201-093944/index.html
+- [x] Published report (previous, 2026-02-01, uses `weston-terminal`): https://tmp.uh-oh.wtf/fluxbox-wayland/smoke-report/4691e2dc/20260201-005222/index.html
+- [x] Published report (previous, 2026-01-30, uses `weston-terminal`): https://tmp.uh-oh.wtf/fluxbox-wayland/smoke-report/4691e2dc/20260130-173952/index.html
+- [x] Published report (older, 2026-01-25, uses `weston-terminal`): https://tmp.uh-oh.wtf/fluxbox-wayland/smoke-report/94b1f2b5/20260125-203918/index.html
+- [x] Published report (older example, 2026-01-25): https://tmp.uh-oh.wtf/fluxbox-wayland/smoke-report/d6b6fc11/20260125-092055/index.html
 
 ---
 
@@ -1267,19 +1274,24 @@ Goal: users can drop in their existing `~/.fluxbox` directory and get the same b
   - Added a generic `init` parser + key/value store with typed getters (bool/int/color) and case-insensitive lookups (`src/wayland/fbwl_server_config.c`).
   - Added Fluxbox-compatible path resolution + discovery helpers (`session.keyFile/appsFile/menuFile/styleFile`), and switched `--config-dir` to use them (`src/wayland/fbwl_server_bootstrap.c`).
   - Kept parsing X11-free (no Xrm/X11 deps).
-- [ ] Apply the full resource set to Wayland compositor behavior:
+- [x] Apply the full resource set to Wayland compositor behavior:
   - [x] Focus/raise/click behavior:
-    - `session.screen0.focusModel` (ClickToFocus/MouseFocus/StrictMouseFocus; StrictMouseFocus currently behaves like MouseFocus).
+    - `session.screen0.focusModel` (ClickToFocus/MouseFocus/StrictMouseFocus).
+      - X11 semantics: `MouseFocus` focuses on “real” pointer entry/motion and deliberately ignores synthetic EnterNotify that happen without pointer motion (via `FocusControl::ignoreAtPointer()` / `isIgnored()` used on unmap/workspace switch/move-resize/menu close). `StrictMouseFocus` does not apply that ignore behavior unless forced, so focus can change even when the pointer is stationary and a window appears/disappears under it.
+      - Wayland status: MouseFocus focuses only on pointer motion. StrictMouseFocus also clears focus when the pointer moves over no view, and re-evaluates focus on workspace-visibility changes (map/unmap/workspace switch/minimize) and on Raise/Lower restacks, so stationary-pointer transitions are handled for those cases (`src/wayland/fbwl_server_policy_input.c`, `scripts/fbwl-smoke-strict-mousefocus-stacking.sh`).
+	      - Parity note (answers “does this match X11 exactly?”):
+	        - For `MouseFocus` behavior: yes (focus changes only on pointer motion/entry; stationary view-tree changes do not shift focus; leaving all windows does not clear focus), matching Fluxbox/X11’s “ignoreAtPointer” intent. The implementation is necessarily different because Wayland has no synthetic EnterNotify stream; we simply avoid re-evaluating focus on stationary scene changes for this model.
+	        - For `StrictMouseFocus`: yes for the implemented WM operations. We explicitly re-check view-under-cursor not only on pointer motion, but also on workspace visibility changes (map/unmap/switch/minimize), compositor-driven restacks (Raise/Lower, layer changes, fullscreen reparenting), and geometry-only view changes (keyboard move/resize and `MoveTo`/`Move`/`ResizeTo`/`Resize*`, plus async XDG/XWayland commit resizes), so focus can change without pointer motion like Fluxbox/X11.
     - `session.screen0.autoRaise` + `session.autoRaiseDelay` (auto-raise with delay on mouse-focus).
     - `session.screen0.clickRaises` (raise on click even when focus doesn't change; decor-only when disabled).
     - `session.screen0.focusNewWindows` (controls focusing newly-mapped views).
-  - [ ] Placement policy, workspace names/behavior, toolbar/menu behavior, tab-related policy, etc.:
+  - [x] Placement policy, workspace names/behavior, toolbar/menu behavior, tab-related policy, etc.:
     - [x] Workspace names: `session.screen0.workspaceNames` (drives toolbar workspace labels + workspace OSD; numbers remain the fallback).
     - [x] Window placement strategy: `session.screen0.windowPlacement` + row/col direction resources.
       - Supports Row/Col Smart + MinOverlap + Cascade + UnderMouse; Autotab tabs new windows to the currently focused one.
 	    - [x] Toolbar behavior: `session.screen0.toolbar.*` (visible/placement/autoHide/autoRaise/width/height/tools).
 	      - Implemented: `visible`, `placement`, `widthPercent`, `height`, `tools` (workspace/iconbar/systemtray/clock), `autoHide`, `autoRaise` (uses `session.autoRaiseDelay`).
-	      - Note: Left/Right placements currently map to top/bottom-aligned horizontal placement; true vertical toolbars are not implemented yet.
+	      - Note: Left/Right placements use a real vertical toolbar layout (covered by `scripts/fbwl-smoke-config-dir.sh`).
 	      - Smoke: extended `scripts/fbwl-smoke-config-dir.sh` to validate placement/size/tools plus autoHide/autoRaise logs.
 	    - [x] Menu behavior: `session.screen0.menuDelay` (hover-to-open submenus after delay).
 	      - Smoke: extended `scripts/fbwl-smoke-config-dir.sh` to validate delayed submenu open (via `fbwl-input-injector motion`).
@@ -1289,15 +1301,18 @@ Goal: users can drop in their existing `~/.fluxbox` directory and get the same b
 		      - Smoke: extended `scripts/fbwl-smoke-config-dir.sh` to assert init parsing + `Tabs: attach reason=autotab`.
     - [x] Output mapping strategy for `screenN` resources (Wayland outputs → Fluxbox screens).
       - Map outputs to screen indices by sorting output layout boxes by `(x, y, name)`.
-      - Use screen0 output for `session.screen0.toolbar.*` placement/size; log `ScreenMap:` whenever outputs/layout change.
-      - Smoke: extended `scripts/fbwl-smoke-multi-output.sh` to assert toolbar centers on screen0 with 2 outputs.
-		- [ ] Extend `keys` support to full classic syntax and command set:
+      - Treat Wayland outputs as Fluxbox “screens”: `session.screenN.*` keys apply per output index from `ScreenMap`, and fall back to `screen0` when unset (so single-screen configs apply everywhere unless overridden).
+      - Toolbar mapping: `session.screen0.toolbar.onhead` selects which `ScreenMap` index the (single) toolbar is placed on; toolbar appearance/behavior reads from `session.screen(toolbar_screen).*`.
+      - Smokes:
+        - `scripts/fbwl-smoke-multi-output.sh` asserts toolbar centers on `screen0` with 2 outputs.
+        - `scripts/fbwl-smoke-screen1-toolbar-overrides.sh` asserts `session.screen1.toolbar.*` overrides apply when the toolbar is on head 2.
+    - [x] Extend `keys` support to full classic syntax and command set:
 	  - [x] Expand command set: Close/Kill, WindowMenu/RootMenu/HideMenus, Prev/NextWindow, Prev/NextWorkspace, Send/Take to (prev|next|N), Reconfigure.
 	  - [x] Support numeric keycodes (X-style) in `keys`.
 	  - [x] Support mouse bindings: OnDesktop/OnWindow/OnTitlebar/OnToolbar + Mouse1-5 (Mouse4/5 via scroll axis).
-	  - [x] Support `MacroCmd {..}` execution for common subcommands (Raise/Focus/StartMoving/StartResizing).
+	  - [x] Support classic Fluxbox command language in `keys`/menus (nested `MacroCmd`, `If/Cond`, `ForEach/Map`, `Delay`, `ToggleCmd`; see §27 + `scripts/fbwl-smoke-keybinding-cmdlang.sh`).
 	  - [x] Smoke: extend `scripts/fbwl-smoke-keys-file.sh` to validate key+mouse bindings and `Reconfigure` reload.
-	  - [ ] TODO:
+	  - [x] TODO:
 	    - [x] NextTab/PrevTab/Tab N.
 	    - [x] Client patterns (workspace=[current], etc).
 	      - Parse `{static groups}` options and `(...)` client-pattern terms from `keys` for Next/PrevWindow.
@@ -1311,26 +1326,693 @@ Goal: users can drop in their existing `~/.fluxbox` directory and get the same b
 	      - Implement `:WorkspaceMenu` as a real workspace switcher menu (not RootMenu) with workspace-name labels.
 	      - Selecting a workspace switches + reapplies workspace visibility.
 	      - Smoke: extended `scripts/fbwl-smoke-keys-file.sh` to open WorkspaceMenu via `OnDesktop Mouse2` and click workspace 2.
-- [ ] Extend `apps` rules toward full “Remember” parity:
+- [x] Extend `apps` rules toward full “Remember” parity:
   - [x] Match semantics: patterns are full-match anchored (Fluxbox-like `^(...)$` behavior).
   - [x] Support `[group]` blocks (tab-group attach on map).
   - [x] Support `[Deco] {none}` and `[Layer] {Menu/Top/Normal/Bottom/Desktop}` (maps to scene layers).
   - [x] Smoke: extend `scripts/fbwl-smoke-apps-rules.sh` to validate group/deco/layer behavior.
-  - [ ] TODO: Fill out “Remember” surface area:
+  - [x] TODO: Fill out “Remember” surface area:
     - [x] Position: `[Position] (anchor) {X[%] Y[%]}` (best-effort compositor placement).
     - [x] Dimensions: `[Dimensions] {width[%] height[%]}` (best-effort size request).
     - [x] Head: `[Head] {number}` (Wayland outputs via ScreenMap).
 	    - [x] Shaded
 	    - [x] Alpha
 	    - [x] FocusProtection
-    - [ ] SaveOnClose (write-back)
-- [ ] Extend menu/style parity:
-  - [x] Menu: support `[include]` (file/dir), `[separator]`, `[nop]`.
-  - [ ] TODO: dynamic submenus/tags: `[config]`, `[workspaces]`, `[stylesmenu]`, `[stylesdir]`, `[wallpapers]`, etc.
-  - [ ] TODO: menu icons + `[encoding]` blocks.
-  - [ ] Style/overlay: expand theme parsing until Fluxbox-like UI can be driven by real styles.
+    - [x] SaveOnClose (write-back)
+		- [x] Extend menu/style parity:
+		  - [x] Menu: support `[include]` (file/dir), `[separator]`, `[nop]`.
+		  - [x] Menu: dynamic submenu/tag `[workspaces]`.
+		  - [x] Dynamic menus/tags: `[config]`, `[reconfig]`, `[style]`, `[stylesmenu]`, `[stylesdir]`, `[wallpapers]` (plus themes aliases).
+			  - [x] TODO: menu icons + `[encoding]` blocks.
+		  - [x] Style/overlay: expand theme parsing until Fluxbox-like UI can be driven by real styles.
 - [x] Add introspection + reload:
   - [x] IPC/CLI: `fbwl-remote dump-config` and `fbwl-remote reconfigure` (reloads `init` when `--config-dir` is set, plus keys/apps/menu/style).
   - [x] Smoke: extend `scripts/fbwl-smoke-ipc.sh` to validate dump-config + reconfigure reload logs.
   - [x] Reconfigure: re-load `init` resources and apply updated settings live (incl. `session.*File` repointing under `--config-dir`).
   - [x] Smoke: extend `scripts/fbwl-smoke-config-dir.sh` to validate `init` reload (keyFile swap + toolbar resize).
+
+---
+
+## 19) Post-Parity Polish — Close Known Gaps (Next)
+
+Goal: eliminate the remaining documented behavior gaps that block “daily usable” expectations, while keeping everything SSH-friendly and covered by deterministic smoke tests.
+
+- [x] Implement true `StrictMouseFocus` semantics:
+  - When the pointer leaves all focusable views, clear keyboard focus (or focus the background) rather than keeping the last-focused view.
+  - Ensure this interacts correctly with `session.screen0.clickRaises`, `session.screen0.autoRaise`, and `session.autoRaiseDelay`.
+  - Smoke: extend `scripts/fbwl-smoke-config-dir.sh` to set `session.screen0.focusModel: StrictMouseFocus` and assert focus clears on pointer leave (via `fbwl-input-injector motion` to empty area + log assertion).
+  - Note (X11 parity): Fluxbox/X11 `StrictMouseFocus` means “focus always follows mouse, even when stationary” (window raise/map/unmap/geometry changes under a stationary pointer can change focus via synthetic Enter/Leave). Our Wayland `StrictMouseFocus` explicitly re-checks view-under-cursor on workspace-visibility changes, compositor-driven restacks, and geometry-only view changes (keyboard move/resize and `MoveTo`/`Move`/`ResizeTo`/`Resize*`), plus async XDG/XWayland commit resizes.
+- [x] Implement true vertical toolbar for Left/Right placements:
+  - Left/Right placements now use a real vertical layout (tool buttons, iconbar, tray, clock stacked vertically); `autoHide` slides along X for Left/Right.
+  - Strut: reserves toolbar thickness when `autoHide=false`; when `autoHide=true`, reserve no usable-area strut (Fluxbox/X11 semantics).
+  - Smoke: extended `scripts/fbwl-smoke-config-dir.sh` to validate left/right toolbar geometry + strut; updated maximize/layer-shell expectations; added optional left/right toolbar screenshots in `scripts/fbwl-smoke-xvfb-kitchen-sink.sh` (gated by `FBWL_REPORT_DIR`).
+- [x] Make `keys` “static groups” affect Next/PrevWindow ordering:
+  - Policy: when `{static}` is present, cycle candidates in deterministic “creation order” (monotonic per-view `create_seq`), stepping next/prev relative to the currently focused view and wrapping at the ends.
+  - Smoke: extended `scripts/fbwl-smoke-keys-file.sh` to spawn multiple matching windows and assert `{static groups}` Next/PrevWindow traverses in stable order.
+- [x] Menu parser polish: menu icons + `[encoding]` blocks:
+  - Icons: menu entries accept per-item `<icon>` paths; menu UI now reserves an icon column when any icon is present so labels stay aligned even when some items have no icon or a missing icon path.
+  - Encoding: `[encoding] {…}` / `[endencoding]` blocks are supported to decode legacy menu files (default remains UTF-8 when unspecified).
+  - Smoke: `scripts/fbwl-smoke-menu.sh` covers icon + encoding parsing (incl. a missing icon path); `scripts/fbwl-smoke-menu-icons.sh` exercises icon/no-icon/missing-icon rendering and captures a screenshot when `FBWL_REPORT_DIR` is set.
+- [x] Style/theme parity: expand parsing until real Fluxbox styles can drive the UI:
+  - Fill missing style keys that affect menus/toolbars/decorations (fonts, colors, bevel/border/gradients as needed).
+  - Keep parsing tolerant (unknown keys warn once, not fatal) to support real-world style files.
+  - Progress: add `menu.hilite.textColor` (selected item fg), `menu.frame.disableColor` (NOP/disabled fg), `toolbar.{textColor,label.textColor,windowLabel.textColor}` (with “specific overrides generic” precedence), `window.label.{focus,unfocus}.color` (mapped to our titlebar colors), plus `borderWidth`/`handleWidth`/`borderColor` aliases, `*.colorTo` “gradient blend” support for key surfaces (menus/toolbars/title/buttons), and basic font keys (`*.font`, `window.font`, `menu.*.font`, `toolbar.*.font`) wired into UI text rendering; log unique unknown keys (deduped, capped).
+  - Smoke: `scripts/fbwl-smoke-style.sh` now uses a representative style fragment (BlueNight-derived) and asserts key parsing (including `*.colorTo` and font keys); `scripts/fbwl-smoke-xvfb-decor-style.sh` runs it under Xvfb.
+- [x] Re-publish a screenshot report after completing the above:
+  - Generate a fresh report via the Xvfb “kitchen sink” run and publish with `scripts/publish_screenshots.sh`.
+  - Record the new “latest” URL in section 17.
+
+---
+
+## 20) Focus Parity — StrictMouseFocus stacking changes (Next)
+
+Goal: close the remaining X11-vs-Wayland semantic gap for `StrictMouseFocus`: in Fluxbox/X11, stack changes can trigger synthetic Enter/Leave without pointer motion, which can shift focus when the pointer is stationary. Our Wayland implementation currently re-evaluates focus on pointer motion and on workspace-visibility changes (map/unmap/switch/minimize), but not on pure stacking operations like Raise/Lower.
+
+- [x] `StrictMouseFocus`: when a restack operation changes which view is topmost under the pointer (without pointer motion), update keyboard focus to follow the pointer.
+  - Implementation: capture `fbwl_view_at()` before and after Raise/Lower; if the topmost view under the cursor changed, call the existing pointer-focus re-evaluation path (StrictMouseFocus only).
+  - Constraint: keep all `src/wayland/*.c|*.h` files under the 1000-LOC gate.
+- [x] Smoke: add a deterministic stacking test that proves focus can change without pointer motion in `StrictMouseFocus`:
+  - Script: `scripts/fbwl-smoke-strict-mousefocus-stacking.sh` (binds `Mod1 F2 :Lower` because `fbwl-input-injector` only supports a fixed set of key specs).
+  - Config: `session.screen0.focusModel: StrictMouseFocus`, `session.screen0.windowPlacement: UnderMousePlacement`.
+  - Scenario: spawn two overlapping clients under the cursor, then invoke `Lower` twice and assert focus flips between them without any `motion` injection.
+  - Wired into: `scripts/fbwl-smoke-all.sh`, `scripts/fbwl-smoke-ci.sh`.
+- [x] `StrictMouseFocus`: treat layer changes/reparenting as restacks
+  - Gap: X11 can generate EnterNotify on non-Raise/Lower stack changes (e.g. `SetLayer`/`RaiseLayer`/`LowerLayer`, fullscreen reparenting), which can shift focus when the pointer is stationary.
+  - Wayland: added a shared StrictMouseFocus restack helper (`server_strict_mousefocus_view_under_cursor` + `server_strict_mousefocus_recheck_after_restack`) and invoked it for `SetLayer` (keybindings + window menu) and fullscreen reparenting, so focus follows the topmost view under a stationary cursor.
+  - Smoke: `scripts/fbwl-smoke-strict-mousefocus-layer.sh` (binds `Mod1 F2 :SetLayer Bottom` and asserts focus flips without any `motion` injection).
+
+---
+
+## 21) Parity Audit — Remaining X11 config/UX gaps (Next)
+
+Goal: enumerate and close the remaining “classic Fluxbox/X11 config directory behaves the same” gaps that are still present in the Wayland backend.
+
+This is primarily “wire the remaining `init` resources” work (see `doc/fluxbox-init-resources.tsv`), plus a few UX features that are core to Fluxbox daily use but currently missing or simplified on Wayland.
+
+### 21.1 `init` resource parity (currently parsed but not fully applied)
+
+Note: the Wayland backend now supports `session.screenN.*` resources for most policy/UI behavior via `ScreenMap` (Wayland outputs → Fluxbox “screens”), with `screenN` → `screen0` fallback semantics for unset keys. Some resources are still global or `screen0`-only by design (workspaces/workspaceNames/defaultDeco), and are called out below.
+
+- [x] Generalize `session.screenN.*` application beyond `screen0`
+  - Mapping: Wayland outputs are treated as Fluxbox “screens” via `ScreenMap` ordering.
+  - Fallback: `session.screenN.foo` falls back to `session.screen0.foo` when unset (so existing single-screen configs apply everywhere unless overridden).
+  - Runtime selection: screen config is chosen by either:
+    - cursor position (`screen(cursor)`) for pointer-driven policy (focus model, clickRaises/autoRaise, move/resize thresholds, warping), or
+    - view output (`screen(view)`) for per-view policy (maximize/fullscreen sizing, maxIgnoreIncrement, tabs maxOver).
+  - Parity notes:
+    - Workspaces: workspace **count/names remain global**, but the **current workspace is per-head** (switching targets the pointer head).
+    - Menu behavior: `menuDelay` / `menu.alpha` apply at menu-open time (menus open at cursor; uses `screen(cursor)`).
+    - Remote actions: Fluxbox/X11 is screen-scoped, but Wayland IPC is global; treat `allowRemoteActions` as a global gate (from `screen0`).
+  - Smoke:
+    - `scripts/fbwl-smoke-screen1-toolbar-overrides.sh` (toolbar on head 2 uses `session.screen1.toolbar.{placement,widthPercent,height}` overrides)
+    - `scripts/fbwl-smoke-screen1-menu-overrides.sh` (root menu alpha+delay uses `session.screenN.menu.*` from `screen(cursor)`)
+
+- [x] Expand `focusModel` enum compatibility to accept classic Fluxbox values:
+  - Map `SloppyFocus` / `SemiSloppyFocus` (and any other upstream names) onto the closest Wayland policy, and add a smoke proving the mapping.
+  - Smoke: `scripts/fbwl-smoke-focusmodel-aliases.sh`
+- [x] Apply remaining global `session.*` resources (Wayland equivalents or documented no-ops):
+  - `session.ignoreBorder`: implemented (when true, ignore `StartMoving` bindings on `OnWindowBorder` so borders don’t initiate move)
+    - Smoke: `scripts/fbwl-smoke-ignore-border.sh`
+  - `session.cacheLife` / `session.cacheMax` / `session.colorsPerChannel`: parsed + stored (currently no-op; pixmap/theme caching TBD)
+  - `session.forcePseudoTransparency`: parsed + stored; currently logged as ignored on Wayland (TODO: implement pseudo transparency semantics; see §30)
+  - `session.groupFile`: parsed + logged (deprecated; grouping uses the `apps` file)
+  - `session.configVersion`: parsed + stored (currently informational; no auto-migration yet)
+- [x] Add `session.doubleClickInterval` and implement true “Double” mouse bindings in `keys`:
+  - Parse the `Double` token into mouse bindings and dispatch based on `session.doubleClickInterval`.
+  - Smoke: `scripts/fbwl-smoke-doubleclick.sh`
+- [x] Implement the remaining screen-level focus / attention resources:
+  - [x] `session.screenN.noFocusWhileTypingDelay`
+    - Parse/apply from `init` and block focus-steal on map/activate when the currently focused view has received recent “typing” keypresses (approximate X11 `FluxboxWindow::isTyping()` semantics; `Enter` resets typing state).
+    - Implementation: track `last_typing_time_msec` on the focused view from the seat keyboard path (`src/wayland/fbwl_server_seat_glue.c`), and gate map/activate focus via `server_focus_request_allowed()` (`src/wayland/fbwl_server_policy.c`).
+    - Smoke: `scripts/fbwl-smoke-no-focus-while-typing.sh` (focusNew + typing delay blocks focus; attention starts; `Enter` allows focus again).
+  - [x] `session.screenN.demandsAttentionTimeout`
+    - Implemented as a Wayland-side “attention” timer that blinks the view’s decoration active state until it is focused (or destroyed), repeating at the configured interval.
+    - Smoke: covered by `scripts/fbwl-smoke-no-focus-while-typing.sh` (asserts attention start + at least one toggle).
+    - Attention UX: iconbar highlights urgent views and an attention OSD is shown on request (X11 has a dedicated attention state).
+  - [x] `session.screenN.allowRemoteActions`
+    - Gate IPC commands when disabled (Fluxbox/X11 default is false when driven by `init`).
+    - Behavior: `ping` still works, other commands return `err remote_actions_disabled`.
+    - Smoke: `scripts/fbwl-smoke-allow-remote-actions.sh`.
+  - [x] `session.screenN.focusSameHead`
+    - Implemented for both focus-cycle (Next/PrevWindow) and “revert focus” (when a focused view becomes invisible/unmaps/workspace changes): restrict candidate selection to the output under the pointer (Wayland analogue of X11 `getCurrHead()`).
+    - Parity: disable the restriction while moving a window (Wayland: `server->grab.mode == FBWL_CURSOR_MOVE`, matching Fluxbox/X11’s `focusedFbWindow()->isMoving()` exception).
+    - Parity: if there are no focusable windows on the current head, revert-focus clears focus (Wayland: `clear_keyboard_focus()` paths), matching Fluxbox/X11’s revert-focus fallback to focusing the root/pointer.
+    - Smoke: `scripts/fbwl-smoke-focus-same-head.sh` (two outputs; make MRU on other head; close focused window; assert focus stays on pointer head).
+- [x] Implement the remaining move/resize/placement/maximize resources:
+  - [x] `session.screenN.edgeSnapThreshold` / `session.screenN.edgeResizeSnapThreshold` (snap-to-edge during move/resize)
+    - Implemented: snap-to-output-edge for interactive move/resize (uses output usable area; SSD-aware when server-side decorations are enabled).
+    - Defaults match Fluxbox/X11: `edgeSnapThreshold=10`, `edgeResizeSnapThreshold=0`.
+    - Smoke: `scripts/fbwl-smoke-edge-snap.sh`.
+  - [x] `session.screenN.opaqueMove` / `session.screenN.opaqueResize` / `session.screenN.opaqueResizeDelay`
+    - Defaults match Fluxbox/X11: `opaqueMove=True`, `opaqueResize=False`, `opaqueResizeDelay=50`.
+    - Implemented:
+      - `opaqueMove`: controls whether interactive move is “live” (moves the view each motion) vs an outline.
+      - `opaqueResize`: controls whether interactive resize is “live” vs an outline that applies on release.
+      - `opaqueResizeDelay`: when `opaqueResize=True`, debounces live-resize applies (matches Fluxbox/X11 timer semantics).
+    - Smoke: `scripts/fbwl-smoke-opaque-resize.sh` (covers outline vs `opaqueResize=True` + delay; asserts `Resize: apply-delay` happens before the release log).
+  - [x] `session.screenN.showwindowposition` (OSD during move/resize)
+    - Implemented: when enabled, shows an OSD during interactive move (frame x/y) and resize (client w/h).
+    - Note: uses a separate OSD instance from the workspace OSD to avoid message clobbering.
+    - Smoke: `scripts/fbwl-smoke-showwindowposition.sh`.
+  - [x] `session.screenN.workspacewarping` + related resources (drag a window across output edge to switch workspace):
+    - Implemented: while moving, entering the edge “warp pad” switches workspaces and warps the pointer to the opposite edge (Fluxbox/X11-style).
+    - Uses `edgeSnapThreshold` as the warp pad width (Fluxbox/X11 behavior).
+    - If `opaqueMove=True`, the dragged window is moved to the new workspace (send + switch); otherwise only the workspace switches.
+    - Resources:
+      - `session.screenN.workspacewarpinghorizontal` / `session.screenN.workspacewarpingvertical`
+      - `session.screenN.workspacewarpinghorizontaloffset` / `session.screenN.workspacewarpingverticaloffset`
+    - Smoke: `scripts/fbwl-smoke-workspace-warping.sh`.
+  - [x] `session.screenN.maxIgnoreIncrement` / `session.screenN.maxDisableMove` / `session.screenN.maxDisableResize`
+    - Defaults match Fluxbox/X11: `maxIgnoreIncrement=True`, `maxDisableMove=False`, `maxDisableResize=False`.
+    - `maxIgnoreIncrement`: for XWayland, when false, maximize snaps to WM_NORMAL_HINTS resize increments (Fluxbox/X11 `applySizeHints` path); when true, maximize uses the full target area.
+    - `maxDisableMove` / `maxDisableResize`: when true, block starting move/resize grabs on fully-maximized/fullscreen views; resize (when allowed) restores/unmaximizes before starting (Fluxbox/X11 `startResizing()` behavior).
+    - Smokes:
+      - `scripts/fbwl-smoke-xwayland-max-ignore-increment.sh` (XWayland size hints increments)
+      - `scripts/fbwl-smoke-max-disable-move-resize.sh` (blocked grabs while maximized)
+  - [x] `session.screenN.fullMaximization`
+    - Implemented: maximize (full + horizontal + vertical) uses the full output box (ignores usable-area/struts), matching Fluxbox/X11 `fullMaximization`.
+    - Smoke: `scripts/fbwl-smoke-full-maximization.sh` (`fullmax` case).
+  - [x] `session.screenN.toolbar.maxOver`
+    - Implemented: when true, the toolbar does not reserve a strut in the usable area (Fluxbox/X11 toolbar strut behavior).
+    - Smoke: `scripts/fbwl-smoke-full-maximization.sh` (`toolbarmaxover` case).
+  - [x] `session.screenN.tabs.maxOver`
+    - Implemented (external tabs only): when `tabs.intitlebar=false` and a window is tabbed, maximize (full + horizontal + vertical) either reserves space for the external tab strip (`tabs.maxOver=false`) or ignores it so the tab strip can extend off-screen (`tabs.maxOver=true`), matching Fluxbox/X11 `max_over_tabs` behavior.
+    - Smoke: `scripts/fbwl-smoke-tabs-maxover.sh` (TopCenter placement; size difference is `titleHeight + borderWidth`).
+  - [x] `session.screenN.slit.maxOver`
+    - Implemented: when `slit.maxOver=false`, the slit reserves its thickness in the output usable-area box; when `slit.maxOver=true`, maximize/placement ignore the slit and can extend under it (Fluxbox/X11 semantics).
+    - Smoke: `scripts/fbwl-smoke-slit-maxover.sh` (DOCK XWayland client + usable-area difference).
+- [x] Implement the remaining toolbar/menu/iconbar resources:
+  - [x] `session.screenN.strftimeFormat` (clock format)
+    - Implemented: toolbar clock now uses the configured strftime format (default remains `%H:%M`).
+    - Smoke: `scripts/fbwl-smoke-strftime-format.sh` (sets format to `FMTTEST` and asserts toolbar log).
+  - [x] `session.screenN.menu.alpha` / `session.screenN.toolbar.alpha` (alpha for compositor-drawn UI)
+    - Implemented: apply classic 0–255 alpha to compositor-drawn menu + toolbar surfaces (background/highlight/labels).
+    - Smoke: `scripts/fbwl-smoke-alpha.sh` (asserts `Toolbar: position ... alpha=` and `Menu: open ... alpha=` logs from a config-dir init).
+  - [x] `session.screenN.tooltipDelay`
+    - Implemented (toolbar iconbar): when hovering an iconbar item whose title is ellipsized, show a tooltip after `tooltipDelay` ms (`0` = immediate, `<0` = disabled), matching Fluxbox/X11 behavior.
+    - Smoke: `scripts/fbwl-smoke-tooltip-delay.sh`.
+  - [x] `session.menuSearch` (menu typeahead/search behavior)
+    - Implemented: classic `nowhere|itemstart|somewhere` modes; type-to-select works while a menu is open.
+    - Smoke: `scripts/fbwl-smoke-menu-search.sh` (execs a typed match in both `itemstart` and `somewhere` modes).
+  - [x] `session.screenN.iconbar.*` (mode/alignment/icon sizing/text padding/iconifiedPattern/usePixmap)
+    - Implemented: `mode`, `alignment`, `iconWidth`, `iconTextPadding`, `usePixmap`, `iconifiedPattern`.
+    - Icons: Wayland `app_id` → icon theme lookup (and absolute path support) via `src/wayland/fbwl_icon_theme.c`.
+    - Smokes: `scripts/fbwl-smoke-iconbar.sh`, `scripts/fbwl-smoke-iconbar-resources.sh`.
+    - Parity note: `iconbar.mode` supports a subset of Fluxbox ClientPattern terms; extend as needed.
+  - [x] `session.screenN.clientMenu.usePixmap`
+    - Implemented: `ClientMenu` keybinding command opens a per-workspace client list menu. When enabled, entries resolve icons from `app_id` via icon theme lookup (and absolute path support).
+    - Smoke: `scripts/fbwl-smoke-clientmenu-usepixmap.sh`.
+  - [x] `session.screenN.systray.pinLeft` / `session.screenN.systray.pinRight` (and `session.screenN.pinLeft` / `session.screenN.pinRight` alias from docs)
+    - Implemented: Fluxbox-style left/right pin ordering for SNI tray icons; matches tokens against StatusNotifierItem `Id` (case-insensitive).
+    - Smoke: `scripts/fbwl-smoke-tray-pin.sh` (covers both `systray.pin*` and alias `pin*` keys).
+  - [x] `session.screenN.toolbar.layer` / `session.screenN.toolbar.onhead`
+    - Implemented:
+      - `session.screen0.toolbar.onhead` (Fluxbox/X11-style 1-based head index) selects which Wayland “screen” (output index from `ScreenMap`) the (single) toolbar is placed on.
+      - Toolbar config is sourced from `session.screen(toolbar_screen).*` so per-screen overrides apply when the toolbar is moved to another output (e.g. `session.screen1.toolbar.placement`).
+      - `toolbar.layer` maps Fluxbox layer names/numbers to compositor scene layers (overlay/top/normal/bottom/background).
+      - Input parity: toolbar click/hover only triggers when the toolbar is the topmost scene node under the pointer (so lower layers don’t steal clicks from windows).
+    - Smokes:
+      - `scripts/fbwl-smoke-toolbar-onhead.sh` (placement + strut applies only on the toolbar output)
+      - `scripts/fbwl-smoke-toolbar-layer.sh` (Top vs Bottom layer click routing)
+      - `scripts/fbwl-smoke-screen1-toolbar-overrides.sh` (screen1 toolbar overrides apply when on head 2)
+  - [x] `session.screenN.toolbar.button.<name>.{label,commands}` + `session.screenN.toolbar.tools` `button.<name>` entries
+    - Implemented: `button.<name>` tokens in `toolbar.tools` are rendered as clickable tool buttons; `toolbar.button.<name>.commands` is parsed as a colon-delimited button1..button5 command list (Fluxbox key commands).
+    - Execution: commands are resolved via `fbwl_fluxbox_cmd_resolve()` and run through the keybinding action path (so RootMenu/Workspace/etc behave like keybindings).
+    - Note: we also route vertical scroll wheel events over toolbar buttons to button4/button5 commands (Wayland axis → Fluxbox mouse button mapping).
+    - Smoke: `scripts/fbwl-smoke-toolbar-buttons.sh`.
+  - [x] Toolbar tool ordering + per-tool widgets parity (`session.screenN.toolbar.tools`):
+    - Implemented: tools are laid out in the exact order given by `toolbar.tools` (ordered list), including per-tool widgets like `workspacename`, `prevworkspace`, `nextworkspace`, `prevwindow`, `nextwindow`, plus `button.<name>` tools.
+    - Notes:
+      - The built-in “segment” tools `iconbar` / `systemtray` / `clock` are treated as singletons; the first occurrence wins.
+    - Smokes: `scripts/fbwl-smoke-toolbar.sh`, `scripts/fbwl-smoke-toolbar-tools-order.sh`.
+  - [x] Implement the remaining titlebar + per-window defaults resources:
+  - [x] `session.titlebar.left` / `session.titlebar.right` and `session.screenN.titlebar.{left,right}` (button list + order)
+    - Implemented for `screen0`: init parsing supports both global and per-screen overrides; used for compositor-drawn titlebar button layout.
+    - Smoke: `scripts/fbwl-smoke-titlebar-buttons.sh`.
+  - [x] `session.screenN.defaultDeco` (default decoration set semantics; Wayland equivalent maps to SSD on/off)
+    - Implemented: treat `NONE` as “no SSD” (we still request xdg-decoration server-side; we simply don’t draw).
+    - Applies to XWayland too (no WM decorations when `NONE`).
+    - Reconfigure: changing the default updates existing non-forced windows.
+    - Smoke: `scripts/fbwl-smoke-default-deco.sh`.
+  - [x] `session.screenN.window.{focus,unfocus}.alpha` (default per-view alpha, overridden by apps rules)
+    - Implemented: parse `session.screen0.window.{focus,unfocus}.alpha` from `init` and apply as the default alpha for views that don’t already have `[Alpha]` set via `apps` (or via the window menu).
+    - Reconfigure: changing the defaults updates existing windows that are still following the defaults (and does not override `apps` alpha).
+    - Smoke: `scripts/fbwl-smoke-window-alpha.sh`.
+  - [x] `session.screenN.windowMenu` (load the `windowmenu` file and use it for the window menu structure)
+    - Implemented: `session.screen0.windowMenu` (plus `session.windowMenu` fallback) and `windowmenu` fallback file discovery.
+    - Smoke: `scripts/fbwl-smoke-window-menu.sh`.
+  - [x] Tabs UI parity (`session.screenN.tabs.*` + `session.screenN.tab.*` UX)
+    - Implemented: visible tab strip UI for tab groups (intitlebar + external placement via `tab.placement`), including click-to-activate and mouse-tab-focus (`tabFocusModel`).
+    - Sizing/padding: honors `tab.width` + `session.tabPadding`.
+    - Pixmap icons: honors `tabs.usePixmap` (XWayland prefers `_NET_WM_ICON`, Wayland uses icon theme lookup from `app_id`).
+    - Drag-to-tab: honors `session.tabsAttachArea` on move-grab release (Titlebar-only vs Window).
+    - Smokes:
+      - `scripts/fbwl-smoke-tabs-ui-click.sh` (click-to-activate)
+      - `scripts/fbwl-smoke-tabs-ui-mousefocus.sh` (MouseTabFocus hover activation)
+      - `scripts/fbwl-smoke-tabs-attach-area.sh` (Titlebar-only attach enforcement)
+      - `scripts/fbwl-smoke-tabs-maxover.sh` (external maximize offsets)
+- [x] Implement remaining “struts” resources (Wayland mapping):
+  - `session.screenN.struts` sets extra reserved pixels on output N (applies to placement + maximize).
+  - Compatibility: `session.screen0.struts.<ai>` (Fluxbox/X11 “head” struts) maps `<ai>` (1-based) to Wayland outputs from `ScreenMap`.
+  - Precedence: `screen0.struts` base → `screen0.struts.<ai>` per-output → `screenN.struts` explicit per-output override (for N>0).
+  - Smoke: `scripts/fbwl-smoke-struts.sh` (2 outputs; asserts both Place usable box and Maximize size respect struts + override precedence).
+
+### 21.2 Core UX parity still missing (beyond `init`)
+
+- [x] Mousebinding context parity (grips):
+  - Distinguish `OnWindowBorder` vs `OnLeftGrip` vs `OnRightGrip` (previously `OnLeftGrip`/`OnRightGrip` collapsed to `OnWindowBorder`, breaking the stock `data/keys` bindings).
+  - Implementation: added explicit contexts + detect left/right grips from `fbwl_view_decor_hit_test().edges` (bottom-left/bottom-right), and covered with `scripts/fbwl-smoke-grips.sh`.
+- [x] Titlebar buttons parity:
+  - Implemented the classic Fluxbox button set: `MenuIcon`, `Shade`, `Stick`, `Minimize`, `Maximize`, `Close`, `LHalf`, `RHalf`.
+  - Layout is driven by `session.titlebar.{left,right}` with `session.screen0.titlebar.{left,right}` overrides.
+  - Behavior:
+    - `MenuIcon` opens the window menu.
+    - `Shade` toggles shade.
+    - `Stick` toggles sticky and reapplies workspace visibility.
+    - `LHalf`/`RHalf` tile the window into the left/right half of the current output’s usable area.
+    - Maximize/tiling now accounts for the SSD frame (border/title) so the titlebar stays on-screen/clickable.
+  - Theming: new button colors are wired to the existing `window.button.focus.color` / `window.button.focus.colorTo` keys (applies to the full button set).
+  - Smoke: `scripts/fbwl-smoke-titlebar-buttons.sh`.
+- [x] Window menu parity:
+  - Implemented `windowmenu` file parsing + fallback default matching `data/windowmenu` ordering.
+  - Added classic window actions: Shade, Stick, Raise/Lower, SendTo (workspace submenu), Layer submenu, Alpha submenu.
+  - Note: `SetTitleDialog` is implemented as a compositor-local title override (decorations/iconbar/foreign-toplevel only). It does **not** change the app-provided title, and the override is cleared if the client later updates its title.
+  - Smoke: `scripts/fbwl-smoke-window-menu.sh`.
+- [x] Keybinding command parity (fluxbox-keys):
+  - Implemented: `MaximizeHorizontal`, `MaximizeVertical`, `RaiseLayer`, `LowerLayer`, `SetLayer <layer>` (accepts both classic layer names like `Top`/`Normal`/`Bottom`/`Desktop`/`Menu` and numeric values).
+  - Parity note: `MaximizeHorizontal`/`MaximizeVertical` preserve the other axis when toggling from fully-maximized (modeled as independent `{horz,vert}` bits + a single restore geometry).
+  - Smokes: `scripts/fbwl-smoke-keybinding-commands.sh`, `scripts/fbwl-smoke-maximize-axis-toggle.sh`.
+- [x] Iconbar parity:
+  - [x] Wayland icons: derive from `app_id` via icon theme lookup (and absolute path support).
+  - [x] XWayland icons: derive from WM hints/NET_WM_ICON.
+  - [x] Apply `iconbar.*` resources (filtering, ordering, layout) for X11-like defaults.
+    - Parity note: `iconbar.mode` supports a subset of ClientPattern.
+  - Smokes: `scripts/fbwl-smoke-iconbar.sh`, `scripts/fbwl-smoke-iconbar-resources.sh`, `scripts/fbwl-smoke-xwayland-net-wm-icon.sh`.
+- [x] Slit/dockapps parity:
+  - [x] Strategy: XWayland DOCK windows-only “slit” (best-effort).
+  - [x] Implement compositor-managed slit container:
+    - Manages XWayland surfaces with `_NET_WM_WINDOW_TYPE_DOCK` (excluding surfaces that set `strut_partial`, i.e. panels).
+    - Config: `session.screenN.slit.{placement,onhead,layer,autoHide,autoRaise,maxOver,alpha,direction,acceptKdeDockapps}`.
+    - Usable-area behavior: reserves `slit.thickness` unless `slit.maxOver=true` or `slit.autoHide=true`.
+  - [x] Smoke: `scripts/fbwl-smoke-slit-maxover.sh` (DOCK XWayland client + `slit.maxOver` usable-area effect).
+  - [x] `session.slitlistFile` ordering (match Fluxbox/X11 slitlist WM_CLASS ordering).
+    - Smoke: `scripts/fbwl-smoke-slit-ordering.sh` (spawn DOCK clients in reverse order; assert slit ordering matches slitlist).
+  - [x] `slit.acceptKdeDockapps` parity (KDE dockapp property detection: `KWM_DOCKWINDOW` / `_KDE_NET_WM_SYSTEM_TRAY_WINDOW_FOR`).
+    - Smoke: `scripts/fbwl-smoke-slit-kde-dockapps.sh` (assert accept=false behaves like normal XWayland; accept=true routes into slit).
+  - [x] Slit menu parity (Fluxbox/X11 “Slit” right-click menu + Clients submenu + “Save SlitList” write-back to `session.slitlistFile`):
+    - Opens on right-click within the slit; left-click raises the slit but still forwards the click to the dockapp (Fluxbox/X11 uses `ReplayPointer` + raises the slit window on button1).
+    - Menu items: Placement, Layer, On Head, Auto hide, Auto raise, Maximize Over, Alpha (presets), Clients submenu.
+    - Clients submenu: Cycle Up/Down, per-client visibility toggles, “Save SlitList” write-back to `session.slitlistFile` (match name preference: XWayland instance → class → app_id → title).
+    - Smoke: `scripts/fbwl-smoke-slit-menu.sh` (cycle down, save, assert `slitlist` contents).
+    - Parity notes:
+      - Alpha is a preset percentage submenu (not Fluxbox/X11’s 0–255 integer menu item).
+      - Per-client move up/down via wheel/middle/right click isn’t implemented; menu currently closes on click (no “stay open” toggle/radio semantics).
+  - [x] Slit parity: auto-save `session.slitlistFile` on DOCK attach + shutdown (Fluxbox/X11 writes `slitlist` in `addClient()` and `shutdown()`).
+    - Smoke: `scripts/fbwl-smoke-slit-autosave.sh` (assert file is created/updated on attach + updated on shutdown after cycle-down without manual “Save SlitList”).
+  - [x] Legacy tray parity for X11 apps (XEmbed):
+    - Implemented: optional XEmbed → SNI bridge via an external proxy auto-started on XWayland ready:
+      - Default: auto (prefers `xembedsniproxy`, then `snixembed`, then `xembed-sni-proxy` if found in `PATH`).
+      - Override: set `FBWL_XEMBED_SNI_PROXY=0/false/off` to disable, or set it to a custom shell command string (supports args).
+      - Lifecycle: proxy PID is tracked and terminated on compositor shutdown.
+    - Smoke: `scripts/fbwl-smoke-xembed-tray.sh` (skips if proxy binary missing; runs `./fbx11-xembed-tray-client` under XWayland and validates the tray icon render via `fbwl-screencopy-client --expect-rgb`).
+  - [x] Wallpaper parity:
+    - Implement compositor-native wallpaper rendering (PNG) via a scene buffer per output (keeps solid-color fallback).
+    - Menu tag: `[wallpapers]` with no `{command}` now sets wallpaper via a server action (no PATH dependency); custom `{command}` still executes as before.
+    - IPC: `fbwl-remote wallpaper <path>` sets wallpaper; `fbwl-remote wallpaper none` clears.
+    - Smoke: `scripts/fbwl-smoke-wallpaper.sh` (generates a 64x64 PNG, sets wallpaper, validates via `fbwl-screencopy-client --expect-rgb`).
+
+### 21.3 Engineering constraint (unblocks further parity work)
+
+- [x] Refactor/split `src/wayland/fbwl_server_policy_input.c` to regain LOC headroom:
+  - Current state: file peaked at 1041 LOC after per-head workspace + keybinding hook work and must remain < 1000 (enforced by `scripts/fbwl-check-wayland-loc.sh`). Now ~965 LOC.
+  - Goal: make future parity patches safe without “whitespace surgery”.
+  - Implementation: moved workspace visibility + head-aware workspace switching helpers (`apply_workspace_visibility()`, `server_workspace_switch_on_head()`) into `src/wayland/fbwl_server_ui.c` (which is now ~977 LOC) and switched StrictMouseFocus follow-up to use the existing `server_strict_mousefocus_recheck()` helper.
+- [x] Refactor/split `src/wayland/fbwl_keybindings.c` to regain LOC headroom:
+  - Current state: file sat at 999 LOC; cycle-pattern parsing + candidate selection moved into `src/wayland/fbwl_keybindings_cycle.c` so we can keep iterating on keybinding parity safely.
+- [x] Refactor/split `src/wayland/fbwl_server_bootstrap.c` to regain LOC headroom:
+  - Current state: was 999 LOC; moved shared init parsing helpers into `src/wayland/fbwl_server_config.c` (bootstrap now ~677 LOC).
+- [x] Restore Next/PrevWindow “cycle” focus logging after keybindings refactor:
+  - Why: `scripts/fbwl-smoke-input.sh` asserts `Policy: focus (cycle)` for `NextWindow` (Alt+F1).
+  - Implementation: added `fbwm_core_focus_view_with_reason()` and use it for keybinding-driven cycle focus.
+- [x] Refactor/split `src/wayland/fbwl_view.c` to regain LOC headroom:
+  - Current state: file sat at 998 LOC and must remain < 1000 (enforced by `scripts/fbwl-check-wayland-loc.sh`).
+  - Implementation: moved decor/alpha/shade helpers into `src/wayland/fbwl_view_decor.c` and updated `src/Makemodule.am` (view.c now ~630 LOC).
+  - Goal: unblock parity work that needs to touch view placement/maximize/output-usable logic (e.g. struts).
+- [x] Refactor/split `src/wayland/fbwl_ui_menu.c` to regain LOC headroom:
+  - Current state: `src/wayland/fbwl_ui_menu.c` now ~702 LOC; icon loading moved into `src/wayland/fbwl_ui_menu_icon.c`.
+  - Goal: unblock menu pixmap + tooltipDelay parity work without risking the LOC gate.
+- [x] Refactor/split `src/wayland/fbwl_ui_toolbar.c` to regain LOC headroom:
+  - Implementation: extracted iconbar + tray build logic into `src/wayland/fbwl_ui_toolbar_iconbar.c` and `src/wayland/fbwl_ui_toolbar_tray.c` (internal API in `src/wayland/fbwl_ui_toolbar_build.h`), and updated `src/Makemodule.am`.
+  - Current state: `fbwl_ui_toolbar.c` now ~821 LOC so we can safely implement `tooltipDelay`, toolbar buttons, and remaining iconbar resources without tripping the LOC gate.
+- [x] Refactor/split `src/wayland/fbwl_sni_item.c` to regain LOC headroom:
+  - Current state: file sat at ~981 LOC and must remain < 1000.
+  - Goal: unblock further SNI/tray parity work without risking the LOC gate.
+  - Implementation: moved request/reply logic into `src/wayland/fbwl_sni_item_requests.c` and updated `src/Makemodule.am` (`fbwl_sni_item.c` now ~161 LOC).
+- [x] Refactor/split `src/wayland/fbwl_apps_rules.c` to regain LOC headroom:
+  - Current state: file sits at ~989 LOC and must remain < 1000.
+  - Goal: unblock further `apps` parity work without risking the LOC gate.
+  - Implementation: split into `src/wayland/fbwl_apps_rules_load_helpers.c`, `src/wayland/fbwl_apps_rules_load.c`, and `src/wayland/fbwl_apps_rules_match.c`, with `src/wayland/fbwl_apps_rules.c` reduced to the `free()` API; updated `src/Makemodule.am`.
+
+---
+
+## 22) Focus Parity — StrictMouseFocus geometry-only changes (Done)
+
+Goal: close the remaining X11-vs-Wayland semantic gap for `StrictMouseFocus`: in Fluxbox/X11, pure geometry changes can trigger synthetic Enter/Leave without pointer motion, which can shift focus when the pointer is stationary.
+
+- [x] `StrictMouseFocus`: after geometry-only WM operations that can move a view under/away from a stationary cursor, re-evaluate view-under-cursor and update keyboard focus accordingly.
+	  - Implemented:
+	    - Immediate view-tree changes: call `server_strict_mousefocus_recheck_after_restack(...)` after maximize/restore (`fbwl_view_set_maximized()`), shade/unshade (`fbwl_view_set_shaded()`), tiling (`LHalf`/`RHalf`), and maximize-h/maximize-v keybinding actions.
+	    - Commit-time resize parity: on XDG/XWayland surface size commits, if the cursor crosses the view’s frame bounds (old size vs new size), call `server_strict_mousefocus_recheck(...)` so focus can change *without* pointer motion even when the resize is async (XDG configure/commit).
+	    - Keybinding geometry ops: `MoveTo`/`Move`/`ResizeTo`/`Resize*` and keyboard-driven `StartMoving`/`StartResizing` call `server_strict_mousefocus_recheck(...)` so focus can change without pointer motion like Fluxbox/X11.
+	    - Focus no-op guard: `focus_view()` only short-circuits when both the compositor policy focus (`server->focused_view`) *and* the seat focus (`seat->keyboard_state.focused_surface`) already match the target, so StrictMouseFocus rechecks still work even when keyboards come/go (headless `fbwl-input-injector`).
+- [x] Smoke: deterministic headless geometry test proving focus can change without pointer motion in `StrictMouseFocus`.
+  - Smoke: `scripts/fbwl-smoke-strict-mousefocus-geometry.sh` (maximize → move cursor over another view → unmaximize; also MoveTo a window away; asserts focus flips with no pointer motion between the geometry change and focus change).
+- [x] Parity guard: ensure `MouseFocus` continues to *only* change focus on pointer motion/entry (i.e., geometry-only changes should not shift focus in `MouseFocus`, matching Fluxbox/X11’s “ignoreAtPointer” intent).
+  - Smoke: `scripts/fbwl-smoke-mousefocus-geometry.sh` (same scenario; asserts *no* focus flip after unmaximize without motion).
+
+---
+
+## 23) Parity Nits — Remaining “Not Quite X11” Items (Done)
+
+Goal: capture the remaining known deviations where Wayland allows closer behavior, so “total parity” has an explicit checklist.
+
+- [x] MaximizeHorizontal/MaximizeVertical axis-toggle parity
+  - Fixed: maximize is modeled as independent `{horz, vert}` bits + a single restore geometry, so toggling one axis from fully-maximized preserves the other axis (Fluxbox/X11 behavior).
+  - Smoke: `scripts/fbwl-smoke-maximize-axis-toggle.sh`
+- [x] Iconbar `RelativeSmart` alignment semantics
+  - Fixed: `RelativeSmart` varies item widths based on preferred title width (Fluxbox/X11-like behavior).
+  - Smoke: `scripts/fbwl-smoke-iconbar-resources.sh` (`RelativeSmart` case).
+- [x] MouseFocus / StrictMouseFocus semantics parity (X11)
+  - Summary: `MouseFocus` changes focus only on real pointer motion; `StrictMouseFocus` also re-evaluates view-under-cursor on compositor-driven restacks and geometry/workspace visibility changes so focus can change with a stationary pointer (Fluxbox/X11 behavior).
+  - Smokes: `scripts/fbwl-smoke-mousefocus-geometry.sh`, `scripts/fbwl-smoke-strict-mousefocus-geometry.sh`, `scripts/fbwl-smoke-strict-mousefocus-stacking.sh`.
+- [x] Iconbar `mode` ClientPattern completeness
+  - Fixed: `iconbar.mode` now supports the documented Fluxbox ClientPattern term *names* used by iconbar mode, with explicit Wayland/implementation limitations.
+    - Implemented: `name/class/title/role`, `transient`, `workspace/workspacename`, `head` (incl. `[mouse]`), `layer`, `screen`, plus state terms (`minimized/maximized/maximizedhorizontal/maximizedvertical/fullscreen/shaded/stuck/urgent`).
+    - Parity: `focushidden` now maps to “hidden from focus-cycling” for XWayland toplevels with `_NET_WM_WINDOW_TYPE` in `{DOCK, DESKTOP, SPLASH}` (and slit-managed docks). XDG toplevels have no standard window-type, so `focushidden` is always `no` for them.
+    - Parity note: Fluxbox/X11 iconbar always appends `(iconhidden=no)`; Wayland does the same. In Wayland, `iconhidden=yes` covers XWayland `_NET_WM_STATE_SKIP_TASKBAR` **and** XWayland `_NET_WM_WINDOW_TYPE` in `{DOCK, DESKTOP, SPLASH, TOOLBAR, MENU}` (plus slit-managed docks), matching Fluxbox’s defaults.
+    - Parity: string terms use anchored POSIX regex matching (Fluxbox-like whole-string match; substring via `.*`). Known limitation: `[current]` is only supported for `workspace` (and `[mouse]` for `head`).
+  - Smoke: `scripts/fbwl-smoke-iconbar-resources.sh` (maximizedhorizontal + workspacename cases).
+- [x] Slit menu “stay open” + per-client reorder shortcuts
+  - Fixed: slit toggle/radio items and slit client items are “closeOnClick=false” (Fluxbox/X11 behavior), so you can toggle/reorder multiple entries without the menu closing.
+  - Fixed: per-client reorder shortcuts now match Fluxbox/X11’s `SlitClientMenuItem::click()` mapping:
+    - Move up: wheel-up (Wayland vertical scroll) or middle click.
+    - Move down: wheel-down (Wayland vertical scroll) or right click.
+    - Toggle visibility: left click / Enter.
+  - Smoke: `scripts/fbwl-smoke-slit-menu.sh` (opens Clients submenu, right-clicks dock-a to move it down, then saves without reopening; asserts no menu close + slitlist order).
+- [x] Slit menu alpha input parity (0–255)
+  - Fixed: slit Alpha menu now includes a “Set Alpha…” integer-entry prompt (0–255), matching Fluxbox/X11’s `IntMenuItem` semantics.
+    - Note: we keep the preset % entries as a convenience (they’re still “stay open” like radio items).
+  - Smoke: `scripts/fbwl-smoke-slit-alpha-input.sh` (opens Alpha submenu → Set Alpha… → types `128` → asserts `Slit: set-alpha 128 (prompt)` + layout alpha=128).
+- [x] DemandsAttention parity in iconbar/OSD
+  - Fixed: urgent views now use “focused” iconbar styling (Fluxbox/X11 `FocusableTheme` behavior: focused OR attention state → focused theme).
+  - Fixed: OSD now shows a short “Attention: …” message when attention starts.
+  - Smoke: `scripts/fbwl-smoke-no-focus-while-typing.sh` (asserts `OSD: show attention ...` + `Toolbar: iconbar attention ...` on `Attention: start`).
+- [x] Multi-screen workspace semantics (per-head / Xinerama parity)
+  - Implemented: per-head current workspace; workspace switching acts on the pointer head; visibility is `sticky || view.workspace == head_current(view_head)`.
+  - UI/IPC: toolbar `workspacename` uses the toolbar’s head; workspace menu selects/switches on the menu’s head; IPC supports optional head targeting.
+  - Smoke: `scripts/fbwl-smoke-multi-output.sh` (switches head 0 and head 1 independently; asserts per-head visibility isolation).
+
+---
+
+## 24) Parity Gaps — Remaining “Not Quite X11” Items (Next)
+
+Goal: capture the remaining known gaps where either (a) we can match Fluxbox/X11 more closely, or (b) Wayland protocol limits mean we need explicit “best-effort” semantics + documentation.
+
+- [x] ClientPattern regex parity (iconbar + keybinding patterns)
+  - Fixed: string terms use anchored POSIX regex semantics (whole-string match; substring via `.*`).
+  - Parity quirk: like Fluxbox/X11, anchoring uses `^PATTERN$` (no extra parens), so `|` precedence matches X11 (e.g. `foo|bar` matches “starts with foo” OR “ends with bar”).
+  - Smokes: `scripts/fbwl-smoke-iconbar-resources.sh`, `scripts/fbwl-smoke-keys-file.sh`, `scripts/fbwl-smoke-clientpattern-regex-quirk.sh`.
+
+- [x] `focushidden` ClientPattern semantics
+  - Fixed: `focushidden` now has concrete Wayland-side meaning for XWayland toplevels: `_NET_WM_WINDOW_TYPE` in `{DOCK, DESKTOP, SPLASH}` (and slit-managed docks) → `yes`, otherwise `no`.
+  - Fixed: focus cycling (`NextWindow`/`PrevWindow`) skips focushidden views (Fluxbox/X11 behavior).
+  - Smoke: `scripts/fbwl-smoke-focushidden.sh` (spawns an XWayland desktop-type view and asserts `NextWindow` skips it).
+  - Note: there is no standard XDG/Wayland analogue for `_NET_WM_WINDOW_TYPE`, so pure Wayland toplevels can’t self-declare `focushidden`; use apps rules `[FocusHidden] {yes}` / `[Hidden] {yes}` to force it when needed.
+
+- [x] Keyboard-driven move/resize parity
+  - Fixed: `:StartMoving` / `:StartResizing` from keybindings now create a keyboard grab: arrow keys step; Enter commits; Escape cancels (Fluxbox/X11 behavior).
+  - Detail: step size is 10px (Ctrl=1px, Shift=50px). StrictMouseFocus recheck runs on commit/cancel and after opaque move/resize steps that change geometry.
+  - Smoke: `scripts/fbwl-smoke-keyboard-move-resize.sh`
+
+- [x] Xinerama per-head workspaces
+  - Implemented: per-head `workspace_current` in WM-core; workspace switching targets the pointer head; visibility is head-aware (`sticky || ws == current(head)`).
+  - UI: toolbar/workspace menu are head-aware.
+  - IPC: `get-workspace [head]`, `workspace <n> [head]`, `nextworkspace [head]`, `prevworkspace [head]` (head is 1-based; default head 1).
+  - Smoke: `scripts/fbwl-smoke-multi-output.sh`
+
+- [x] Pixmap/theme caching resources (`session.cacheLife` / `session.cacheMax` / `session.colorsPerChannel`)
+  - Implemented: disk-loaded menu/iconbar/titlebar icons are now cached (decoded+scaled Cairo surfaces keyed by `(path, icon_px)`), honoring `session.cacheLife` (minutes) + `session.cacheMax` (kB). Setting either to `0` disables caching and clears the cache.
+  - Parity note: `session.colorsPerChannel` remains a no-op in Wayland (ARGB32 rendering).
+
+---
+
+## 25) Parity Audit — Newly Found X11 Gaps (Next)
+
+Goal: capture remaining Fluxbox/X11 behaviors not yet mirrored in the Wayland backend, so “total parity” stays an explicit checklist.
+
+- [x] Apps (“Remember”) hidden-state parity: `[Hidden]` / `[FocusHidden]` / `[IconHidden]`
+  - Implemented: parse/apply these keys from the `apps` file.
+    - `[Hidden] {yes|no}` sets both `FocusHidden` + `IconHidden`.
+    - `[FocusHidden] {yes|no}` hides the view from focus cycling (Alt-Tab / `NextWindow` / `PrevWindow`).
+    - `[IconHidden] {yes|no}` hides the view from the toolbar iconbar.
+  - Parity: `FocusHidden` only affects “focus list” semantics (not click/mouse focusing), matching Fluxbox/X11’s use of focus-hidden state.
+  - Smoke: `scripts/fbwl-smoke-apps-hidden.sh`.
+
+- [x] Apps (“Remember”) maximize-mode parity: `[Maximized] {horz|vert}` applies axis-only maximize (not full maximize)
+  - Fixed: apps parsing now preserves the axis form:
+    - `[Maximized] {yes}` → `h=1 v=1`
+    - `[Maximized] {horz}` → `h=1 v=0`
+    - `[Maximized] {vert}` → `h=0 v=1`
+    - `[Maximized] {no}` → `h=0 v=0`
+  - Applied: post-map uses `fbwl_view_set_maximized_axes()` so XDG and XWayland both get correct geometry + state.
+  - Smoke: `scripts/fbwl-smoke-apps-rules.sh` + `scripts/fbwl-smoke-apps-rules-xwayland.sh` (covers horz/vert remember on map).
+
+- [x] Apps (“Remember”) `[IgnoreSizeHints] {yes|no}` parity (XWayland-only)
+  - Implemented: per-view override that controls whether XWayland maximize applies WM_NORMAL_HINTS (min/max/base/inc).
+    - Applied via apps remember pre-map (`fbwl_apps_remember_apply_pre_map()`).
+    - Used in full-maximize (`fbwl_view_set_maximized()`): when `IgnoreSizeHints=yes`, skip size-hint snapping regardless of `session.screenN.maxIgnoreIncrement`.
+  - Smoke: `scripts/fbwl-smoke-apps-ignore-size-hints.sh` (global `maxIgnoreIncrement=false` + two XWayland windows: one snaps to increments, one ignores via apps rule).
+
+- [x] Apps (“Remember”) `[Tab] {yes|no}` parity (mapping to our tabs model)
+  - Semantics: `Tab=no` means “this window is not eligible for tabbing” (Fluxbox/X11: “tabs enabled” toggle).
+  - Implemented:
+    - Per-view override `view->tabs_enabled_override_set/value` is applied on map *before* any autotab/apps-group attach can run.
+    - `fbwl_tabs_attach()` refuses to attach if either the view or the anchor has tabs disabled, so this blocks apps-group + placement autotab + interactive attaches.
+    - `Tab` is parsed/inherited/saved in the `apps` rules layer.
+  - Smoke: `scripts/fbwl-smoke-apps-tab.sh` (proves `Tab=yes` still attaches and `Tab=no` prevents apps-group attach).
+
+- [x] Keybinding ClientPattern completeness for `NextWindow` / `PrevWindow`
+  - Implemented: cycle patterns now reuse the full Fluxbox-style ClientPattern surface area supported by the iconbar matcher:
+    - `name`, `class/app_id`, `title`, `role`
+    - `workspace` (incl. shorthand `(workspace)`), `workspacename`
+    - `head` (incl. `head=[mouse]`), `layer`, `screen`
+    - `minimized`, `maximized`, `maximizedhorizontal`, `maximizedvertical`, `fullscreen`, `shaded`, `stuck`, `transient`, `urgent`, `iconhidden`, `focushidden`
+  - Detail: `FocusHidden` views are still excluded from cycling (Fluxbox/X11 focus list semantics), regardless of ClientPattern terms.
+  - Smoke: `scripts/fbwl-smoke-nextwindow-clientpattern.sh` (layer/head/maximize-axis terms via `NextWindow` patterns).
+
+---
+
+## 26) Parity Audit — ClientPattern advanced semantics (Done)
+
+Goal: finish Fluxbox/X11 ClientPattern semantics so keybindings, iconbar patterns, and apps rules behave like classic Fluxbox.
+
+- [x] ClientPattern special value `[current]` parity (beyond `workspace=[current]`)
+  - Implemented: `name|class|title|role|maximized*|fullscreen|shaded|stuck|transient|urgent|iconhidden|focushidden|head|layer|screen` accept `=[current]` to compare against the currently focused view’s value.
+  - Implemented: shorthand `(Name)` / `(Class)` / `(Layer)` etc maps to `(...=[current])`, matching Fluxbox/X11 `ClientPattern` parsing rules.
+  - Smoke: extended `scripts/fbwl-smoke-nextwindow-clientpattern.sh` to cover `class=[current]`, `(class)`, and `layer!=[current]`.
+
+- [x] ClientPattern `@XPROP` parity (XWayland-only)
+  - Implemented: parse `(@FOO=regex)` terms (and `!=`) for keybinding/iconbar patterns.
+  - Implemented: match against X11 window properties via XCB on the XWayland connection (tries both text property and CARDINAL-as-string, mirroring Fluxbox/X11 behavior).
+  - Implemented: `SetXProp` keybinding command for XWayland windows (sets `UTF8_STRING`).
+  - Smoke: `scripts/fbwl-smoke-xwayland-xprop-clientpattern.sh` (covers SetXProp + `NextWindow (@FOO=...)` for both text + CARDINAL properties).
+
+- [x] Apps rules `{N}` match-limit parity
+  - Implemented: parse and persist `{N}` suffix on `[app] (...)` and enforce it when matching apps rules (Fluxbox/X11 `ClientPattern::m_matchlimit` semantics).
+  - Implemented: track active match counts per rule and decrement on view destroy so slots free up when matching clients exit.
+  - Smoke: `scripts/fbwl-smoke-apps-matchlimit.sh` (spawns 3 matching clients with `{2}`, asserts the third does not match, then closes one and asserts a new client matches).
+
+- [x] Remaining keybinding command parity (selected high-impact)
+  - Implemented: `ShowDesktop`, `ArrangeWindows*`, `Unclutter`, `GotoWindow`, `NextGroup/PrevGroup`, `Attach`.
+    - `Attach`: uses Fluxbox-style ClientPattern matching to attach matching views to the most-recently-focused matching anchor.
+      - Note: string ClientPattern terms are whole-string anchored regex (Fluxbox/X11 semantics), so substring matches require `.*`.
+    - `GotoWindow {groups}` parity: counts active tab-groups as one slot, matching Fluxbox `FocusControl::goToWindowNumber`.
+    - `NextGroup/PrevGroup` parity: cycle focus by group instead of by window.
+    - `ShowDesktop` parity: minimize/restore windows on the current workspace; when restoring (unminimize) avoid re-focusing the restored view (Fluxbox/X11 `deiconify(false)` behavior).
+  - Smoke: `scripts/fbwl-smoke-keybinding-parity-commands.sh`.
+
+---
+
+## 27) Parity Audit — Remaining Fluxbox command surface (Next)
+
+Goal: close the remaining gaps between Fluxbox/X11’s command parser + command set and the Wayland backend, so existing `keys` and menu command usage works unchanged (or has explicit, documented limitations).
+
+- [x] Keybinding command parity (core daily-use window ops)
+  - Implemented: `Shade`, `ShadeOn`, `ShadeOff`, `ShadeWindow`; `Stick`, `StickOn`, `StickOff`, `StickWindow`.
+  - Implemented: `SetAlpha`, `SetTitle`, `SetTitleDialog`, `ToggleDecor`, `SetDecor`.
+  - Implemented: `Deiconify`, `CloseAllWindows` (+ `KillWindow` alias for `Kill`).
+  - Smoke: extended `scripts/fbwl-smoke-keybinding-parity-commands.sh` to bind and assert logs/states for these commands (using only injector-supported key sequences).
+
+- [x] Command language parity for keys/menu (classic Fluxbox parser)
+  - Implemented: nested `{...}` parsing with `\}` escape handling for `MacroCmd`, `If/Cond`, `ForEach/Map`, `Delay`, `ToggleCmd`.
+  - Implemented boolean terms: `Matches`, `Some`, `Every`, `Not`, `And`, `Or`, `Xor`.
+  - Wiring: `fbwl_fluxbox_cmd_resolve()` recognizes these commands; `fbwl_keybindings_execute_action()` executes them via `src/wayland/fbwl_cmdlang*.c`.
+  - Menu parsing: brace-delimited command strings now support nested braces so menu items can contain `MacroCmd`/`If`/`ForEach` without truncation.
+  - Smoke: `scripts/fbwl-smoke-keybinding-cmdlang.sh`.
+  - Parity notes:
+    - `ToggleCmd` and `Delay` state is keyed by `(server/userdata, full args string)`; identical strings across bindings share state, unlike Fluxbox/X11’s per-command-instance state.
+
+- [x] Head + marking commands parity
+  - Heads: `SendToNextHead`, `SendToPrevHead`, `SetHead` (moves focused view between screens/outputs; preserves relative frame position and reapplies maximized/fullscreen geometry on the target head).
+  - Marking: `MarkWindow`, `GotoMarkedWindow` (via `Arg` key placeholder; stores a keycode→window mapping and focuses/raises the marked window).
+  - Smoke: `scripts/fbwl-smoke-keybinding-head-mark.sh`.
+  - Parity notes:
+    - Fluxbox/X11’s placeholder `Arg` is used in key-chains; fbwl currently supports `Arg` as a direct binding key to enable `MarkWindow`/`GotoMarkedWindow` without implementing key-chains.
+
+- [x] Resource/style mutation commands parity
+  - Implemented: `ReloadStyle`, `SetStyle`, `SaveRC`, `SetResourceValue`, `SetResourceValueDialog`.
+  - Style-path parity: `session.styleFile` / `SetStyle` can now point at a *directory* (loads `theme.cfg` first, then `style.cfg`), matching Fluxbox/X11 `ThemeManager::load` behavior.
+  - Save semantics: like Fluxbox/X11, `SetStyle`, `ReloadStyle`, and `SetResourceValue` trigger `SaveRC` after a successful apply.
+  - Wayland note: `SetResourceValue` also runs a `Reconfigure` pass so the new value takes effect immediately (we don’t have a live Xrm resource manager like X11).
+  - Smoke: `scripts/fbwl-smoke-resource-style-cmds.sh` (covers style directory load + ReloadStyle + SetStyle + SetResourceValue + SetResourceValueDialog + SaveRC).
+
+- [x] Attention UI parity
+  - Implemented: track XWayland urgency/demands-attention changes and trigger the existing attention UI (OSD + decor blink + iconbar highlight) when a background window becomes urgent.
+  - Wiring: listen for XWayland `request_demands_attention` and `set_hints` events and translate into `fbwl_view_attention_request()` / `fbwl_view_attention_clear()`.
+  - Smoke: `scripts/fbwl-smoke-xwayland-window-attention.sh` (spawns two XWayland clients, focuses one, then sets urgency on the other and asserts `Attention: start`).
+
+- [x] ClientPattern regex quirk parity
+  - Fixed: anchored string-term regex compilation uses `^PATTERN$` (no extra parens), matching Fluxbox/X11 `|` precedence.
+  - Applies to: ClientPattern string terms (keybindings/iconbar) and `apps` match terms.
+  - Smoke: `scripts/fbwl-smoke-clientpattern-regex-quirk.sh`.
+
+---
+
+## 28) Parity Audit — Newly Found X11/Fluxbox Gaps (Next)
+
+Goal: capture any remaining Fluxbox/X11 behaviors that are missing in the Wayland backend (or need explicit Wayland-side “best effort” semantics), so “total parity” stays an explicit checklist.
+
+Additional command parity targets from `fluxbox-keys(5)`:
+- [x] Workspace commands parity (dynamic workspaces + naming)
+  - Implemented: `AddWorkspace`, `RemoveLastWorkspace`.
+  - Implemented: `SetWorkspaceName`, `SetWorkspaceNameDialog` (updates/persists `session.screen0.workspaceNames`).
+  - Smoke: `scripts/fbwl-smoke-workspace-add-remove-name.sh`.
+  - Parity notes:
+    - Like Fluxbox/X11, workspace names are optional. We preserve the “numbers fallback” when `workspaceNames` is unset/empty.
+    - Once naming is used, we keep the CSV index-stable by filling missing entries with `Workspace N` defaults.
+
+- [x] Workspace navigation parity (offset args + non-wrapping variants)
+  - [x] Implement offsets for: `NextWorkspace N`, `PrevWorkspace N`, `SendToNextWorkspace N`, `SendToPrevWorkspace N`, `TakeToNextWorkspace N`, `TakeToPrevWorkspace N` (smoke: `scripts/fbwl-smoke-workspace-nav-offset-toggle.sh`).
+  - [x] Implement the `NextWorkspace 0` / `PrevWorkspace 0` toggle-to-previous-workspace semantics (smoke: `scripts/fbwl-smoke-workspace-nav-offset-toggle.sh`).
+  - [x] Implement non-wrapping variants: `RightWorkspace N`, `LeftWorkspace N` (smoke: `scripts/fbwl-smoke-workspace-nav-offset-toggle.sh`).
+
+- [x] Geometry command parity (non-interactive move/resize)
+  - Implemented: `MoveTo`, `Move`, `MoveRight/Left/Up/Down`.
+  - Implemented: `ResizeTo`, `Resize`, `ResizeHorizontal`, `ResizeVertical`.
+  - Parity: Fluxbox/X11 `StrictMouseFocus` shifts focus even when the pointer is stationary (because Enter/Leave can fire on geometry/stacking changes); Wayland rechecks view-under-cursor after geometry-only commands and on async commit resizes.
+  - Smoke: `scripts/fbwl-smoke-geometry-cmds.sh` (+ strict focus coverage in `scripts/fbwl-smoke-strict-mousefocus-geometry.sh`).
+
+- [x] Focus command parity (directional + pattern forms)
+  - Implemented directional focus: `FocusLeft` / `FocusRight` / `FocusUp` / `FocusDown` (Fluxbox/X11 `FocusControl::dirFocus` heuristic).
+    - Tabs parity: directional focus operates at the tab-group/window level by targeting only the active tab per group (matching X11’s `Workspace::windowList()` being group-based).
+    - Tie-break parity: when weights/exposure match, we pick the oldest window (stable creation-order), matching X11’s first-match wins.
+  - [x] Implement pattern forms: `Activate [pattern]` / `Focus [pattern]` behave like `GotoWindow 1 [pattern]` (smoke: `scripts/fbwl-smoke-activate-focus-pattern.sh`).
+  - Smoke: `scripts/fbwl-smoke-focus-directional.sh`.
+
+- [x] MacroCmd target-window retargeting parity
+  - Fixed: in Fluxbox/X11, `MacroCmd` executes commands against the *current* window as it changes (so `GotoWindow ...` followed by `MoveTo/ResizeTo` affects the newly focused window). fbwl now matches this when `MacroCmd` is invoked without an explicit target view.
+    - Implementation detail: `MacroCmd` now preserves the original `target_view` pointer (NULL for top-level keybindings), so each nested command resolves the target at execution time instead of “locking” to the macro-entry view.
+  - Smoke: `scripts/fbwl-smoke-macrocmd-retarget.sh`.
+
+- [x] Tabs command parity (mouse-only + group ops)
+  - Implemented mouse-only: `StartTabbing`, `ActivateTab`.
+  - Implemented group ops: `DetachClient`, `MoveTabLeft`, `MoveTabRight`.
+  - Parity: tab-attach by drag is only enabled for drags started via `StartTabbing` (prevents accidental attaches during normal move/resize drags).
+  - Smoke: `scripts/fbwl-smoke-tabs-commands.sh`, `scripts/fbwl-smoke-tabs-attach-area.sh`.
+
+- [x] Menu command parity (custom + filtered client menu)
+  - Implemented: `CustomMenu <path>`.
+  - Implemented: `ClientMenu [pattern]` (pattern-filtered list).
+  - Smoke: `scripts/fbwl-smoke-custommenu-clientmenu-pattern.sh`, `scripts/fbwl-smoke-clientmenu-usepixmap.sh`.
+
+- [x] Exec environment command parity
+  - Implemented: `SetEnv name value` / `Export name=value` (affects future `ExecCommand`).
+  - Smoke: `scripts/fbwl-smoke-setenv-export.sh`.
+
+- [x] Layer/UI toggle command parity
+  - [x] Implement offsets for: `RaiseLayer [offset]` / `LowerLayer [offset]` (covered by `scripts/fbwl-smoke-keybinding-commands.sh`).
+  - [x] Implement: `ToggleToolbarHidden` / `ToggleToolbarAbove`.
+  - [x] Implement: `ToggleSlitHidden` / `ToggleSlitAbove`.
+  - Parity: `Toggle{Toolbar,Slit}Hidden` affects hidden-offset even when `autoHide=false` (matches Fluxbox/X11’s `toggleHidden()` behavior).
+  - Smoke: `scripts/fbwl-smoke-layer-ui-toggle-cmds.sh`.
+
+- [x] `Restart [path]` command parity (Wayland semantics)
+  - Implemented: `Restart [cmd...]` resolves from keys/menu and re-execs the compositor after a clean shutdown.
+    - With args: `exec $SHELL -c "<cmd...>"` (Fluxbox/X11 style).
+    - Without args: re-`execvp(argv[0], argv)` best-effort.
+  - IPC: `fbwl-remote restart [cmd...]` returns `ok restarting` then triggers the same restart path.
+  - Smoke: `scripts/fbwl-smoke-restart.sh`.
+
+- [x] Keys file “chaining” parity
+  - Implemented: Emacs-style multi-step chains in classic `keys` syntax (e.g. `Mod1 F1 Mod1 F2 :ExecCommand ...`).
+  - Runtime: `<Escape>` abort restores the pre-chain mode; non-matching keys abort and are forwarded; timeout restores after 5s.
+  - Smoke: `scripts/fbwl-smoke-keys-chaining.sh`.
+
+- [x] Keys file `ChangeWorkspace` special-event parity
+  - Implemented: `ChangeWorkspace :<command...>` pseudo-event triggers after workspace switches.
+  - Guardrail: recursion guard prevents obvious self-trigger loops (as warned in `fluxbox-keys(5)`).
+  - Smoke: `scripts/fbwl-smoke-changeworkspace-event.sh`.
+
+- [x] Mouse binding syntax parity (`fluxbox-keys(5)`)
+  - Contexts: added `OnSlit`, `OnTab` (and `OnTitlebar` matches `OnTab` for existing Fluxbox configs).
+  - Keys:
+    - `MouseN`: press semantics (supports `Double`).
+    - `ClickN`: fires on release if the pointer stayed within the click threshold.
+    - `MoveN`: fires on motion once the click threshold is exceeded (and if it starts a grab, the grab uses the original press point so deltas match Fluxbox/X11).
+  - Smokes:
+    - `scripts/fbwl-smoke-mousebindings-click-move.sh` (ClickN vs MoveN threshold + mutual exclusion).
+    - `scripts/fbwl-smoke-mousebindings-ontab.sh` (OnTab context).
+    - `scripts/fbwl-smoke-slit-menu.sh` (OnSlit context).
+    - Existing Move-context coverage remains in `scripts/fbwl-smoke-grips.sh` + `scripts/fbwl-smoke-ignore-border.sh`.
+
+---
+
+## 29) Parity Checkpoint — 2026-02-09
+
+- [x] Fixed: `StrictMouseFocus` geometry recheck could no-op incorrectly when seat focus was stale (e.g. headless tests where virtual keyboards come/go), blocking focus flips after `MoveTo`/unmaximize without pointer motion.
+  - Fix: `focus_view()` only short-circuits when both the seat focus and compositor policy focus already match the target (`src/wayland/fbwl_server_policy.c`).
+  - Regression guard: `scripts/fbwl-smoke-strict-mousefocus-geometry.sh`.
+- [x] Verified: `scripts/fbwl-smoke-ci.sh` passes end-to-end (ran=133, skipped=0).
+
+---
+
+## 30) Parity Feature — Pseudo Transparency on Wayland (Next)
+
+Goal: implement Fluxbox/X11 `session.forcePseudoTransparency` semantics on Wayland: translucent menus/toolbars/slit/windows blend against the desktop background (wallpaper / background color) rather than the live scene (other windows), matching X11 “pseudo transparency”.
+
+- [ ] Config: honor `session.forcePseudoTransparency` (global) in the Wayland backend
+  - When false (default): current behavior (true compositing) — alpha blends against whatever is behind.
+  - When true: force pseudo transparency — alpha blends against background only (wallpaper or background color), never showing other windows through.
+
+- [ ] Implement wallpaper-backed underlays (“pseudo background”) for all alpha-rendered components:
+  - Menus (`session.screenN.menu.alpha`)
+  - Toolbar/slit/tooltip UI (toolbar alpha, slit alpha, etc)
+  - Window alpha (`window.focus.alpha` / `window.unfocus.alpha` defaults + apps `[Alpha]` + `SetAlpha`)
+  - Underlay content: use `server->wallpaper_buf` if set, else a solid rect with `server->background_color`
+  - Underlay is **opaque** and sits directly behind the translucent element, so underlying windows are occluded
+
+- [ ] Window implementation details (alpha windows):
+  - Add a per-view scene node (e.g. `view->pseudo_bg`) under `view->scene_tree` at `(0, 0)` sized to the client content (optionally the full frame area if we later apply window alpha to decorations too).
+  - Use `wlr_scene_buffer_set_source_box()` + `wlr_scene_buffer_set_dest_size()` to crop/scale the wallpaper buffer so the underlay matches the desktop background region under the view.
+  - Update the underlay on view move/resize/maximize/fullscreen/output-changes and on wallpaper changes.
+  - Ensure `fbwl_view_alpha_apply()` does **not** apply opacity to the underlay buffer (it must stay opaque).
+
+- [ ] Multi-output semantics:
+  - Pick the output under the view’s center (or the view’s primary output) to compute wallpaper mapping.
+  - Document/accept the seam when a view spans multiple outputs (best-effort; matches our “per-output wallpaper” model).
+
+- [ ] Smoke: deterministic headless screencopy test proving pseudo transparency hides windows behind alpha windows
+  - Script: `scripts/fbwl-smoke-pseudo-transparency.sh`
+  - Setup: set a solid-color wallpaper (like `scripts/fbwl-smoke-wallpaper.sh`), spawn two overlapping clients, apply `SetAlpha 0` (or a low alpha) to the top window.
+  - Assert via `fbwl-screencopy-client --expect-rgb` that a sampled pixel inside the top window area matches the wallpaper color (pseudo) and not the underlying window color.
+  - Include a control assertion when pseudo is disabled (pixel matches underlying window), or run the scenario twice (`forcePseudoTransparency=false/true`).

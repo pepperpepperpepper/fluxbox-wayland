@@ -6,6 +6,7 @@
 #include <wlr/types/wlr_xdg_decoration_v1.h>
 #include <wlr/util/log.h>
 
+#include "wayland/fbwl_server_internal.h"
 #include "wayland/fbwl_util.h"
 #include "wayland/fbwl_view.h"
 
@@ -18,27 +19,44 @@ struct fbwl_xdg_decoration {
     struct wl_listener destroy;
 };
 
+static struct fbwl_view *xdg_decoration_view(struct wlr_xdg_toplevel_decoration_v1 *decoration) {
+    if (decoration == NULL || decoration->toplevel == NULL || decoration->toplevel->base == NULL) {
+        return NULL;
+    }
+
+    if (decoration->toplevel->base->data == NULL) {
+        return NULL;
+    }
+
+    struct wlr_scene_tree *tree = decoration->toplevel->base->data;
+    if (tree == NULL) {
+        return NULL;
+    }
+    return tree->node.data;
+}
+
 static void xdg_decoration_apply(struct fbwl_xdg_decoration *xd) {
     if (xd == NULL || xd->decoration == NULL || xd->decoration->toplevel == NULL ||
             xd->decoration->toplevel->base == NULL) {
         return;
     }
+
+    struct fbwl_view *view = xdg_decoration_view(xd->decoration);
+    if (view != NULL) {
+        view->xdg_decoration_server_side =
+            xd->desired_mode == WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE;
+        fbwl_view_decor_create(view, xd->decor_theme);
+        if (!view->decor_forced && view->mapped) {
+            const bool enable = view->xdg_decoration_server_side && view->server != NULL && view->server->default_deco_enabled;
+            fbwl_view_decor_set_enabled(view, enable);
+        }
+        fbwl_view_decor_update(view, xd->decor_theme);
+    }
+
     if (!xd->decoration->toplevel->base->initialized) {
         return;
     }
-
     (void)wlr_xdg_toplevel_decoration_v1_set_mode(xd->decoration, xd->desired_mode);
-
-    struct fbwl_view *view = NULL;
-    if (xd->decoration->toplevel->base->data != NULL) {
-        struct wlr_scene_tree *tree = xd->decoration->toplevel->base->data;
-        view = tree->node.data;
-    }
-    if (view != NULL) {
-        fbwl_view_decor_create(view, xd->decor_theme);
-        fbwl_view_decor_set_enabled(view, xd->desired_mode == WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE);
-        fbwl_view_decor_update(view, xd->decor_theme);
-    }
 }
 
 static void xdg_decoration_surface_map(struct wl_listener *listener, void *data) {
@@ -77,6 +95,12 @@ static void handle_new_xdg_decoration(struct wl_listener *listener, void *data) 
     wl_signal_add(&decoration->events.request_mode, &xd->request_mode);
     xd->destroy.notify = xdg_decoration_destroy;
     wl_signal_add(&decoration->events.destroy, &xd->destroy);
+
+    struct fbwl_view *view = xdg_decoration_view(decoration);
+    if (view != NULL) {
+        view->xdg_decoration_server_side =
+            xd->desired_mode == WLR_XDG_TOPLEVEL_DECORATION_V1_MODE_SERVER_SIDE;
+    }
 
     if (decoration->toplevel != NULL && decoration->toplevel->base != NULL &&
             decoration->toplevel->base->initialized) {

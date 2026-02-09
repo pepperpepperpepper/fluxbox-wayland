@@ -85,6 +85,16 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data) {
         handled = true;
     }
 
+    if (!handled && event->state == WL_KEYBOARD_KEY_STATE_PRESSED &&
+            keyboard->hooks.grab_handle_key != NULL) {
+        for (int i = 0; i < nsyms; i++) {
+            if (keyboard->hooks.grab_handle_key(keyboard->hooks.userdata, syms[i], modifiers)) {
+                handled = true;
+                break;
+            }
+        }
+    }
+
     if (!handled &&
             (keyboard->hooks.shortcuts_inhibited == NULL ||
                 !keyboard->hooks.shortcuts_inhibited(keyboard->hooks.userdata)) &&
@@ -99,6 +109,9 @@ static void keyboard_handle_key(struct wl_listener *listener, void *data) {
     }
 
     if (!handled) {
+        if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED && keyboard->hooks.notify_key_to_client != NULL) {
+            keyboard->hooks.notify_key_to_client(keyboard->hooks.userdata, syms, (size_t)nsyms, modifiers);
+        }
         wlr_seat_set_keyboard(keyboard->seat, keyboard->wlr_keyboard);
         wlr_seat_keyboard_notify_key(keyboard->seat,
             event->time_msec, event->keycode, event->state);

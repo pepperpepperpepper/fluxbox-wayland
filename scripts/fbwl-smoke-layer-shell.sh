@@ -80,6 +80,13 @@ CL_PID=$!
 timeout 5 bash -c "until rg -q 'Place: placed' '$LOG'; do sleep 0.05; done"
 
 PLACED_LINE=$(tail -c +$((OFFSET + 1)) "$LOG" | rg 'Place: placed' | tail -n 1)
+if [[ "$PLACED_LINE" =~ usable=([-0-9]+),([-0-9]+)[[:space:]]([0-9]+)x([0-9]+)[[:space:]] ]]; then
+  MAX_USABLE_W="${BASH_REMATCH[3]}"
+  MAX_USABLE_H="${BASH_REMATCH[4]}"
+else
+  echo "failed to parse usable box from Place line: $PLACED_LINE" >&2
+  exit 1
+fi
 PLACED_X=$(echo "$PLACED_LINE" | rg -o 'x=-?[0-9]+' | head -n 1 | cut -d= -f2)
 PLACED_Y=$(echo "$PLACED_LINE" | rg -o 'y=-?[0-9]+' | head -n 1 | cut -d= -f2)
 if (( PLACED_X < USABLE_X )); then
@@ -94,6 +101,6 @@ fi
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" click $((PLACED_X + 5)) $((PLACED_Y + 5)) >/dev/null 2>&1 || true
 ./fbwl-input-injector --socket "$SOCKET" key alt-m >/dev/null 2>&1
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Maximize: placed on w=${OUT_W} h=${USABLE_H}"
+tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Maximize: placed on w=${MAX_USABLE_W} h=${MAX_USABLE_H}"
 
 echo "ok: layer-shell smoke passed (socket=$SOCKET log=$LOG output=${OUT_W}x${OUT_H} panel_h=$PANEL_H)"

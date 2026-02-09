@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <sys/stat.h>
 
 #include <wlr/util/log.h>
 
@@ -29,20 +30,166 @@ static char *trim_inplace(char *s) {
     return s;
 }
 
+static char *unquote_inplace(char *s) {
+    s = trim_inplace(s);
+    if (s == NULL) {
+        return NULL;
+    }
+    size_t len = strlen(s);
+    if (len >= 2 && ((s[0] == '"' && s[len - 1] == '"') || (s[0] == '\'' && s[len - 1] == '\''))) {
+        s[len - 1] = '\0';
+        s++;
+    }
+    return s;
+}
+
+static bool parse_int_range(const char *s, int min_incl, int max_incl, int *out) {
+    if (s == NULL || out == NULL) {
+        return false;
+    }
+
+    while (*s != '\0' && isspace((unsigned char)*s)) {
+        s++;
+    }
+    if (*s == '\0') {
+        return false;
+    }
+
+    char *end = NULL;
+    long v = strtol(s, &end, 10);
+    if (end == s || end == NULL) {
+        return false;
+    }
+    while (*end != '\0' && isspace((unsigned char)*end)) {
+        end++;
+    }
+    if (*end != '\0') {
+        return false;
+    }
+
+    if (v < min_incl || v > max_incl) {
+        return false;
+    }
+
+    *out = (int)v;
+    return true;
+}
+
+static void copy_color(float dst[static 4], const float src[static 4]) {
+    if (dst == NULL || src == NULL) {
+        return;
+    }
+    dst[0] = src[0];
+    dst[1] = src[1];
+    dst[2] = src[2];
+    dst[3] = src[3];
+}
+
+static void blend_color(float dst[static 4], const float src[static 4]) {
+    if (dst == NULL || src == NULL) {
+        return;
+    }
+    dst[0] = (dst[0] + src[0]) * 0.5f;
+    dst[1] = (dst[1] + src[1]) * 0.5f;
+    dst[2] = (dst[2] + src[2]) * 0.5f;
+    dst[3] = (dst[3] + src[3]) * 0.5f;
+}
+
+static bool str_list_contains_ci(char *const *items, size_t len, const char *s) {
+    if (items == NULL || s == NULL) {
+        return false;
+    }
+    for (size_t i = 0; i < len; i++) {
+        if (items[i] != NULL && strcasecmp(items[i], s) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool str_list_push(char ***items, size_t *len, size_t *cap, const char *s) {
+    if (items == NULL || len == NULL || cap == NULL || s == NULL || *s == '\0') {
+        return false;
+    }
+    if (*len >= *cap) {
+        size_t new_cap = *cap > 0 ? (*cap * 2) : 16;
+        char **tmp = realloc(*items, new_cap * sizeof(*tmp));
+        if (tmp == NULL) {
+            return false;
+        }
+        *items = tmp;
+        *cap = new_cap;
+    }
+    char *dup = strdup(s);
+    if (dup == NULL) {
+        return false;
+    }
+    (*items)[(*len)++] = dup;
+    return true;
+}
+
 bool fbwl_style_load_file(struct fbwl_decor_theme *theme, const char *path) {
     if (theme == NULL || path == NULL || *path == '\0') {
         return false;
     }
 
-    FILE *f = fopen(path, "r");
+    const char *load_path = path;
+    char *dir_resolved_owned = NULL;
+    struct stat st = {0};
+    if (stat(path, &st) == 0 && S_ISDIR(st.st_mode)) {
+        const char *candidates[] = {"theme.cfg", "style.cfg"};
+        for (size_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]); i++) {
+            const char *name = candidates[i];
+            const size_t needed = strlen(path) + 1 + strlen(name) + 1;
+            char *joined = malloc(needed);
+            if (joined == NULL) {
+                continue;
+            }
+            int n = snprintf(joined, needed, "%s/%s", path, name);
+            if (n < 0 || (size_t)n >= needed) {
+                free(joined);
+                continue;
+            }
+            if (stat(joined, &st) == 0 && S_ISREG(st.st_mode)) {
+                dir_resolved_owned = joined;
+                load_path = dir_resolved_owned;
+                break;
+            }
+            free(joined);
+        }
+        if (dir_resolved_owned == NULL) {
+            wlr_log(WLR_ERROR, "Style: no theme.cfg/style.cfg in %s", path);
+            return false;
+        }
+    }
+
+    FILE *f = fopen(load_path, "r");
     if (f == NULL) {
-        wlr_log(WLR_ERROR, "Style: failed to open %s: %s", path, strerror(errno));
+        wlr_log(WLR_ERROR, "Style: failed to open %s: %s", load_path, strerror(errno));
+        free(dir_resolved_owned);
         return false;
     }
 
     char *line = NULL;
     size_t cap = 0;
     ssize_t nread;
+    bool border_width_explicit = false;
+    bool border_color_explicit = false;
+    bool titlebar_active_set = false;
+    bool titlebar_inactive_set = false;
+    bool menu_bg_set = false;
+    bool menu_hilite_set = false;
+    bool toolbar_bg_set = false;
+    bool toolbar_hilite_set = false;
+    bool btn_set = false;
+    int toolbar_text_prio = 0;
+    int window_font_prio = 0;
+    int menu_font_prio = 0;
+    int toolbar_font_prio = 0;
+    char **unknown_keys = NULL;
+    size_t unknown_keys_len = 0;
+    size_t unknown_keys_cap = 0;
+    size_t unknown_logged = 0;
     while ((nread = getline(&line, &cap, f)) != -1) {
         if (nread > 0 && line[nread - 1] == '\n') {
             line[nread - 1] = '\0';
@@ -67,44 +214,474 @@ bool fbwl_style_load_file(struct fbwl_decor_theme *theme, const char *path) {
             continue;
         }
 
+        // Basic Xrm-style wildcards used in many themes.
+        if (strcasecmp(key, "*color") == 0) {
+            float c[4] = {0};
+            if (fbwl_parse_color(val, c)) {
+                copy_color(theme->titlebar_active, c);
+                titlebar_active_set = true;
+                copy_color(theme->menu_bg, c);
+                menu_bg_set = true;
+                copy_color(theme->menu_hilite, c);
+                menu_hilite_set = true;
+                copy_color(theme->toolbar_bg, c);
+                toolbar_bg_set = true;
+                copy_color(theme->toolbar_hilite, c);
+                toolbar_hilite_set = true;
+                copy_color(theme->toolbar_iconbar_focused, c);
+            }
+            continue;
+        }
+
+        if (strcasecmp(key, "*unfocus.color") == 0) {
+            float c[4] = {0};
+            if (fbwl_parse_color(val, c)) {
+                copy_color(theme->titlebar_inactive, c);
+                titlebar_inactive_set = true;
+            }
+            continue;
+        }
+
+        if (strcasecmp(key, "*textColor") == 0) {
+            float c[4] = {0};
+            if (fbwl_parse_color(val, c)) {
+                copy_color(theme->title_text_active, c);
+                copy_color(theme->title_text_inactive, c);
+                copy_color(theme->menu_text, c);
+                copy_color(theme->toolbar_text, c);
+            }
+            continue;
+        }
+
+        if (strcasecmp(key, "*unfocus.textColor") == 0) {
+            float c[4] = {0};
+            if (fbwl_parse_color(val, c)) {
+                copy_color(theme->title_text_inactive, c);
+            }
+            continue;
+        }
+
+        if (strcasecmp(key, "*.font") == 0 || strcasecmp(key, "*font") == 0) {
+            char *font = unquote_inplace(val);
+            if (font != NULL && *font != '\0') {
+                if (window_font_prio <= 0) {
+                    (void)snprintf(theme->window_font, sizeof(theme->window_font), "%s", font);
+                    window_font_prio = 0;
+                }
+                if (menu_font_prio <= 0) {
+                    (void)snprintf(theme->menu_font, sizeof(theme->menu_font), "%s", font);
+                    menu_font_prio = 0;
+                }
+                if (toolbar_font_prio <= 0) {
+                    (void)snprintf(theme->toolbar_font, sizeof(theme->toolbar_font), "%s", font);
+                    toolbar_font_prio = 0;
+                }
+            }
+            continue;
+        }
+
         if (strcasecmp(key, "window.borderWidth") == 0) {
-            char *end = NULL;
-            long v = strtol(val, &end, 10);
-            if (end != val && (end == NULL || *trim_inplace(end) == '\0') && v > 0 && v < 1000) {
-                theme->border_width = (int)v;
+            int v = 0;
+            if (parse_int_range(val, 1, 999, &v)) {
+                theme->border_width = v;
+                border_width_explicit = true;
+            }
+            continue;
+        }
+
+        if (strcasecmp(key, "borderWidth") == 0) {
+            int v = 0;
+            if (parse_int_range(val, 1, 999, &v)) {
+                theme->border_width = v;
+                border_width_explicit = true;
+            }
+            continue;
+        }
+
+        if (strcasecmp(key, "handleWidth") == 0) {
+            int v = 0;
+            if (!border_width_explicit && parse_int_range(val, 1, 999, &v)) {
+                theme->border_width = v;
+                border_width_explicit = true;
+            }
+            continue;
+        }
+
+        if (strcasecmp(key, "window.font") == 0) {
+            char *font = unquote_inplace(val);
+            if (font != NULL && *font != '\0' && window_font_prio <= 1) {
+                (void)snprintf(theme->window_font, sizeof(theme->window_font), "%s", font);
+                window_font_prio = 1;
+            }
+            continue;
+        }
+
+        if (strcasecmp(key, "window.label.focus.font") == 0 ||
+                strcasecmp(key, "window.label.unfocus.font") == 0 ||
+                strcasecmp(key, "window.label.active.font") == 0) {
+            char *font = unquote_inplace(val);
+            if (font != NULL && *font != '\0' && window_font_prio <= 2) {
+                (void)snprintf(theme->window_font, sizeof(theme->window_font), "%s", font);
+                window_font_prio = 2;
             }
             continue;
         }
 
         if (strcasecmp(key, "window.title.height") == 0) {
-            char *end = NULL;
-            long v = strtol(val, &end, 10);
-            if (end != val && (end == NULL || *trim_inplace(end) == '\0') && v > 0 && v < 1000) {
-                theme->title_height = (int)v;
+            int v = 0;
+            if (parse_int_range(val, 1, 999, &v)) {
+                theme->title_height = v;
             }
             continue;
         }
 
         if (strcasecmp(key, "window.borderColor") == 0) {
-            (void)fbwl_parse_hex_color(val, theme->border_color);
+            if (fbwl_parse_color(val, theme->border_color)) {
+                border_color_explicit = true;
+            }
+            continue;
+        }
+
+        if (strcasecmp(key, "borderColor") == 0) {
+            if (fbwl_parse_color(val, theme->border_color)) {
+                border_color_explicit = true;
+            }
+            continue;
+        }
+
+        if (!border_color_explicit &&
+                (strcasecmp(key, "window.frame.focusColor") == 0 ||
+                    strcasecmp(key, "window.frame.unfocusColor") == 0)) {
+            (void)fbwl_parse_color(val, theme->border_color);
+            continue;
+        }
+
+        if (!border_color_explicit &&
+                (strcasecmp(key, "window.handle.focus.color") == 0 ||
+                    strcasecmp(key, "window.handle.unfocus.color") == 0 ||
+                    strcasecmp(key, "window.grip.focus.color") == 0 ||
+                    strcasecmp(key, "window.grip.unfocus.color") == 0)) {
+            (void)fbwl_parse_color(val, theme->border_color);
             continue;
         }
 
         if (strcasecmp(key, "window.title.focus.color") == 0) {
-            (void)fbwl_parse_hex_color(val, theme->titlebar_active);
+            (void)fbwl_parse_color(val, theme->titlebar_active);
+            titlebar_active_set = true;
             continue;
         }
 
         if (strcasecmp(key, "window.title.unfocus.color") == 0) {
-            (void)fbwl_parse_hex_color(val, theme->titlebar_inactive);
+            (void)fbwl_parse_color(val, theme->titlebar_inactive);
+            titlebar_inactive_set = true;
             continue;
+        }
+
+        if (strcasecmp(key, "window.label.focus.color") == 0 ||
+                strcasecmp(key, "window.label.active.color") == 0) {
+            (void)fbwl_parse_color(val, theme->titlebar_active);
+            titlebar_active_set = true;
+            continue;
+        }
+
+        if (strcasecmp(key, "window.label.unfocus.color") == 0) {
+            (void)fbwl_parse_color(val, theme->titlebar_inactive);
+            titlebar_inactive_set = true;
+            continue;
+        }
+
+        if (strcasecmp(key, "window.title.focus.colorTo") == 0 ||
+                strcasecmp(key, "window.label.focus.colorTo") == 0 ||
+                strcasecmp(key, "window.label.active.colorTo") == 0) {
+            float c[4] = {0};
+            if (fbwl_parse_color(val, c)) {
+                if (titlebar_active_set) {
+                    blend_color(theme->titlebar_active, c);
+                } else {
+                    copy_color(theme->titlebar_active, c);
+                }
+                titlebar_active_set = true;
+            }
+            continue;
+        }
+
+        if (strcasecmp(key, "window.title.unfocus.colorTo") == 0 ||
+                strcasecmp(key, "window.label.unfocus.colorTo") == 0) {
+            float c[4] = {0};
+            if (fbwl_parse_color(val, c)) {
+                if (titlebar_inactive_set) {
+                    blend_color(theme->titlebar_inactive, c);
+                } else {
+                    copy_color(theme->titlebar_inactive, c);
+                }
+                titlebar_inactive_set = true;
+            }
+            continue;
+        }
+
+        if (strcasecmp(key, "window.label.focus.textColor") == 0 ||
+                strcasecmp(key, "window.label.active.textColor") == 0) {
+            (void)fbwl_parse_color(val, theme->title_text_active);
+            continue;
+        }
+
+        if (strcasecmp(key, "window.label.unfocus.textColor") == 0) {
+            (void)fbwl_parse_color(val, theme->title_text_inactive);
+            continue;
+        }
+
+        if (strcasecmp(key, "window.button.focus.color") == 0) {
+            float c[4] = {0};
+            if (fbwl_parse_color(val, c)) {
+                copy_color(theme->btn_menu_color, c);
+                copy_color(theme->btn_shade_color, c);
+                copy_color(theme->btn_stick_color, c);
+                copy_color(theme->btn_close_color, c);
+                copy_color(theme->btn_max_color, c);
+                copy_color(theme->btn_min_color, c);
+                copy_color(theme->btn_lhalf_color, c);
+                copy_color(theme->btn_rhalf_color, c);
+                btn_set = true;
+            }
+            continue;
+        }
+
+        if (strcasecmp(key, "window.button.focus.colorTo") == 0) {
+            float c[4] = {0};
+            if (fbwl_parse_color(val, c)) {
+                if (btn_set) {
+                    blend_color(theme->btn_menu_color, c);
+                    blend_color(theme->btn_shade_color, c);
+                    blend_color(theme->btn_stick_color, c);
+                    blend_color(theme->btn_close_color, c);
+                    blend_color(theme->btn_max_color, c);
+                    blend_color(theme->btn_min_color, c);
+                    blend_color(theme->btn_lhalf_color, c);
+                    blend_color(theme->btn_rhalf_color, c);
+                } else {
+                    copy_color(theme->btn_menu_color, c);
+                    copy_color(theme->btn_shade_color, c);
+                    copy_color(theme->btn_stick_color, c);
+                    copy_color(theme->btn_close_color, c);
+                    copy_color(theme->btn_max_color, c);
+                    copy_color(theme->btn_min_color, c);
+                    copy_color(theme->btn_lhalf_color, c);
+                    copy_color(theme->btn_rhalf_color, c);
+                }
+                btn_set = true;
+            }
+            continue;
+        }
+
+        if (strcasecmp(key, "menu.itemHeight") == 0) {
+            int v = 0;
+            if (parse_int_range(val, 1, 999, &v)) {
+                theme->menu_item_height = v;
+            }
+            continue;
+        }
+
+        if (strcasecmp(key, "menu.frame.font") == 0) {
+            char *font = unquote_inplace(val);
+            if (font != NULL && *font != '\0' && menu_font_prio <= 2) {
+                (void)snprintf(theme->menu_font, sizeof(theme->menu_font), "%s", font);
+                menu_font_prio = 2;
+            }
+            continue;
+        }
+
+        if (strcasecmp(key, "menu.title.font") == 0) {
+            char *font = unquote_inplace(val);
+            if (font != NULL && *font != '\0' && menu_font_prio <= 1) {
+                (void)snprintf(theme->menu_font, sizeof(theme->menu_font), "%s", font);
+                menu_font_prio = 1;
+            }
+            continue;
+        }
+
+        if (strcasecmp(key, "menu.frame.color") == 0 || strcasecmp(key, "menu.color") == 0) {
+            if (fbwl_parse_color(val, theme->menu_bg)) {
+                menu_bg_set = true;
+            }
+            continue;
+        }
+
+        if (strcasecmp(key, "menu.hilite.color") == 0) {
+            if (fbwl_parse_color(val, theme->menu_hilite)) {
+                menu_hilite_set = true;
+            }
+            continue;
+        }
+
+        if (strcasecmp(key, "menu.frame.colorTo") == 0) {
+            float c[4] = {0};
+            if (fbwl_parse_color(val, c)) {
+                if (menu_bg_set) {
+                    blend_color(theme->menu_bg, c);
+                } else {
+                    copy_color(theme->menu_bg, c);
+                }
+                menu_bg_set = true;
+            }
+            continue;
+        }
+
+        if (strcasecmp(key, "menu.hilite.colorTo") == 0) {
+            float c[4] = {0};
+            if (fbwl_parse_color(val, c)) {
+                if (menu_hilite_set) {
+                    blend_color(theme->menu_hilite, c);
+                } else {
+                    copy_color(theme->menu_hilite, c);
+                }
+                menu_hilite_set = true;
+            }
+            continue;
+        }
+
+        if (strcasecmp(key, "menu.hilite.textColor") == 0) {
+            (void)fbwl_parse_color(val, theme->menu_hilite_text);
+            continue;
+        }
+
+        if (strcasecmp(key, "menu.frame.textColor") == 0 ||
+                strcasecmp(key, "menu.title.textColor") == 0) {
+            (void)fbwl_parse_color(val, theme->menu_text);
+            continue;
+        }
+
+        if (strcasecmp(key, "menu.frame.disableColor") == 0) {
+            (void)fbwl_parse_color(val, theme->menu_disable_text);
+            continue;
+        }
+
+        if (strcasecmp(key, "toolbar.height") == 0) {
+            int v = 0;
+            if (parse_int_range(val, 1, 999, &v)) {
+                theme->toolbar_height = v;
+            }
+            continue;
+        }
+
+        if (strcasecmp(key, "toolbar.font") == 0) {
+            char *font = unquote_inplace(val);
+            if (font != NULL && *font != '\0' && toolbar_font_prio <= 1) {
+                (void)snprintf(theme->toolbar_font, sizeof(theme->toolbar_font), "%s", font);
+                toolbar_font_prio = 1;
+            }
+            continue;
+        }
+
+        if (strcasecmp(key, "toolbar.workspace.font") == 0 ||
+                strcasecmp(key, "toolbar.iconbar.focused.font") == 0 ||
+                strcasecmp(key, "toolbar.iconbar.unfocused.font") == 0 ||
+                strcasecmp(key, "toolbar.clock.font") == 0 ||
+                strcasecmp(key, "toolbar.label.font") == 0 ||
+                strcasecmp(key, "toolbar.windowLabel.font") == 0) {
+            char *font = unquote_inplace(val);
+            if (font != NULL && *font != '\0' && toolbar_font_prio <= 2) {
+                (void)snprintf(theme->toolbar_font, sizeof(theme->toolbar_font), "%s", font);
+                toolbar_font_prio = 2;
+            }
+            continue;
+        }
+
+        if (strcasecmp(key, "toolbar.color") == 0) {
+            if (fbwl_parse_color(val, theme->toolbar_bg)) {
+                toolbar_bg_set = true;
+            }
+            continue;
+        }
+
+        if (strcasecmp(key, "toolbar.colorTo") == 0) {
+            float c[4] = {0};
+            if (fbwl_parse_color(val, c)) {
+                if (toolbar_bg_set) {
+                    blend_color(theme->toolbar_bg, c);
+                } else {
+                    copy_color(theme->toolbar_bg, c);
+                }
+                toolbar_bg_set = true;
+            }
+            continue;
+        }
+
+        if (strcasecmp(key, "toolbar.workspace.color") == 0) {
+            if (fbwl_parse_color(val, theme->toolbar_hilite)) {
+                toolbar_hilite_set = true;
+            }
+            continue;
+        }
+
+        if (strcasecmp(key, "toolbar.workspace.colorTo") == 0) {
+            float c[4] = {0};
+            if (fbwl_parse_color(val, c)) {
+                if (toolbar_hilite_set) {
+                    blend_color(theme->toolbar_hilite, c);
+                } else {
+                    copy_color(theme->toolbar_hilite, c);
+                }
+                toolbar_hilite_set = true;
+            }
+            continue;
+        }
+
+        if (strcasecmp(key, "toolbar.iconbar.focused.color") == 0) {
+            (void)fbwl_parse_color(val, theme->toolbar_iconbar_focused);
+            continue;
+        }
+
+        if (strcasecmp(key, "toolbar.workspace.textColor") == 0 ||
+                strcasecmp(key, "toolbar.iconbar.focused.textColor") == 0 ||
+                strcasecmp(key, "toolbar.iconbar.unfocused.textColor") == 0 ||
+                strcasecmp(key, "toolbar.clock.textColor") == 0) {
+            if (toolbar_text_prio <= 2) {
+                (void)fbwl_parse_color(val, theme->toolbar_text);
+                toolbar_text_prio = 2;
+            }
+            continue;
+        }
+
+        if (strcasecmp(key, "toolbar.label.textColor") == 0 ||
+                strcasecmp(key, "toolbar.windowLabel.textColor") == 0) {
+            if (toolbar_text_prio <= 2) {
+                (void)fbwl_parse_color(val, theme->toolbar_text);
+                toolbar_text_prio = 2;
+            }
+            continue;
+        }
+
+        if (strcasecmp(key, "toolbar.textColor") == 0) {
+            if (toolbar_text_prio <= 1) {
+                (void)fbwl_parse_color(val, theme->toolbar_text);
+                toolbar_text_prio = 1;
+            }
+            continue;
+        }
+
+        if (!str_list_contains_ci(unknown_keys, unknown_keys_len, key)) {
+            if (str_list_push(&unknown_keys, &unknown_keys_len, &unknown_keys_cap, key)) {
+                if (unknown_logged < 20) {
+                    wlr_log(WLR_INFO, "Style: ignored key=%s", key);
+                    unknown_logged++;
+                }
+            }
         }
     }
 
     free(line);
     fclose(f);
 
+    if (unknown_keys_len > unknown_logged) {
+        wlr_log(WLR_INFO, "Style: ignored %zu additional unknown keys", unknown_keys_len - unknown_logged);
+    }
+    for (size_t i = 0; i < unknown_keys_len; i++) {
+        free(unknown_keys[i]);
+    }
+    free(unknown_keys);
+
     wlr_log(WLR_INFO, "Style: loaded %s (border=%d title_h=%d)",
-        path, theme->border_width, theme->title_height);
+        load_path, theme->border_width, theme->title_height);
+    free(dir_resolved_owned);
     return true;
 }
