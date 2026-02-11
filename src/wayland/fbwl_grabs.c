@@ -106,6 +106,7 @@ static void grab_apply_pending(struct fbwl_grab *grab, struct wlr_output_layout 
     if (view->scene_tree != NULL) {
         wlr_scene_node_set_position(&view->scene_tree->node, view->x, view->y);
     }
+    fbwl_view_pseudo_bg_update(view, reason);
 
     const bool include_size = grab->mode == FBWL_CURSOR_RESIZE;
     if (include_size) {

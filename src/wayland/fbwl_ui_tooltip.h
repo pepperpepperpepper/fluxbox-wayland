@@ -2,10 +2,13 @@
 
 #include <stdbool.h>
 
+#include "wayland/fbwl_pseudo_bg.h"
+
 struct wl_display;
 struct wl_event_source;
 
 struct fbwl_decor_theme;
+struct wlr_buffer;
 
 struct wlr_output_layout;
 struct wlr_scene;
@@ -18,7 +21,10 @@ struct fbwl_ui_tooltip_env {
     struct wlr_scene_tree *layer_overlay;
     struct wl_display *wl_display;
     struct wlr_output_layout *output_layout;
+    struct wlr_buffer *wallpaper_buf;
+    const float *background_color;
     const struct fbwl_decor_theme *decor_theme;
+    bool force_pseudo_transparency;
 };
 
 struct fbwl_tooltip_ui {
@@ -37,6 +43,7 @@ struct fbwl_tooltip_ui {
 
     struct wl_event_source *timer;
     struct wlr_scene_tree *tree;
+    struct fbwl_pseudo_bg pseudo_bg;
     struct wlr_scene_rect *bg;
     struct wlr_scene_buffer *label;
 

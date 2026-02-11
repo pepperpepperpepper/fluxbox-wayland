@@ -159,6 +159,16 @@ static void fbwl_ui_toolbar_apply_position(struct fbwl_toolbar_ui *ui) {
     ui->x = x;
     ui->y = y;
     wlr_scene_node_set_position(&ui->tree->node, ui->x, ui->y);
+    const float alpha = (float)ui->alpha / 255.0f;
+    const bool pseudo = ui->pseudo_force_pseudo_transparency && ui->pseudo_decor_theme != NULL &&
+        ui->pseudo_decor_theme->toolbar_bg[3] * alpha < 0.999f;
+    if (pseudo) {
+        fbwl_pseudo_bg_update(&ui->pseudo_bg, ui->tree, ui->pseudo_output_layout,
+            ui->x, ui->y, 0, 0, ui->width, ui->height,
+            ui->pseudo_wallpaper_buf, ui->pseudo_background_color);
+    } else {
+        fbwl_pseudo_bg_destroy(&ui->pseudo_bg);
+    }
 }
 static void fbwl_ui_toolbar_destroy_scene(struct fbwl_toolbar_ui *ui) {
     if (ui == NULL) {
@@ -172,6 +182,12 @@ static void fbwl_ui_toolbar_destroy_scene(struct fbwl_toolbar_ui *ui) {
         wl_event_source_remove(ui->auto_timer);
         ui->auto_timer = NULL;
     }
+    fbwl_pseudo_bg_destroy(&ui->pseudo_bg);
+    ui->pseudo_output_layout = NULL;
+    ui->pseudo_wallpaper_buf = NULL;
+    ui->pseudo_background_color = NULL;
+    ui->pseudo_decor_theme = NULL;
+    ui->pseudo_force_pseudo_transparency = false;
     if (ui->tree != NULL) {
         wlr_scene_node_destroy(&ui->tree->node);
         ui->tree = NULL;
@@ -364,6 +380,11 @@ void fbwl_ui_toolbar_rebuild(struct fbwl_toolbar_ui *ui, const struct fbwl_ui_to
     if (ui->tree == NULL) {
         return;
     }
+    ui->pseudo_output_layout = env->output_layout;
+    ui->pseudo_wallpaper_buf = env->wallpaper_buf;
+    ui->pseudo_background_color = env->background_color;
+    ui->pseudo_decor_theme = env->decor_theme;
+    ui->pseudo_force_pseudo_transparency = env->force_pseudo_transparency;
     ui->x = 0;
     ui->y = 0;
     ui->base_x = 0;
@@ -431,6 +452,11 @@ void fbwl_ui_toolbar_update_position(struct fbwl_toolbar_ui *ui, const struct fb
     if (!ui->enabled || ui->tree == NULL) {
         return;
     }
+    ui->pseudo_output_layout = env->output_layout;
+    ui->pseudo_wallpaper_buf = env->wallpaper_buf;
+    ui->pseudo_background_color = env->background_color;
+    ui->pseudo_decor_theme = env->decor_theme;
+    ui->pseudo_force_pseudo_transparency = env->force_pseudo_transparency;
     const size_t on_head = ui->on_head >= 0 ? (size_t)ui->on_head : 0;
     struct wlr_output *out = fbwl_screen_map_output_for_screen(env->output_layout, env->outputs, on_head);
     if (out == NULL) {
@@ -495,6 +521,16 @@ void fbwl_ui_toolbar_update_position(struct fbwl_toolbar_ui *ui, const struct fb
     ui->base_x = base_x;
     ui->base_y = base_y;
     fbwl_ui_toolbar_apply_position(ui);
+    const float alpha = (float)ui->alpha / 255.0f;
+    const bool pseudo = ui->pseudo_force_pseudo_transparency && ui->pseudo_decor_theme != NULL &&
+        ui->pseudo_decor_theme->toolbar_bg[3] * alpha < 0.999f;
+    if (pseudo) {
+        fbwl_pseudo_bg_update(&ui->pseudo_bg, ui->tree, ui->pseudo_output_layout,
+            ui->x, ui->y, 0, 0, ui->width, ui->height,
+            ui->pseudo_wallpaper_buf, ui->pseudo_background_color);
+    } else {
+        fbwl_pseudo_bg_destroy(&ui->pseudo_bg);
+    }
     if (ui->x != prev_x || ui->y != prev_y) {
         wlr_log(WLR_INFO, "Toolbar: position x=%d y=%d h=%d cell_w=%d workspaces=%zu w=%d thickness=%d alpha=%u",
             ui->x, ui->y, ui->height, ui->cell_w, ui->cell_count, ui->width, ui->thickness, (unsigned)ui->alpha);
@@ -549,6 +585,11 @@ void fbwl_ui_toolbar_handle_motion(struct fbwl_toolbar_ui *ui, const struct fbwl
     if (!ui->auto_hide && !ui->auto_raise) {
         return;
     }
+    ui->pseudo_output_layout = env->output_layout;
+    ui->pseudo_wallpaper_buf = env->wallpaper_buf;
+    ui->pseudo_background_color = env->background_color;
+    ui->pseudo_decor_theme = env->decor_theme;
+    ui->pseudo_force_pseudo_transparency = env->force_pseudo_transparency;
     const bool was_hovered = ui->hovered;
     bool hovered =
         lx >= ui->x && lx < ui->x + ui->width &&

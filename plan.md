@@ -1433,8 +1433,10 @@ Note: the Wayland backend now supports `session.screenN.*` resources for most po
 - [x] Apply remaining global `session.*` resources (Wayland equivalents or documented no-ops):
   - `session.ignoreBorder`: implemented (when true, ignore `StartMoving` bindings on `OnWindowBorder` so borders don’t initiate move)
     - Smoke: `scripts/fbwl-smoke-ignore-border.sh`
-  - `session.cacheLife` / `session.cacheMax` / `session.colorsPerChannel`: parsed + stored (currently no-op; pixmap/theme caching TBD)
-  - `session.forcePseudoTransparency`: parsed + stored; currently logged as ignored on Wayland (TODO: implement pseudo transparency semantics; see §30)
+  - `session.cacheLife` / `session.cacheMax`: applied to the internal icon buffer cache (menus/iconbar/window icons)
+  - `session.colorsPerChannel`: parsed + stored; ignored on Wayland (kept for config compatibility)
+  - `session.forcePseudoTransparency`: implemented (Wayland pseudo transparency; alpha blends against the desktop background only)
+    - Smoke: `scripts/fbwl-smoke-pseudo-transparency.sh`
   - `session.groupFile`: parsed + logged (deprecated; grouping uses the `apps` file)
   - `session.configVersion`: parsed + stored (currently informational; no auto-migration yet)
 - [x] Add `session.doubleClickInterval` and implement true “Double” mouse bindings in `keys`:
@@ -1986,33 +1988,8 @@ Additional command parity targets from `fluxbox-keys(5)`:
 
 ---
 
-## 30) Parity Feature — Pseudo Transparency on Wayland (Next)
+## 30) Parity Feature — Pseudo Transparency on Wayland
 
-Goal: implement Fluxbox/X11 `session.forcePseudoTransparency` semantics on Wayland: translucent menus/toolbars/slit/windows blend against the desktop background (wallpaper / background color) rather than the live scene (other windows), matching X11 “pseudo transparency”.
+Implemented: Fluxbox/X11 `session.forcePseudoTransparency` semantics on Wayland: translucent menus/toolbars/slit/windows blend against the desktop background (wallpaper / background color) rather than the live scene (other windows), matching X11 “pseudo transparency”.
 
-- [ ] Config: honor `session.forcePseudoTransparency` (global) in the Wayland backend
-  - When false (default): current behavior (true compositing) — alpha blends against whatever is behind.
-  - When true: force pseudo transparency — alpha blends against background only (wallpaper or background color), never showing other windows through.
-
-- [ ] Implement wallpaper-backed underlays (“pseudo background”) for all alpha-rendered components:
-  - Menus (`session.screenN.menu.alpha`)
-  - Toolbar/slit/tooltip UI (toolbar alpha, slit alpha, etc)
-  - Window alpha (`window.focus.alpha` / `window.unfocus.alpha` defaults + apps `[Alpha]` + `SetAlpha`)
-  - Underlay content: use `server->wallpaper_buf` if set, else a solid rect with `server->background_color`
-  - Underlay is **opaque** and sits directly behind the translucent element, so underlying windows are occluded
-
-- [ ] Window implementation details (alpha windows):
-  - Add a per-view scene node (e.g. `view->pseudo_bg`) under `view->scene_tree` at `(0, 0)` sized to the client content (optionally the full frame area if we later apply window alpha to decorations too).
-  - Use `wlr_scene_buffer_set_source_box()` + `wlr_scene_buffer_set_dest_size()` to crop/scale the wallpaper buffer so the underlay matches the desktop background region under the view.
-  - Update the underlay on view move/resize/maximize/fullscreen/output-changes and on wallpaper changes.
-  - Ensure `fbwl_view_alpha_apply()` does **not** apply opacity to the underlay buffer (it must stay opaque).
-
-- [ ] Multi-output semantics:
-  - Pick the output under the view’s center (or the view’s primary output) to compute wallpaper mapping.
-  - Document/accept the seam when a view spans multiple outputs (best-effort; matches our “per-output wallpaper” model).
-
-- [ ] Smoke: deterministic headless screencopy test proving pseudo transparency hides windows behind alpha windows
-  - Script: `scripts/fbwl-smoke-pseudo-transparency.sh`
-  - Setup: set a solid-color wallpaper (like `scripts/fbwl-smoke-wallpaper.sh`), spawn two overlapping clients, apply `SetAlpha 0` (or a low alpha) to the top window.
-  - Assert via `fbwl-screencopy-client --expect-rgb` that a sampled pixel inside the top window area matches the wallpaper color (pseudo) and not the underlying window color.
-  - Include a control assertion when pseudo is disabled (pixel matches underlying window), or run the scenario twice (`forcePseudoTransparency=false/true`).
+Smoke: `scripts/fbwl-smoke-pseudo-transparency.sh`.

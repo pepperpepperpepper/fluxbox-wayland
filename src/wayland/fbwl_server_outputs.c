@@ -190,6 +190,23 @@ static void server_background_update_all(struct fbwl_server *server) {
     }
 }
 
+void server_pseudo_transparency_refresh(struct fbwl_server *server, const char *why) {
+    if (server == NULL) {
+        return;
+    }
+    for (struct fbwm_view *wm_view = server->wm.views.next;
+            wm_view != &server->wm.views;
+            wm_view = wm_view->next) {
+        struct fbwl_view *view = wm_view->userdata;
+        if (view == NULL) {
+            continue;
+        }
+        fbwl_view_pseudo_bg_update(view, why != NULL ? why : "server-refresh");
+    }
+    server_toolbar_ui_update_position(server);
+    server_slit_ui_update_position(server);
+}
+
 bool server_wallpaper_set(struct fbwl_server *server, const char *path) {
     if (server == NULL) {
         return false;
@@ -204,6 +221,7 @@ bool server_wallpaper_set(struct fbwl_server *server, const char *path) {
             server->wallpaper_buf = NULL;
         }
         server_background_update_all(server);
+        server_pseudo_transparency_refresh(server, "wallpaper-clear");
         wlr_log(WLR_INFO, "Background: wallpaper cleared");
         return true;
     }
@@ -229,6 +247,7 @@ bool server_wallpaper_set(struct fbwl_server *server, const char *path) {
     server->wallpaper_buf = buf;
 
     server_background_update_all(server);
+    server_pseudo_transparency_refresh(server, "wallpaper-set");
     wlr_log(WLR_INFO, "Background: wallpaper set path=%s", server->wallpaper_path);
     return true;
 }
@@ -290,6 +309,7 @@ static void server_output_manager_apply(struct wl_listener *listener, void *data
         server_slit_ui_update_position(server);
         server_cmd_dialog_ui_update_position(server);
         server_osd_ui_update_position(server);
+        server_pseudo_transparency_refresh(server, "output-management-apply");
     } else {
         wlr_output_configuration_v1_send_failed(config);
     }
@@ -327,6 +347,7 @@ static void server_output_destroyed(void *userdata, struct wlr_output *wlr_outpu
     server_slit_ui_update_position(server);
     server_cmd_dialog_ui_update_position(server);
     server_osd_ui_update_position(server);
+    server_pseudo_transparency_refresh(server, "output-destroy");
 }
 
 static void server_new_output(struct wl_listener *listener, void *data) {
@@ -352,6 +373,7 @@ static void server_new_output(struct wl_listener *listener, void *data) {
     server_slit_ui_update_position(server);
     server_cmd_dialog_ui_update_position(server);
     server_osd_ui_update_position(server);
+    server_pseudo_transparency_refresh(server, "new-output");
 }
 
 bool fbwl_server_outputs_init(struct fbwl_server *server) {

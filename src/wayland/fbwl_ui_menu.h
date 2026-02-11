@@ -8,6 +8,7 @@
 #include <xkbcommon/xkbcommon.h>
 
 #include "wayland/fbwl_menu.h"
+#include "wayland/fbwl_pseudo_bg.h"
 
 struct wl_display;
 struct wl_event_source;
@@ -19,12 +20,18 @@ struct wlr_scene;
 struct wlr_scene_buffer;
 struct wlr_scene_rect;
 struct wlr_scene_tree;
+struct wlr_buffer;
+struct wlr_output_layout;
 
 struct fbwl_ui_menu_env {
     struct wlr_scene *scene;
     struct wlr_scene_tree *layer_overlay;
+    struct wlr_output_layout *output_layout;
+    struct wlr_buffer *wallpaper_buf;
+    const float *background_color;
     const struct fbwl_decor_theme *decor_theme;
     struct wl_display *wl_display;
+    bool force_pseudo_transparency;
 };
 
 enum fbwl_menu_search_mode {
@@ -57,6 +64,7 @@ struct fbwl_menu_ui {
     bool any_icons;
 
     struct wlr_scene_tree *tree;
+    struct fbwl_pseudo_bg pseudo_bg;
     struct wlr_scene_rect *bg;
     struct wlr_scene_rect *highlight;
     struct wlr_scene_rect **item_rects;

@@ -39,6 +39,7 @@ static void fbwl_ui_menu_destroy_scene(struct fbwl_menu_ui *ui) {
     if (ui == NULL) {
         return;
     }
+    fbwl_pseudo_bg_destroy(&ui->pseudo_bg);
     if (ui->tree != NULL) {
         wlr_scene_node_destroy(&ui->tree->node);
         ui->tree = NULL;
@@ -167,6 +168,15 @@ static void fbwl_ui_menu_rebuild(struct fbwl_menu_ui *ui, const struct fbwl_ui_m
     const int h = count > 0 ? count * item_h : item_h;
 
     const float alpha = (float)ui->alpha / 255.0f;
+    const bool pseudo = env->force_pseudo_transparency &&
+        (env->decor_theme->menu_bg[3] * alpha < 0.999f ||
+            env->decor_theme->menu_hilite[3] * alpha < 0.999f);
+    if (pseudo) {
+        fbwl_pseudo_bg_update(&ui->pseudo_bg, ui->tree, env->output_layout,
+            ui->x, ui->y, 0, 0, w, h, env->wallpaper_buf, env->background_color);
+    } else {
+        fbwl_pseudo_bg_destroy(&ui->pseudo_bg);
+    }
     float bg[4] = {env->decor_theme->menu_bg[0], env->decor_theme->menu_bg[1], env->decor_theme->menu_bg[2], env->decor_theme->menu_bg[3] * alpha};
     float hi[4] = {env->decor_theme->menu_hilite[0], env->decor_theme->menu_hilite[1],
         env->decor_theme->menu_hilite[2], env->decor_theme->menu_hilite[3] * alpha};

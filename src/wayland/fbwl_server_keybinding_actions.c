@@ -116,6 +116,7 @@ void server_keybindings_view_toggle_maximize_horizontal(void *userdata, struct f
         wlr_scene_node_set_position(&view->scene_tree->node, view->x, view->y);
         wlr_scene_node_raise_to_top(&view->scene_tree->node);
     }
+    fbwl_view_pseudo_bg_update(view, on ? "maximize-h-on" : "maximize-h-off");
     if (view->type == FBWL_VIEW_XDG) {
         wlr_xdg_toplevel_set_maximized(view->xdg_toplevel, view->maximized);
         wlr_xdg_toplevel_set_size(view->xdg_toplevel, w, h);
@@ -215,6 +216,7 @@ void server_keybindings_view_toggle_maximize_vertical(void *userdata, struct fbw
         wlr_scene_node_set_position(&view->scene_tree->node, view->x, view->y);
         wlr_scene_node_raise_to_top(&view->scene_tree->node);
     }
+    fbwl_view_pseudo_bg_update(view, on ? "maximize-v-on" : "maximize-v-off");
     if (view->type == FBWL_VIEW_XDG) {
         wlr_xdg_toplevel_set_maximized(view->xdg_toplevel, view->maximized);
         wlr_xdg_toplevel_set_size(view->xdg_toplevel, w, h);

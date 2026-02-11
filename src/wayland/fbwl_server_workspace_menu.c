@@ -6,8 +6,12 @@ static struct fbwl_ui_menu_env menu_ui_env(struct fbwl_server *server) {
     return (struct fbwl_ui_menu_env){
         .scene = server != NULL ? server->scene : NULL,
         .layer_overlay = server != NULL ? server->layer_overlay : NULL,
+        .output_layout = server != NULL ? server->output_layout : NULL,
+        .wallpaper_buf = server != NULL ? server->wallpaper_buf : NULL,
+        .background_color = server != NULL ? server->background_color : NULL,
         .decor_theme = server != NULL ? &server->decor_theme : NULL,
         .wl_display = server != NULL ? server->wl_display : NULL,
+        .force_pseudo_transparency = server != NULL && server->force_pseudo_transparency,
     };
 }
 

@@ -11,6 +11,14 @@
 
 #include <wayland-server-core.h>
 
+#include <wlr/types/wlr_buffer.h>
+#include <wlr/types/wlr_output_layout.h>
+#include <wlr/types/wlr_scene.h>
+#include <wlr/util/box.h>
+
+#include "wayland/fbwl_server_internal.h"
+#include "wayland/fbwl_view.h"
+
 void fbwl_cleanup_listener(struct wl_listener *listener) {
     if (listener->link.prev != NULL && listener->link.next != NULL) {
         wl_list_remove(&listener->link);
@@ -329,4 +337,278 @@ uint64_t fbwl_now_msec(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (uint64_t)ts.tv_sec * 1000u + (uint64_t)ts.tv_nsec / 1000000u;
+}
+
+static bool pseudo_bg_never_accepts_input(struct wlr_scene_buffer *buffer, double *sx, double *sy) {
+    (void)buffer;
+    (void)sx;
+    (void)sy;
+    return false;
+}
+
+static bool pseudo_bg_compute_wallpaper_src_box(struct wlr_output_layout *output_layout,
+        struct wlr_buffer *wallpaper_buf, int global_x, int global_y, int width, int height,
+        struct wlr_fbox *out_src_box) {
+    if (output_layout == NULL || wallpaper_buf == NULL || out_src_box == NULL || width < 1 || height < 1) {
+        return false;
+    }
+
+    const double cx = (double)global_x + (double)width / 2.0;
+    const double cy = (double)global_y + (double)height / 2.0;
+    struct wlr_output *output = wlr_output_layout_output_at(output_layout, cx, cy);
+    if (output == NULL) {
+        output = wlr_output_layout_get_center_output(output_layout);
+    }
+    if (output == NULL) {
+        return false;
+    }
+
+    struct wlr_box output_box = {0};
+    wlr_output_layout_get_box(output_layout, output, &output_box);
+    if (output_box.width < 1 || output_box.height < 1) {
+        return false;
+    }
+
+    const double buf_w = (double)wallpaper_buf->width;
+    const double buf_h = (double)wallpaper_buf->height;
+
+    double sx = ((double)global_x - (double)output_box.x) / (double)output_box.width * buf_w;
+    double sy = ((double)global_y - (double)output_box.y) / (double)output_box.height * buf_h;
+    double sw = (double)width / (double)output_box.width * buf_w;
+    double sh = (double)height / (double)output_box.height * buf_h;
+    if (sw <= 0.0 || sh <= 0.0) {
+        return false;
+    }
+
+    if (sx < 0.0) {
+        sw += sx;
+        sx = 0.0;
+    }
+    if (sy < 0.0) {
+        sh += sy;
+        sy = 0.0;
+    }
+    if (sx + sw > buf_w) {
+        sw = buf_w - sx;
+    }
+    if (sy + sh > buf_h) {
+        sh = buf_h - sy;
+    }
+    if (sw <= 0.0 || sh <= 0.0) {
+        return false;
+    }
+
+    *out_src_box = (struct wlr_fbox){
+        .x = sx,
+        .y = sy,
+        .width = sw,
+        .height = sh,
+    };
+    return true;
+}
+
+void fbwl_pseudo_bg_destroy(struct fbwl_pseudo_bg *bg) {
+    if (bg == NULL) {
+        return;
+    }
+    if (bg->image != NULL) {
+        wlr_scene_node_destroy(&bg->image->node);
+        bg->image = NULL;
+    }
+    if (bg->rect != NULL) {
+        wlr_scene_node_destroy(&bg->rect->node);
+        bg->rect = NULL;
+    }
+}
+
+void fbwl_pseudo_bg_update(struct fbwl_pseudo_bg *bg,
+        struct wlr_scene_tree *parent,
+        struct wlr_output_layout *output_layout,
+        int global_x,
+        int global_y,
+        int rel_x,
+        int rel_y,
+        int width,
+        int height,
+        struct wlr_buffer *wallpaper_buf,
+        const float background_color[4]) {
+    if (bg == NULL || parent == NULL || width < 1 || height < 1) {
+        fbwl_pseudo_bg_destroy(bg);
+        return;
+    }
+
+    if (wallpaper_buf != NULL && output_layout != NULL) {
+        if (bg->rect != NULL) {
+            wlr_scene_node_destroy(&bg->rect->node);
+            bg->rect = NULL;
+        }
+        if (bg->image == NULL) {
+            bg->image = wlr_scene_buffer_create(parent, wallpaper_buf);
+            if (bg->image != NULL) {
+                bg->image->point_accepts_input = pseudo_bg_never_accepts_input;
+            }
+        } else {
+            wlr_scene_buffer_set_buffer(bg->image, wallpaper_buf);
+        }
+        if (bg->image == NULL) {
+            return;
+        }
+
+        wlr_scene_node_set_position(&bg->image->node, rel_x, rel_y);
+        wlr_scene_node_lower_to_bottom(&bg->image->node);
+        wlr_scene_buffer_set_opacity(bg->image, 1.0f);
+        wlr_scene_buffer_set_dest_size(bg->image, width, height);
+
+        struct wlr_fbox src = {0};
+        if (pseudo_bg_compute_wallpaper_src_box(output_layout, wallpaper_buf,
+                global_x, global_y, width, height, &src)) {
+            wlr_scene_buffer_set_source_box(bg->image, &src);
+        } else {
+            wlr_scene_buffer_set_source_box(bg->image, NULL);
+        }
+
+        return;
+    }
+
+    if (bg->image != NULL) {
+        wlr_scene_node_destroy(&bg->image->node);
+        bg->image = NULL;
+    }
+    if (bg->rect == NULL) {
+        float color[4] = {0};
+        if (background_color != NULL) {
+            color[0] = background_color[0];
+            color[1] = background_color[1];
+            color[2] = background_color[2];
+        }
+        color[3] = 1.0f;
+        bg->rect = wlr_scene_rect_create(parent, width, height, color);
+    } else {
+        wlr_scene_rect_set_size(bg->rect, width, height);
+        float color[4] = {0};
+        if (background_color != NULL) {
+            color[0] = background_color[0];
+            color[1] = background_color[1];
+            color[2] = background_color[2];
+        }
+        color[3] = 1.0f;
+        wlr_scene_rect_set_color(bg->rect, color);
+    }
+    if (bg->rect == NULL) {
+        return;
+    }
+    wlr_scene_node_set_position(&bg->rect->node, rel_x, rel_y);
+    wlr_scene_node_lower_to_bottom(&bg->rect->node);
+}
+
+struct view_pseudo_bg_bounds {
+    bool any;
+    int min_x;
+    int min_y;
+    int max_x;
+    int max_y;
+    const struct wlr_scene_buffer *ignore;
+};
+
+static void view_pseudo_bg_bounds_iter(struct wlr_scene_buffer *buffer, int sx, int sy, void *user_data) {
+    struct view_pseudo_bg_bounds *b = user_data;
+    if (buffer == NULL || b == NULL) {
+        return;
+    }
+    if (b->ignore != NULL && buffer == b->ignore) {
+        return;
+    }
+    if (buffer->buffer == NULL) {
+        return;
+    }
+
+    int w = buffer->dst_width > 0 ? buffer->dst_width : buffer->buffer->width;
+    int h = buffer->dst_height > 0 ? buffer->dst_height : buffer->buffer->height;
+    if (w < 1 || h < 1) {
+        return;
+    }
+
+    const int x1 = sx;
+    const int y1 = sy;
+    const int x2 = sx + w;
+    const int y2 = sy + h;
+
+    if (!b->any) {
+        b->any = true;
+        b->min_x = x1;
+        b->min_y = y1;
+        b->max_x = x2;
+        b->max_y = y2;
+        return;
+    }
+    if (x1 < b->min_x) {
+        b->min_x = x1;
+    }
+    if (y1 < b->min_y) {
+        b->min_y = y1;
+    }
+    if (x2 > b->max_x) {
+        b->max_x = x2;
+    }
+    if (y2 > b->max_y) {
+        b->max_y = y2;
+    }
+}
+
+static bool view_needs_pseudo_bg(const struct fbwl_view *view) {
+    if (view == NULL || view->server == NULL) {
+        return false;
+    }
+    if (!view->server->force_pseudo_transparency) {
+        return false;
+    }
+    if (!view->alpha_set) {
+        return false;
+    }
+    return view->alpha_focused < 255 || view->alpha_unfocused < 255;
+}
+
+void fbwl_view_pseudo_bg_update(struct fbwl_view *view, const char *why) {
+    (void)why;
+    if (view == NULL || view->server == NULL || view->scene_tree == NULL) {
+        return;
+    }
+
+    if (!view_needs_pseudo_bg(view)) {
+        fbwl_pseudo_bg_destroy(&view->pseudo_bg);
+        return;
+    }
+
+    struct view_pseudo_bg_bounds bounds = {
+        .any = false,
+        .min_x = 0,
+        .min_y = 0,
+        .max_x = 0,
+        .max_y = 0,
+        .ignore = view->pseudo_bg.image,
+    };
+    wlr_scene_node_for_each_buffer(&view->scene_tree->node, view_pseudo_bg_bounds_iter, &bounds);
+    if (!bounds.any) {
+        fbwl_pseudo_bg_destroy(&view->pseudo_bg);
+        return;
+    }
+
+    const int w = bounds.max_x - bounds.min_x;
+    const int h = bounds.max_y - bounds.min_y;
+    if (w < 1 || h < 1) {
+        fbwl_pseudo_bg_destroy(&view->pseudo_bg);
+        return;
+    }
+
+    int origin_x = 0;
+    int origin_y = 0;
+    if (!wlr_scene_node_coords(&view->scene_tree->node, &origin_x, &origin_y)) {
+        origin_x = view->x;
+        origin_y = view->y;
+    }
+    const int rel_x = bounds.min_x - origin_x;
+    const int rel_y = bounds.min_y - origin_y;
+    fbwl_pseudo_bg_update(&view->pseudo_bg, view->scene_tree, view->server->output_layout,
+        bounds.min_x, bounds.min_y, rel_x, rel_y, w, h,
+        view->server->wallpaper_buf, view->server->background_color);
 }

@@ -237,6 +237,7 @@ static void sync_view_to_anchor_geometry(struct fbwl_view *view, const struct fb
     if (view->scene_tree != NULL) {
         wlr_scene_node_set_position(&view->scene_tree->node, view->x, view->y);
     }
+    fbwl_view_pseudo_bg_update(view, "tab-sync-anchor");
 
     const int w = fbwl_view_current_width(anchor);
     const int h = fbwl_view_current_height(anchor);

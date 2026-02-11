@@ -170,6 +170,7 @@ static void tile_view_half(struct fbwl_server *server, struct fbwl_view *view, b
         wlr_scene_node_set_position(&view->scene_tree->node, view->x, view->y);
         wlr_scene_node_raise_to_top(&view->scene_tree->node);
     }
+    fbwl_view_pseudo_bg_update(view, right ? "rhalf" : "lhalf");
 
     if (view->type == FBWL_VIEW_XDG) {
         wlr_xdg_toplevel_set_size(view->xdg_toplevel, w, h);

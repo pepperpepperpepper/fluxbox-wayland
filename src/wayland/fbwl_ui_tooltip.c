@@ -20,6 +20,7 @@ static void fbwl_ui_tooltip_destroy_scene(struct fbwl_tooltip_ui *ui) {
     if (ui == NULL) {
         return;
     }
+    fbwl_pseudo_bg_destroy(&ui->pseudo_bg);
     if (ui->tree != NULL) {
         wlr_scene_node_destroy(&ui->tree->node);
         ui->tree = NULL;
@@ -159,6 +160,15 @@ static void fbwl_ui_tooltip_show_now(struct fbwl_tooltip_ui *ui) {
     ui->width = w;
     ui->height = h;
 
+    const float bg_alpha = 0.95f;
+    const bool pseudo = ui->env.force_pseudo_transparency && ui->env.decor_theme->toolbar_bg[3] * bg_alpha < 0.999f;
+    if (pseudo) {
+        fbwl_pseudo_bg_update(&ui->pseudo_bg, ui->tree, ui->env.output_layout,
+            ui->x, ui->y, 0, 0, ui->width, ui->height,
+            ui->env.wallpaper_buf, ui->env.background_color);
+    } else {
+        fbwl_pseudo_bg_destroy(&ui->pseudo_bg);
+    }
     wlr_scene_node_set_position(&ui->tree->node, ui->x, ui->y);
     wlr_scene_node_set_enabled(&ui->tree->node, true);
     wlr_scene_node_raise_to_top(&ui->tree->node);

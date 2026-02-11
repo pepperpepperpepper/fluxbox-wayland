@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+struct wlr_buffer;
 struct wl_display;
 struct wl_event_source;
 struct wl_list;
@@ -19,6 +20,8 @@ struct wlr_scene_buffer;
 struct wlr_scene_rect;
 struct wlr_scene_tree;
 struct wlr_xwayland;
+
+#include "wayland/fbwl_pseudo_bg.h"
 
 enum fbwl_toolbar_placement {
     FBWL_TOOLBAR_PLACEMENT_BOTTOM_LEFT = 0,
@@ -150,6 +153,12 @@ struct fbwl_toolbar_ui {
     struct wlr_scene_buffer *clock_label;
 
     struct wlr_scene_tree *tree;
+    struct fbwl_pseudo_bg pseudo_bg;
+    struct wlr_output_layout *pseudo_output_layout;
+    struct wlr_buffer *pseudo_wallpaper_buf;
+    const float *pseudo_background_color;
+    const struct fbwl_decor_theme *pseudo_decor_theme;
+    bool pseudo_force_pseudo_transparency;
     struct wlr_scene_rect *bg;
     struct wlr_scene_rect *highlight;
     struct wlr_scene_rect **cells;
@@ -163,6 +172,9 @@ struct fbwl_ui_toolbar_env {
     struct wlr_output_layout *output_layout;
     const struct wl_list *outputs;
     struct wl_display *wl_display;
+    struct wlr_buffer *wallpaper_buf;
+    const float *background_color;
+    bool force_pseudo_transparency;
     struct fbwm_core *wm;
     struct wlr_xwayland *xwayland;
     const struct fbwl_decor_theme *decor_theme;

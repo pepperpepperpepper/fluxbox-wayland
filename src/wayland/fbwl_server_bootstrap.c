@@ -644,9 +644,6 @@ bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_
             server->cache_max_kb,
             server->colors_per_channel,
             server->group_file != NULL ? server->group_file : "(null)");
-        if (server->force_pseudo_transparency) {
-            wlr_log(WLR_INFO, "Init: session.forcePseudoTransparency is X11-only and ignored on Wayland");
-        }
         if (server->group_file != NULL) {
             wlr_log(WLR_INFO, "Init: session.groupFile is deprecated; grouping uses apps file (ignoring %s)", server->group_file);
         }

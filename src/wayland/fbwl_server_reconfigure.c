@@ -462,9 +462,6 @@ void server_reconfigure(struct fbwl_server *server) {
                 server->cache_max_kb,
                 server->colors_per_channel,
                 server->group_file != NULL ? server->group_file : "(null)");
-            if (server->force_pseudo_transparency) {
-                wlr_log(WLR_INFO, "Reconfigure: session.forcePseudoTransparency is X11-only and ignored on Wayland");
-            }
             if (server->group_file != NULL) {
                 wlr_log(WLR_INFO, "Reconfigure: session.groupFile is deprecated; grouping uses apps file (ignoring %s)", server->group_file);
             }
@@ -646,6 +643,8 @@ done_style:
     if (slit_needs_rebuild) {
         server_slit_ui_rebuild(server);
     }
+
+    server_pseudo_transparency_refresh(server, "reconfigure");
 
     if (!did_any) {
         wlr_log(WLR_INFO, "Reconfigure: nothing to reload");

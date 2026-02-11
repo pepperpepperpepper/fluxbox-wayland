@@ -426,6 +426,7 @@ void fbwl_xwayland_handle_surface_commit(struct fbwl_view *view,
         wlr_log(WLR_INFO, "Surface size: %s %dx%d", fbwl_view_display_title(view), w, h);
     }
     fbwl_view_decor_update(view, view->server != NULL ? decor_theme : NULL);
+    fbwl_view_pseudo_bg_update(view, size_changed ? "commit-size" : "commit");
 
     if (size_changed && view->server != NULL && view->server->cursor != NULL) {
         const double cx = view->server->cursor->x;
@@ -465,6 +466,7 @@ void fbwl_xwayland_handle_surface_associate(struct fbwl_view *view,
     view->x = xsurface->x;
     view->y = xsurface->y;
     wlr_scene_node_set_position(&view->scene_tree->node, view->x, view->y);
+    fbwl_view_pseudo_bg_update(view, "xwayland-associate");
     fbwl_view_foreign_update_output_from_position(view, output_layout);
 
     view->map.notify = map_fn;
@@ -498,6 +500,7 @@ void fbwl_xwayland_handle_surface_dissociate(struct fbwl_view *view,
     fbwl_cleanup_listener(&view->commit);
 
     if (view->scene_tree != NULL) {
+        fbwl_pseudo_bg_destroy(&view->pseudo_bg);
         wlr_scene_node_destroy(&view->scene_tree->node);
         view->scene_tree = NULL;
         view->content_tree = NULL;
@@ -519,6 +522,7 @@ void fbwl_xwayland_handle_surface_request_configure(struct fbwl_view *view,
     if (view->scene_tree != NULL) {
         wlr_scene_node_set_position(&view->scene_tree->node, view->x, view->y);
     }
+    fbwl_view_pseudo_bg_update(view, "xwayland-request-configure");
     fbwl_view_decor_update(view, view->server != NULL ? decor_theme : NULL);
 
     wlr_xwayland_surface_configure(view->xwayland_surface, event->x, event->y,

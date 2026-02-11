@@ -858,13 +858,24 @@ void fbwl_view_cleanup(struct fbwl_view *view) {
     view->decor_tabs_h = 0;
     view->decor_tabs_vertical = false;
 }
+
+struct alpha_apply_ctx {
+    struct fbwl_view *view;
+    float opacity;
+};
+
 static void alpha_apply_iter(struct wlr_scene_buffer *buffer, int sx, int sy, void *user_data) {
     (void)sx;
     (void)sy;
     if (buffer == NULL || user_data == NULL) {
         return;
     }
-    const float opacity = *(float *)user_data;
+    const struct alpha_apply_ctx *ctx = user_data;
+    struct fbwl_view *view = ctx != NULL ? ctx->view : NULL;
+    const float opacity = ctx != NULL ? ctx->opacity : 1.0f;
+    if (view != NULL && view->pseudo_bg.image != NULL && buffer == view->pseudo_bg.image) {
+        return;
+    }
     wlr_scene_buffer_set_opacity(buffer, opacity);
 }
 void fbwl_view_alpha_apply(struct fbwl_view *view) {
@@ -873,7 +884,8 @@ void fbwl_view_alpha_apply(struct fbwl_view *view) {
     }
     const uint8_t alpha = view->decor_active ? view->alpha_focused : view->alpha_unfocused;
     const float opacity = alpha_to_opacity(alpha);
-    wlr_scene_node_for_each_buffer(&view->scene_tree->node, alpha_apply_iter, (void *)&opacity);
+    struct alpha_apply_ctx ctx = { .view = view, .opacity = opacity };
+    wlr_scene_node_for_each_buffer(&view->scene_tree->node, alpha_apply_iter, &ctx);
 }
 void fbwl_view_set_alpha(struct fbwl_view *view, uint8_t focused, uint8_t unfocused, const char *why) {
     if (view == NULL) {
@@ -883,6 +895,7 @@ void fbwl_view_set_alpha(struct fbwl_view *view, uint8_t focused, uint8_t unfocu
     view->alpha_focused = focused;
     view->alpha_unfocused = unfocused;
     fbwl_view_alpha_apply(view);
+    fbwl_view_pseudo_bg_update(view, why != NULL ? why : "alpha-set");
     wlr_log(WLR_INFO, "Alpha: %s focused=%u unfocused=%u reason=%s",
         fbwl_view_display_title(view),
         (unsigned int)focused,

@@ -8,6 +8,7 @@
 #include <wlr/util/box.h>
 
 #include "wmcore/fbwm_core.h"
+#include "wayland/fbwl_pseudo_bg.h"
 
 struct fbwl_decor_theme;
 struct fbwl_server;
@@ -37,6 +38,7 @@ struct fbwl_view {
     struct wlr_scene_tree *scene_tree;
     struct wlr_scene_tree *content_tree;
     struct wlr_scene_tree *base_layer;
+    struct fbwl_pseudo_bg pseudo_bg;
     bool decor_enabled;
     bool decor_active;
     bool decor_forced;
@@ -208,6 +210,8 @@ bool fbwl_view_tabs_index_at(const struct fbwl_view *view, double lx, double ly,
 void fbwl_view_alpha_apply(struct fbwl_view *view);
 void fbwl_view_set_alpha(struct fbwl_view *view, uint8_t focused, uint8_t unfocused, const char *why);
 void fbwl_view_set_shaded(struct fbwl_view *view, bool shaded, const char *why);
+
+void fbwl_view_pseudo_bg_update(struct fbwl_view *view, const char *why);
 
 void fbwl_view_cleanup(struct fbwl_view *view);
 

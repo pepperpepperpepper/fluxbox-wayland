@@ -404,6 +404,7 @@ static void view_apply_move(struct fbwl_server *server, struct fbwl_view *view, 
     if (view->scene_tree != NULL) {
         wlr_scene_node_set_position(&view->scene_tree->node, view->x, view->y);
     }
+    fbwl_view_pseudo_bg_update(view, why);
     if (view->type == FBWL_VIEW_XWAYLAND && view->xwayland_surface != NULL) {
         wlr_xwayland_surface_configure(view->xwayland_surface, view->x, view->y, (uint16_t)w, (uint16_t)h);
     }
@@ -429,6 +430,7 @@ static void view_apply_resize(struct fbwl_server *server, struct fbwl_view *view
     view->width = w;
     view->height = h;
     view->placed = true;
+    fbwl_view_pseudo_bg_update(view, why);
     fbwl_tabs_sync_geometry_from_view(view, true, w, h, why);
     fbwl_view_foreign_update_output_from_position(view, server->output_layout);
 }

@@ -7,9 +7,11 @@
 #include <wayland-server-core.h>
 
 #include "wayland/fbwl_ui_toolbar.h"
+#include "wayland/fbwl_pseudo_bg.h"
 
 struct fbwl_decor_theme;
 struct fbwl_view;
+struct wlr_buffer;
 
 struct wlr_output_layout;
 struct wlr_scene;
@@ -55,6 +57,12 @@ struct fbwl_slit_ui {
     uint32_t auto_pending;
 
     struct wlr_scene_tree *tree;
+    struct fbwl_pseudo_bg pseudo_bg;
+    struct wlr_output_layout *pseudo_output_layout;
+    struct wlr_buffer *pseudo_wallpaper_buf;
+    const float *pseudo_background_color;
+    const struct fbwl_decor_theme *pseudo_decor_theme;
+    bool pseudo_force_pseudo_transparency;
     struct wlr_scene_rect *bg;
 
     struct wl_list items; // struct fbwl_slit_item.link
@@ -70,6 +78,9 @@ struct fbwl_ui_slit_env {
     struct wlr_output_layout *output_layout;
     struct wl_list *outputs;
     struct wl_display *wl_display;
+    struct wlr_buffer *wallpaper_buf;
+    const float *background_color;
+    bool force_pseudo_transparency;
     const struct fbwl_decor_theme *decor_theme;
 };
 

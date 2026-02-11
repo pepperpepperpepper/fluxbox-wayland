@@ -19,6 +19,7 @@
 
 struct fbwl_popup {
     struct wlr_xdg_popup *xdg_popup;
+    struct fbwl_view *view;
     struct wl_listener commit;
     struct wl_listener destroy;
 };
@@ -34,6 +35,9 @@ static void xdg_popup_commit(struct wl_listener *listener, void *data) {
 static void xdg_popup_destroy(struct wl_listener *listener, void *data) {
     (void)data;
     struct fbwl_popup *popup = wl_container_of(listener, popup, destroy);
+    if (popup != NULL && popup->view != NULL) {
+        fbwl_view_pseudo_bg_update(popup->view, "popup-destroy");
+    }
     fbwl_cleanup_listener(&popup->commit);
     fbwl_cleanup_listener(&popup->destroy);
     free(popup);
@@ -92,8 +96,10 @@ void fbwl_xdg_shell_handle_new_popup(struct wl_listener *listener, void *data) {
         }
         struct fbwl_view *view = walk != NULL ? walk->data : NULL;
         if (view != NULL && popup_tree != NULL) {
+            popup->view = view;
             popup_tree->node.data = view;
             fbwl_view_alpha_apply(view);
+            fbwl_view_pseudo_bg_update(view, "popup-create");
         }
     }
 
@@ -359,6 +365,7 @@ void fbwl_xdg_shell_handle_toplevel_commit(struct fbwl_view *view,
             w, h);
     }
     fbwl_view_decor_update(view, view->server != NULL ? decor_theme : NULL);
+    fbwl_view_pseudo_bg_update(view, size_changed ? "commit-size" : "commit");
 
     if (size_changed && view->server != NULL && view->server->cursor != NULL) {
         const double cx = view->server->cursor->x;

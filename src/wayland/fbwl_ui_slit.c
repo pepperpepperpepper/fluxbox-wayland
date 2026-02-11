@@ -289,6 +289,16 @@ static void fbwl_ui_slit_apply_position(struct fbwl_slit_ui *ui) {
     ui->x = x;
     ui->y = y;
     wlr_scene_node_set_position(&ui->tree->node, ui->x, ui->y);
+    const float alpha = (float)ui->alpha / 255.0f;
+    const bool pseudo = ui->pseudo_force_pseudo_transparency && ui->pseudo_decor_theme != NULL &&
+        ui->pseudo_decor_theme->toolbar_bg[3] * alpha < 0.999f;
+    if (pseudo) {
+        fbwl_pseudo_bg_update(&ui->pseudo_bg, ui->tree, ui->pseudo_output_layout,
+            ui->x, ui->y, 0, 0, ui->width, ui->height,
+            ui->pseudo_wallpaper_buf, ui->pseudo_background_color);
+    } else {
+        fbwl_pseudo_bg_destroy(&ui->pseudo_bg);
+    }
 }
 
 static void slit_sync_client_geometries(const struct fbwl_slit_ui *ui) {
@@ -309,6 +319,7 @@ static void slit_sync_client_geometries(const struct fbwl_slit_ui *ui) {
         (void)wlr_scene_node_coords(&view->scene_tree->node, &gx, &gy);
         view->x = gx;
         view->y = gy;
+        fbwl_view_pseudo_bg_update(view, "slit-sync-geometries");
 
         if (view->type == FBWL_VIEW_XWAYLAND && view->xwayland_surface != NULL) {
             int vw = fbwl_view_current_width(view);
@@ -348,12 +359,18 @@ static void slit_update_layout(struct fbwl_slit_ui *ui, const struct fbwl_ui_sli
     if (ui == NULL || env == NULL) {
         return;
     }
+    ui->pseudo_output_layout = env->output_layout;
+    ui->pseudo_wallpaper_buf = env->wallpaper_buf;
+    ui->pseudo_background_color = env->background_color;
+    ui->pseudo_decor_theme = env->decor_theme;
+    ui->pseudo_force_pseudo_transparency = env->force_pseudo_transparency;
 
     const size_t mapped = slit_mapped_client_count(ui);
     if (!ui->enabled || mapped == 0) {
         ui->width = 0;
         ui->height = 0;
         ui->thickness = 0;
+        fbwl_pseudo_bg_destroy(&ui->pseudo_bg);
         if (ui->tree != NULL) {
             wlr_scene_node_set_enabled(&ui->tree->node, false);
         }
@@ -380,6 +397,7 @@ static void slit_update_layout(struct fbwl_slit_ui *ui, const struct fbwl_ui_sli
         ui->width = 0;
         ui->height = 0;
         ui->thickness = 0;
+        fbwl_pseudo_bg_destroy(&ui->pseudo_bg);
         if (ui->tree != NULL) {
             wlr_scene_node_set_enabled(&ui->tree->node, false);
         }
@@ -393,6 +411,7 @@ static void slit_update_layout(struct fbwl_slit_ui *ui, const struct fbwl_ui_sli
         ui->width = 0;
         ui->height = 0;
         ui->thickness = 0;
+        fbwl_pseudo_bg_destroy(&ui->pseudo_bg);
         wlr_scene_node_set_enabled(&ui->tree->node, false);
         return;
     }
@@ -460,6 +479,16 @@ static void slit_update_layout(struct fbwl_slit_ui *ui, const struct fbwl_ui_sli
         wlr_scene_rect_set_color(ui->bg, color);
         wlr_scene_node_set_position(&ui->bg->node, 0, 0);
         wlr_scene_node_lower_to_bottom(&ui->bg->node);
+    }
+    const float alpha = (float)ui->alpha / 255.0f;
+    const bool pseudo = ui->pseudo_force_pseudo_transparency && ui->pseudo_decor_theme != NULL &&
+        ui->pseudo_decor_theme->toolbar_bg[3] * alpha < 0.999f;
+    if (pseudo) {
+        fbwl_pseudo_bg_update(&ui->pseudo_bg, ui->tree, ui->pseudo_output_layout,
+            ui->x, ui->y, 0, 0, ui->width, ui->height,
+            ui->pseudo_wallpaper_buf, ui->pseudo_background_color);
+    } else {
+        fbwl_pseudo_bg_destroy(&ui->pseudo_bg);
     }
 
     int xoff = 0;
@@ -607,6 +636,12 @@ void fbwl_ui_slit_destroy(struct fbwl_slit_ui *ui) {
     }
 
     slit_cancel_auto_timer(ui);
+    fbwl_pseudo_bg_destroy(&ui->pseudo_bg);
+    ui->pseudo_output_layout = NULL;
+    ui->pseudo_wallpaper_buf = NULL;
+    ui->pseudo_background_color = NULL;
+    ui->pseudo_decor_theme = NULL;
+    ui->pseudo_force_pseudo_transparency = false;
 
     struct fbwl_slit_item *it;
     struct fbwl_slit_item *tmp;
@@ -618,6 +653,7 @@ void fbwl_ui_slit_destroy(struct fbwl_slit_ui *ui) {
             wlr_scene_node_set_position(&it->view->scene_tree->node, gx, gy);
             it->view->x = gx;
             it->view->y = gy;
+            fbwl_view_pseudo_bg_update(it->view, "slit-destroy");
         }
         wl_list_remove(&it->link);
         free(it);
@@ -683,6 +719,7 @@ void fbwl_ui_slit_detach_view(struct fbwl_slit_ui *ui, const struct fbwl_ui_slit
         wlr_scene_node_set_position(&view->scene_tree->node, gx, gy);
         view->x = gx;
         view->y = gy;
+        fbwl_view_pseudo_bg_update(view, "slit-detach");
     }
 
     wl_list_remove(&it->link);
@@ -740,6 +777,11 @@ void fbwl_ui_slit_handle_motion(struct fbwl_slit_ui *ui, const struct fbwl_ui_sl
     if (!ui->auto_hide && !ui->auto_raise) {
         return;
     }
+    ui->pseudo_output_layout = env->output_layout;
+    ui->pseudo_wallpaper_buf = env->wallpaper_buf;
+    ui->pseudo_background_color = env->background_color;
+    ui->pseudo_decor_theme = env->decor_theme;
+    ui->pseudo_force_pseudo_transparency = env->force_pseudo_transparency;
 
     const bool was_hovered = ui->hovered;
     bool hovered =

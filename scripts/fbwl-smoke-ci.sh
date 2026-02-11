@@ -160,6 +160,7 @@ scripts=(
 	  scripts/fbwl-smoke-menu-icons.sh
 	  scripts/fbwl-smoke-alpha.sh
 	  scripts/fbwl-smoke-window-alpha.sh
+	  scripts/fbwl-smoke-pseudo-transparency.sh
 		  scripts/fbwl-smoke-window-menu.sh
 		  scripts/fbwl-smoke-titlebar-buttons.sh
 		  scripts/fbwl-smoke-toolbar.sh

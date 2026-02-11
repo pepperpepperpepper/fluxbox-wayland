@@ -328,6 +328,7 @@ void fbwl_apps_remember_apply_pre_map(struct fbwl_view *view, const struct fbwl_
         if (view->scene_tree != NULL) {
             wlr_scene_node_set_position(&view->scene_tree->node, view->x, view->y);
         }
+        fbwl_view_pseudo_bg_update(view, "apps-remember-position");
         view->placed = true;
         fbwl_view_foreign_update_output_from_position(view, server->output_layout);
 

@@ -734,7 +734,7 @@ void fbwl_view_place_initial(struct fbwl_view *view, struct fbwm_core *wm, struc
     view->x = x + frame_left;
     view->y = y + frame_top;
     if (view->scene_tree != NULL) {
-        wlr_scene_node_set_position(&view->scene_tree->node, view->x, view->y);
+        wlr_scene_node_set_position(&view->scene_tree->node, view->x, view->y); fbwl_view_pseudo_bg_update(view, "place");
     }
     wlr_log(WLR_INFO, "Place: %s out=%s x=%d y=%d usable=%d,%d %dx%d full=%d,%d %dx%d",
         fbwl_view_display_title(view),
@@ -815,7 +815,7 @@ void fbwl_view_set_maximized(struct fbwl_view *view, bool maximized, struct wlr_
         view->x = box.x + frame_left;
         view->y = box.y + frame_top;
         if (view->scene_tree != NULL) {
-            wlr_scene_node_set_position(&view->scene_tree->node, view->x, view->y);
+            wlr_scene_node_set_position(&view->scene_tree->node, view->x, view->y); fbwl_view_pseudo_bg_update(view, "maximize");
             wlr_scene_node_raise_to_top(&view->scene_tree->node);
         }
         if (view->type == FBWL_VIEW_XDG) {
@@ -850,7 +850,7 @@ void fbwl_view_set_maximized(struct fbwl_view *view, bool maximized, struct wlr_
         view->x = view->saved_x;
         view->y = view->saved_y;
         if (view->scene_tree != NULL) {
-            wlr_scene_node_set_position(&view->scene_tree->node, view->x, view->y);
+            wlr_scene_node_set_position(&view->scene_tree->node, view->x, view->y); fbwl_view_pseudo_bg_update(view, "unmaximize");
             wlr_scene_node_raise_to_top(&view->scene_tree->node);
         }
         if (view->type == FBWL_VIEW_XDG) {
@@ -910,7 +910,7 @@ void fbwl_view_set_fullscreen(struct fbwl_view *view, bool fullscreen, struct wl
         view->x = box.x;
         view->y = box.y;
         if (view->scene_tree != NULL) {
-            wlr_scene_node_set_position(&view->scene_tree->node, view->x, view->y);
+            wlr_scene_node_set_position(&view->scene_tree->node, view->x, view->y); fbwl_view_pseudo_bg_update(view, "fullscreen-on");
             wlr_scene_node_raise_to_top(&view->scene_tree->node);
         }
         if (view->type == FBWL_VIEW_XDG) {
@@ -948,7 +948,7 @@ void fbwl_view_set_fullscreen(struct fbwl_view *view, bool fullscreen, struct wl
         view->x = view->saved_x;
         view->y = view->saved_y;
         if (view->scene_tree != NULL) {
-            wlr_scene_node_set_position(&view->scene_tree->node, view->x, view->y);
+            wlr_scene_node_set_position(&view->scene_tree->node, view->x, view->y); fbwl_view_pseudo_bg_update(view, "fullscreen-off");
             wlr_scene_node_raise_to_top(&view->scene_tree->node);
         }
         if (view->type == FBWL_VIEW_XDG) {

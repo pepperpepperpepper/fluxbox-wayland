@@ -564,6 +564,7 @@ bool server_menu_load_custom_file(struct fbwl_server *server, const char *path);
 
 bool fbwl_server_outputs_init(struct fbwl_server *server);
 bool server_wallpaper_set(struct fbwl_server *server, const char *path);
+void server_pseudo_transparency_refresh(struct fbwl_server *server, const char *why);
 bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_bootstrap_options *opts);
 void fbwl_server_finish(struct fbwl_server *server);
 void server_toolbar_ui_rebuild(struct fbwl_server *server);

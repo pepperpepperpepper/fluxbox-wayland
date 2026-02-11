@@ -155,6 +155,7 @@ static void view_move_to_head(struct fbwl_server *server, struct fbwl_view *view
         if (view->scene_tree != NULL) {
             wlr_scene_node_set_position(&view->scene_tree->node, view->x, view->y);
         }
+        fbwl_view_pseudo_bg_update(view, why != NULL ? why : "set-head-fullscreen");
         if (view->type == FBWL_VIEW_XDG) {
             wlr_xdg_toplevel_set_size(view->xdg_toplevel, box.width, box.height);
         } else if (view->type == FBWL_VIEW_XWAYLAND && view->xwayland_surface != NULL) {
@@ -223,6 +224,7 @@ static void view_move_to_head(struct fbwl_server *server, struct fbwl_view *view
         if (view->scene_tree != NULL) {
             wlr_scene_node_set_position(&view->scene_tree->node, view->x, view->y);
         }
+        fbwl_view_pseudo_bg_update(view, why != NULL ? why : "set-head-maximized");
         if (view->type == FBWL_VIEW_XDG) {
             wlr_xdg_toplevel_set_maximized(view->xdg_toplevel, view->maximized);
             wlr_xdg_toplevel_set_size(view->xdg_toplevel, w, h);
@@ -286,6 +288,7 @@ static void view_move_to_head(struct fbwl_server *server, struct fbwl_view *view
     if (view->scene_tree != NULL) {
         wlr_scene_node_set_position(&view->scene_tree->node, view->x, view->y);
     }
+    fbwl_view_pseudo_bg_update(view, why != NULL ? why : "set-head");
     if (view->type == FBWL_VIEW_XWAYLAND && view->xwayland_surface != NULL) {
         wlr_xwayland_surface_configure(view->xwayland_surface, view->x, view->y, (uint16_t)cur_w, (uint16_t)cur_h);
     }

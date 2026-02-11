@@ -250,6 +250,7 @@ static bool server_view_move_frame(struct fbwl_server *server, struct fbwl_view 
     if (view->scene_tree != NULL) {
         wlr_scene_node_set_position(&view->scene_tree->node, view->x, view->y);
     }
+    fbwl_view_pseudo_bg_update(view, why);
 
     if (view->type == FBWL_VIEW_XWAYLAND && view->xwayland_surface != NULL) {
         wlr_xwayland_surface_configure(view->xwayland_surface, view->x, view->y, (uint16_t)w, (uint16_t)h);
@@ -281,6 +282,7 @@ static bool server_view_move_resize_frame(struct fbwl_server *server, struct fbw
     if (view->scene_tree != NULL) {
         wlr_scene_node_set_position(&view->scene_tree->node, view->x, view->y);
     }
+    fbwl_view_pseudo_bg_update(view, why);
 
     if (view->type == FBWL_VIEW_XDG && view->xdg_toplevel != NULL) {
         wlr_xdg_toplevel_set_size(view->xdg_toplevel, w, h);
