@@ -22,12 +22,14 @@ struct str_vec {
 
 struct toggle_state {
     void *userdata;
+    const void *scope;
     char *key;
     size_t idx;
 };
 
 struct delay_state {
     struct fbwl_server *server;
+    const void *scope;
     char *key;
     struct wl_event_source *timer;
     char *cmd_line;
@@ -166,7 +168,7 @@ static bool cmdlang_tokens_between(struct str_vec *out, const char *in, char fir
     return true;
 }
 
-static struct toggle_state *toggle_state_get_or_add(void *userdata, const char *args) {
+static struct toggle_state *toggle_state_get_or_add(void *userdata, const void *scope, const char *args) {
     if (args == NULL) {
         return NULL;
     }
@@ -187,7 +189,9 @@ static struct toggle_state *toggle_state_get_or_add(void *userdata, const char *
     }
 
     for (size_t i = 0; i < g_toggle_states_len; i++) {
-        if (g_toggle_states[i].userdata == userdata && strcmp(g_toggle_states[i].key, key_norm) == 0) {
+        if (g_toggle_states[i].userdata == userdata &&
+                g_toggle_states[i].scope == scope &&
+                strcmp(g_toggle_states[i].key, key_norm) == 0) {
             free(key_norm);
             return &g_toggle_states[i];
         }
@@ -207,6 +211,7 @@ static struct toggle_state *toggle_state_get_or_add(void *userdata, const char *
     struct toggle_state *st = &g_toggle_states[g_toggle_states_len++];
     *st = (struct toggle_state){0};
     st->userdata = userdata;
+    st->scope = scope;
     st->key = key_norm;
     st->idx = 0;
     return st;
@@ -221,7 +226,8 @@ bool fbwl_cmdlang_execute_togglecmd(const char *args, struct fbwl_view *target_v
         return false;
     }
 
-    struct toggle_state *state = toggle_state_get_or_add(hooks->userdata, args);
+    const void *scope = hooks->cmdlang_scope != NULL ? hooks->cmdlang_scope : hooks->userdata;
+    struct toggle_state *state = toggle_state_get_or_add(hooks->userdata, scope, args);
     if (state == NULL) {
         return false;
     }
@@ -274,7 +280,7 @@ static bool parse_u64(const char *s, uint64_t *out) {
     return true;
 }
 
-static struct delay_state *delay_state_get_or_add(struct fbwl_server *server, const char *args) {
+static struct delay_state *delay_state_get_or_add(struct fbwl_server *server, const void *scope, const char *args) {
     if (args == NULL) {
         return NULL;
     }
@@ -295,7 +301,9 @@ static struct delay_state *delay_state_get_or_add(struct fbwl_server *server, co
     }
 
     for (size_t i = 0; i < g_delay_states_len; i++) {
-        if (g_delay_states[i].server == server && strcmp(g_delay_states[i].key, key_norm) == 0) {
+        if (g_delay_states[i].server == server &&
+                g_delay_states[i].scope == scope &&
+                strcmp(g_delay_states[i].key, key_norm) == 0) {
             free(key_norm);
             return &g_delay_states[i];
         }
@@ -315,6 +323,7 @@ static struct delay_state *delay_state_get_or_add(struct fbwl_server *server, co
     struct delay_state *st = &g_delay_states[g_delay_states_len++];
     *st = (struct delay_state){0};
     st->server = server;
+    st->scope = scope;
     st->key = key_norm;
     st->timer = NULL;
     st->cmd_line = NULL;
@@ -383,7 +392,8 @@ bool fbwl_cmdlang_execute_delay(const char *args, struct fbwl_view *target_view,
         return ok;
     }
 
-    struct delay_state *st = delay_state_get_or_add(server, args);
+    const void *scope = hooks->cmdlang_scope != NULL ? hooks->cmdlang_scope : hooks->userdata;
+    struct delay_state *st = delay_state_get_or_add(server, scope, args);
     if (st == NULL) {
         free(cmd);
         return false;

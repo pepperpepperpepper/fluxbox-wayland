@@ -876,6 +876,7 @@ static bool keybindings_cycle_view_allowed(void *userdata, const struct fbwl_vie
 struct fbwl_keybindings_hooks keybindings_hooks(struct fbwl_server *server) {
     return (struct fbwl_keybindings_hooks){
         .userdata = server,
+        .cmdlang_scope = NULL,
         .wm = server != NULL ? &server->wm : NULL,
         .key_mode = server != NULL ? server->key_mode : NULL,
         .key_mode_set = keybindings_key_mode_set,

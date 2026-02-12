@@ -39,6 +39,7 @@ Mod1 Control 4 :Map {SetTitle foreach-hit} {Matches (class=foreach)}
 Mod1 Control 5 :MacroCmd {If {Matches (class=if-yes)} {SetTitle macro-nested} {SetTitle macro-other}} {SetTitle macro-after}
 Mod1 Control 6 :Delay {SetTitle delay-fired} 200000
 Mod1 Control 7 :ToggleCmd {SetTitle toggle-1} {SetTitle toggle-2}
+Mod1 Control 8 :ToggleCmd {SetTitle toggle-1} {SetTitle toggle-2}
 EOF
 
 WLR_BACKENDS="${WLR_BACKENDS:-headless}" WLR_RENDERER="${WLR_RENDERER:-pixman}" ./fluxbox-wayland \
@@ -147,9 +148,13 @@ if [[ "$cnt" != "1" ]]; then
   exit 1
 fi
 
-# ToggleCmd cycles between subcommands.
+# ToggleCmd cycles between subcommands, and state is scoped per binding (identical ToggleCmd strings don't share state).
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" key alt-ctrl-7
+timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Title: set title override create_seq=[0-9]+ title=toggle-1 reason=keybinding'; do sleep 0.05; done"
+
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-input-injector --socket "$SOCKET" key alt-ctrl-8
 timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Title: set title override create_seq=[0-9]+ title=toggle-1 reason=keybinding'; do sleep 0.05; done"
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
@@ -157,7 +162,7 @@ OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Title: set title override create_seq=[0-9]+ title=toggle-2 reason=keybinding'; do sleep 0.05; done"
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
-./fbwl-input-injector --socket "$SOCKET" key alt-ctrl-7
-timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Title: set title override create_seq=[0-9]+ title=toggle-1 reason=keybinding'; do sleep 0.05; done"
+./fbwl-input-injector --socket "$SOCKET" key alt-ctrl-8
+timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Title: set title override create_seq=[0-9]+ title=toggle-2 reason=keybinding'; do sleep 0.05; done"
 
 echo "ok: keybinding cmdlang smoke passed (socket=$SOCKET log=$LOG keys=$KEYS_FILE)"

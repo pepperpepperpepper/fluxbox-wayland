@@ -141,6 +141,7 @@ struct fbwl_keybinding {
 
 struct fbwl_keybindings_hooks {
     void *userdata;
+    const void *cmdlang_scope;
     struct fbwm_core *wm;
     const char *key_mode;
     uint32_t placeholder_keycode;

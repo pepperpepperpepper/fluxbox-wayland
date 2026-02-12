@@ -123,7 +123,9 @@ static bool mousebindings_handle_once(const struct fbwl_mousebinding *bindings, 
         if (binding->modifiers != modifiers) {
             continue;
         }
-        return fbwl_keybindings_execute_action(binding->action, binding->arg, binding->cmd, target_view, hooks);
+        struct fbwl_keybindings_hooks tmp = *hooks;
+        tmp.cmdlang_scope = binding;
+        return fbwl_keybindings_execute_action(binding->action, binding->arg, binding->cmd, target_view, &tmp);
     }
 
     return false;

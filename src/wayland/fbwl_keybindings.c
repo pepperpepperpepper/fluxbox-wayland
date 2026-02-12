@@ -166,18 +166,23 @@ bool fbwl_keybindings_handle(const struct fbwl_keybinding *bindings, size_t coun
         }
         if (binding->key_kind == FBWL_KEYBIND_KEYCODE) {
             if (binding->keycode == keycode) {
-                return fbwl_keybindings_execute_action(binding->action, binding->arg, binding->cmd, NULL, hooks);
+                struct fbwl_keybindings_hooks tmp = *hooks;
+                tmp.cmdlang_scope = binding;
+                return fbwl_keybindings_execute_action(binding->action, binding->arg, binding->cmd, NULL, &tmp);
             }
             continue;
         }
         if (binding->sym == sym) {
-            return fbwl_keybindings_execute_action(binding->action, binding->arg, binding->cmd, NULL, hooks);
+            struct fbwl_keybindings_hooks tmp = *hooks;
+            tmp.cmdlang_scope = binding;
+            return fbwl_keybindings_execute_action(binding->action, binding->arg, binding->cmd, NULL, &tmp);
         }
     }
     if (placeholder != NULL) {
         struct fbwl_keybindings_hooks tmp = *hooks;
         tmp.placeholder_keycode = keycode;
         tmp.placeholder_sym = sym;
+        tmp.cmdlang_scope = placeholder;
         return fbwl_keybindings_execute_action(placeholder->action, placeholder->arg, placeholder->cmd, NULL, &tmp);
     }
     return false;
@@ -199,7 +204,9 @@ bool fbwl_keybindings_handle_change_workspace(const struct fbwl_keybinding *bind
         if (!mode_matches(binding->mode, hooks->key_mode)) {
             continue;
         }
-        return fbwl_keybindings_execute_action(binding->action, binding->arg, binding->cmd, NULL, hooks);
+        struct fbwl_keybindings_hooks tmp = *hooks;
+        tmp.cmdlang_scope = binding;
+        return fbwl_keybindings_execute_action(binding->action, binding->arg, binding->cmd, NULL, &tmp);
     }
     return false;
 }
