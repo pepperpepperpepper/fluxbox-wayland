@@ -28,7 +28,7 @@
 #include "wayland/fbwl_view.h"
 
 static void server_update_pointer_focus(struct fbwl_server *server, enum fbwl_focus_reason reason,
-        const char *why, bool allow_clear);
+        const char *why);
 
 struct fbwl_view *server_strict_mousefocus_view_under_cursor(struct fbwl_server *server) {
     if (server == NULL || server->scene == NULL || server->cursor == NULL) {
@@ -61,7 +61,7 @@ void server_strict_mousefocus_recheck(struct fbwl_server *server, const char *wh
         return;
     }
 
-    server_update_pointer_focus(server, FBWL_FOCUS_REASON_POINTER_MOTION, why, true);
+    server_update_pointer_focus(server, FBWL_FOCUS_REASON_POINTER_MOTION, why);
 }
 
 void server_strict_mousefocus_recheck_after_restack(struct fbwl_server *server, struct fbwl_view *before, const char *why) {
@@ -82,7 +82,7 @@ void server_strict_mousefocus_recheck_after_restack(struct fbwl_server *server, 
     struct fbwl_view *after =
         fbwl_view_at(server->scene, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
     if (after != before) {
-        server_update_pointer_focus(server, FBWL_FOCUS_REASON_POINTER_MOTION, why, true);
+        server_update_pointer_focus(server, FBWL_FOCUS_REASON_POINTER_MOTION, why);
     }
 }
 
@@ -294,8 +294,9 @@ static bool server_pointer_focus_allowed(const struct fbwl_server *server) {
     return true;
 }
 static void server_update_pointer_focus(struct fbwl_server *server, enum fbwl_focus_reason reason,
-        const char *why, bool allow_clear) {
-    if (!server_pointer_focus_allowed(server)) {
+        const char *why) {
+    (void)why;
+    if (server == NULL || server->scene == NULL || server->cursor == NULL) {
         return;
     }
 
@@ -305,6 +306,15 @@ static void server_update_pointer_focus(struct fbwl_server *server, enum fbwl_fo
     if (view != NULL && !fbwl_view_accepts_focus(view)) {
         view = NULL;
     }
+
+    if (server->auto_raise_pending_view != NULL && view != server->auto_raise_pending_view) {
+        server->auto_raise_pending_view = NULL;
+    }
+
+    if (!server_pointer_focus_allowed(server)) {
+        return;
+    }
+
     if (view != NULL) {
         if (view != server->focused_view) {
             const enum fbwl_focus_reason prev_reason = server->focus_reason;
@@ -313,12 +323,6 @@ static void server_update_pointer_focus(struct fbwl_server *server, enum fbwl_fo
             server->focus_reason = prev_reason;
         }
         return;
-    }
-
-    if (allow_clear && server->focused_view != NULL) {
-        wlr_log(WLR_INFO, "Focus: clear reason=pointer-leave why=%s", why != NULL ? why : "(null)");
-        server->auto_raise_pending_view = NULL;
-        clear_keyboard_focus(server);
     }
 }
 
@@ -334,11 +338,7 @@ void server_cursor_motion(struct wl_listener *listener, void *data) {
         &server->pointer_constraints.phys_valid, &server->pointer_constraints.phys_x, &server->pointer_constraints.phys_y,
         server->grab.mode, cursor_grab_update, server,
         &hooks, event);
-    const struct fbwl_screen_config *cfg = fbwl_server_screen_config_at(server, server->cursor->x, server->cursor->y);
-    const enum fbwl_focus_model model =
-        cfg != NULL ? cfg->focus.model : server->focus.model;
-    server_update_pointer_focus(server, FBWL_FOCUS_REASON_POINTER_MOTION, "pointer-motion",
-        model == FBWL_FOCUS_MODEL_STRICT_MOUSE_FOCUS);
+    server_update_pointer_focus(server, FBWL_FOCUS_REASON_POINTER_MOTION, "pointer-motion");
     server_mousebind_capture_handle_motion(server);
     server_toolbar_ui_handle_motion(server);
     server_slit_ui_handle_motion(server);
@@ -360,11 +360,7 @@ void server_cursor_motion_absolute(struct wl_listener *listener, void *data) {
         &server->pointer_constraints.phys_valid, &server->pointer_constraints.phys_x, &server->pointer_constraints.phys_y,
         server->grab.mode, cursor_grab_update, server,
         &hooks, event);
-    const struct fbwl_screen_config *cfg = fbwl_server_screen_config_at(server, server->cursor->x, server->cursor->y);
-    const enum fbwl_focus_model model =
-        cfg != NULL ? cfg->focus.model : server->focus.model;
-    server_update_pointer_focus(server, FBWL_FOCUS_REASON_POINTER_MOTION, "pointer-motion-absolute",
-        model == FBWL_FOCUS_MODEL_STRICT_MOUSE_FOCUS);
+    server_update_pointer_focus(server, FBWL_FOCUS_REASON_POINTER_MOTION, "pointer-motion-absolute");
     server_mousebind_capture_handle_motion(server);
     server_toolbar_ui_handle_motion(server);
     server_slit_ui_handle_motion(server);

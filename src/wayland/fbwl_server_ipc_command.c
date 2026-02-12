@@ -90,7 +90,25 @@ void server_ipc_command(void *userdata, int client_fd, char *line) {
             return;
         }
 
-        if (!server_wallpaper_set(server, rest)) {
+        enum fbwl_wallpaper_mode mode = FBWL_WALLPAPER_MODE_STRETCH;
+        char *path = rest;
+        if (strncasecmp(rest, "--mode", 6) == 0 && isspace((unsigned char)rest[6])) {
+            char *arg_save = NULL;
+            (void)strtok_r(rest, " \t", &arg_save); // --mode
+            char *mode_tok = strtok_r(NULL, " \t", &arg_save);
+            if (mode_tok == NULL) {
+                fbwl_ipc_send_line(client_fd, "err wallpaper_requires_mode");
+                return;
+            }
+            mode = fbwl_wallpaper_mode_parse(mode_tok);
+            path = ipc_trim_inplace(arg_save);
+            if (path == NULL || *path == '\0') {
+                fbwl_ipc_send_line(client_fd, "err wallpaper_requires_path");
+                return;
+            }
+        }
+
+        if (!server_wallpaper_set(server, path, mode)) {
             fbwl_ipc_send_line(client_fd, "err wallpaper_failed");
             return;
         }

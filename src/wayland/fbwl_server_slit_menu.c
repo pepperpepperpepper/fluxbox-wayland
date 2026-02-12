@@ -19,6 +19,7 @@ static struct fbwl_ui_menu_env menu_ui_env(struct fbwl_server *server) {
         .scene = server != NULL ? server->scene : NULL,
         .layer_overlay = server != NULL ? server->layer_overlay : NULL,
         .output_layout = server != NULL ? server->output_layout : NULL,
+        .wallpaper_mode = server != NULL ? server->wallpaper_mode : FBWL_WALLPAPER_MODE_STRETCH,
         .wallpaper_buf = server != NULL ? server->wallpaper_buf : NULL,
         .background_color = server != NULL ? server->background_color : NULL,
         .decor_theme = server != NULL ? &server->decor_theme : NULL,

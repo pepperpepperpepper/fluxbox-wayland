@@ -165,7 +165,7 @@ static void fbwl_ui_tooltip_show_now(struct fbwl_tooltip_ui *ui) {
     if (pseudo) {
         fbwl_pseudo_bg_update(&ui->pseudo_bg, ui->tree, ui->env.output_layout,
             ui->x, ui->y, 0, 0, ui->width, ui->height,
-            ui->env.wallpaper_buf, ui->env.background_color);
+            ui->env.wallpaper_mode, ui->env.wallpaper_buf, ui->env.background_color);
     } else {
         fbwl_pseudo_bg_destroy(&ui->pseudo_bg);
     }

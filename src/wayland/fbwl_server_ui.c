@@ -227,20 +227,16 @@ static struct fbwl_ui_toolbar_env toolbar_ui_env(struct fbwl_server *server) {
         .layer_tree = toolbar_ui_layer_tree(server),
         .output_layout = server != NULL ? server->output_layout : NULL,
         .outputs = server != NULL ? &server->outputs : NULL,
-        .wl_display = server != NULL ? server->wl_display : NULL, .wallpaper_buf = server != NULL ? server->wallpaper_buf : NULL, .background_color = server != NULL ? server->background_color : NULL, .force_pseudo_transparency = server != NULL && server->force_pseudo_transparency,
-        .wm = server != NULL ? &server->wm : NULL,
-        .xwayland = server != NULL ? server->xwayland : NULL,
-        .decor_theme = server != NULL ? &server->decor_theme : NULL,
-        .focused_view = server != NULL ? server->focused_view : NULL,
-        .cursor_valid = server != NULL && server->cursor != NULL,
-        .cursor_x = server != NULL && server->cursor != NULL ? server->cursor->x : 0.0,
-        .cursor_y = server != NULL && server->cursor != NULL ? server->cursor->y : 0.0,
-        .layer_background = server != NULL ? server->layer_background : NULL,
-        .layer_bottom = server != NULL ? server->layer_bottom : NULL,
-        .layer_normal = server != NULL ? server->layer_normal : NULL,
-        .layer_fullscreen = server != NULL ? server->layer_fullscreen : NULL,
-        .layer_top = server != NULL ? server->layer_top : NULL,
-        .layer_overlay = server != NULL ? server->layer_overlay : NULL,
+        .wl_display = server != NULL ? server->wl_display : NULL, .wallpaper_mode = server != NULL ? server->wallpaper_mode : FBWL_WALLPAPER_MODE_STRETCH,
+        .wallpaper_buf = server != NULL ? server->wallpaper_buf : NULL,
+        .background_color = server != NULL ? server->background_color : NULL,
+        .force_pseudo_transparency = server != NULL && server->force_pseudo_transparency,
+        .wm = server != NULL ? &server->wm : NULL, .xwayland = server != NULL ? server->xwayland : NULL,
+        .decor_theme = server != NULL ? &server->decor_theme : NULL, .focused_view = server != NULL ? server->focused_view : NULL,
+        .cursor_valid = server != NULL && server->cursor != NULL, .cursor_x = server != NULL && server->cursor != NULL ? server->cursor->x : 0.0, .cursor_y = server != NULL && server->cursor != NULL ? server->cursor->y : 0.0,
+        .layer_background = server != NULL ? server->layer_background : NULL, .layer_bottom = server != NULL ? server->layer_bottom : NULL,
+        .layer_normal = server != NULL ? server->layer_normal : NULL, .layer_fullscreen = server != NULL ? server->layer_fullscreen : NULL,
+        .layer_top = server != NULL ? server->layer_top : NULL, .layer_overlay = server != NULL ? server->layer_overlay : NULL,
 #ifdef HAVE_SYSTEMD
         .sni = server != NULL ? &server->sni : NULL,
 #endif
@@ -272,7 +268,9 @@ static struct fbwl_ui_slit_env slit_ui_env(struct fbwl_server *server) {
         .layer_tree = slit_ui_layer_tree(server),
         .output_layout = server != NULL ? server->output_layout : NULL,
         .outputs = server != NULL ? &server->outputs : NULL,
-        .wl_display = server != NULL ? server->wl_display : NULL, .wallpaper_buf = server != NULL ? server->wallpaper_buf : NULL, .background_color = server != NULL ? server->background_color : NULL, .force_pseudo_transparency = server != NULL && server->force_pseudo_transparency, .decor_theme = server != NULL ? &server->decor_theme : NULL,
+        .wl_display = server != NULL ? server->wl_display : NULL, .wallpaper_mode = server != NULL ? server->wallpaper_mode : FBWL_WALLPAPER_MODE_STRETCH,
+        .wallpaper_buf = server != NULL ? server->wallpaper_buf : NULL, .background_color = server != NULL ? server->background_color : NULL,
+        .force_pseudo_transparency = server != NULL && server->force_pseudo_transparency, .decor_theme = server != NULL ? &server->decor_theme : NULL,
     };
 }
 
@@ -290,9 +288,10 @@ static struct fbwl_ui_tooltip_env tooltip_ui_env(struct fbwl_server *server) {
     return (struct fbwl_ui_tooltip_env){
         .scene = server != NULL ? server->scene : NULL,
         .layer_overlay = server != NULL ? server->layer_overlay : NULL,
-        .wl_display = server != NULL ? server->wl_display : NULL,
-        .output_layout = server != NULL ? server->output_layout : NULL,
-        .wallpaper_buf = server != NULL ? server->wallpaper_buf : NULL, .background_color = server != NULL ? server->background_color : NULL, .decor_theme = server != NULL ? &server->decor_theme : NULL, .force_pseudo_transparency = server != NULL && server->force_pseudo_transparency,
+        .wl_display = server != NULL ? server->wl_display : NULL, .output_layout = server != NULL ? server->output_layout : NULL,
+        .wallpaper_mode = server != NULL ? server->wallpaper_mode : FBWL_WALLPAPER_MODE_STRETCH,
+        .wallpaper_buf = server != NULL ? server->wallpaper_buf : NULL, .background_color = server != NULL ? server->background_color : NULL,
+        .decor_theme = server != NULL ? &server->decor_theme : NULL, .force_pseudo_transparency = server != NULL && server->force_pseudo_transparency,
     };
 }
 
@@ -798,8 +797,10 @@ static struct fbwl_ui_menu_env menu_ui_env(struct fbwl_server *server) {
     return (struct fbwl_ui_menu_env){
         .scene = server != NULL ? server->scene : NULL,
         .layer_overlay = server != NULL ? server->layer_overlay : NULL, .output_layout = server != NULL ? server->output_layout : NULL,
+        .wallpaper_mode = server != NULL ? server->wallpaper_mode : FBWL_WALLPAPER_MODE_STRETCH,
         .wallpaper_buf = server != NULL ? server->wallpaper_buf : NULL, .background_color = server != NULL ? server->background_color : NULL,
-        .decor_theme = server != NULL ? &server->decor_theme : NULL, .wl_display = server != NULL ? server->wl_display : NULL, .force_pseudo_transparency = server != NULL && server->force_pseudo_transparency,
+        .decor_theme = server != NULL ? &server->decor_theme : NULL, .wl_display = server != NULL ? server->wl_display : NULL,
+        .force_pseudo_transparency = server != NULL && server->force_pseudo_transparency,
     };
 }
 

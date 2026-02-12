@@ -8,6 +8,7 @@
 #include <wlr/util/box.h>
 
 struct wlr_allocator;
+struct wlr_buffer;
 struct wlr_renderer;
 struct wlr_output;
 struct wlr_output_layout;
@@ -24,6 +25,7 @@ struct fbwl_output {
     struct wlr_box usable_area;
     struct wlr_scene_rect *background_rect;
     struct wlr_scene_buffer *background_image;
+    struct wlr_buffer *wallpaper_tile_buf;
     struct wlr_scene *scene;
 
     fbwl_output_on_destroy_fn on_destroy;

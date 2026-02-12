@@ -165,7 +165,7 @@ static void fbwl_ui_toolbar_apply_position(struct fbwl_toolbar_ui *ui) {
     if (pseudo) {
         fbwl_pseudo_bg_update(&ui->pseudo_bg, ui->tree, ui->pseudo_output_layout,
             ui->x, ui->y, 0, 0, ui->width, ui->height,
-            ui->pseudo_wallpaper_buf, ui->pseudo_background_color);
+            ui->pseudo_wallpaper_mode, ui->pseudo_wallpaper_buf, ui->pseudo_background_color);
     } else {
         fbwl_pseudo_bg_destroy(&ui->pseudo_bg);
     }
@@ -184,6 +184,7 @@ static void fbwl_ui_toolbar_destroy_scene(struct fbwl_toolbar_ui *ui) {
     }
     fbwl_pseudo_bg_destroy(&ui->pseudo_bg);
     ui->pseudo_output_layout = NULL;
+    ui->pseudo_wallpaper_mode = FBWL_WALLPAPER_MODE_STRETCH;
     ui->pseudo_wallpaper_buf = NULL;
     ui->pseudo_background_color = NULL;
     ui->pseudo_decor_theme = NULL;
@@ -381,6 +382,7 @@ void fbwl_ui_toolbar_rebuild(struct fbwl_toolbar_ui *ui, const struct fbwl_ui_to
         return;
     }
     ui->pseudo_output_layout = env->output_layout;
+    ui->pseudo_wallpaper_mode = env->wallpaper_mode;
     ui->pseudo_wallpaper_buf = env->wallpaper_buf;
     ui->pseudo_background_color = env->background_color;
     ui->pseudo_decor_theme = env->decor_theme;
@@ -453,6 +455,7 @@ void fbwl_ui_toolbar_update_position(struct fbwl_toolbar_ui *ui, const struct fb
         return;
     }
     ui->pseudo_output_layout = env->output_layout;
+    ui->pseudo_wallpaper_mode = env->wallpaper_mode;
     ui->pseudo_wallpaper_buf = env->wallpaper_buf;
     ui->pseudo_background_color = env->background_color;
     ui->pseudo_decor_theme = env->decor_theme;
@@ -527,7 +530,7 @@ void fbwl_ui_toolbar_update_position(struct fbwl_toolbar_ui *ui, const struct fb
     if (pseudo) {
         fbwl_pseudo_bg_update(&ui->pseudo_bg, ui->tree, ui->pseudo_output_layout,
             ui->x, ui->y, 0, 0, ui->width, ui->height,
-            ui->pseudo_wallpaper_buf, ui->pseudo_background_color);
+            ui->pseudo_wallpaper_mode, ui->pseudo_wallpaper_buf, ui->pseudo_background_color);
     } else {
         fbwl_pseudo_bg_destroy(&ui->pseudo_bg);
     }
@@ -586,6 +589,7 @@ void fbwl_ui_toolbar_handle_motion(struct fbwl_toolbar_ui *ui, const struct fbwl
         return;
     }
     ui->pseudo_output_layout = env->output_layout;
+    ui->pseudo_wallpaper_mode = env->wallpaper_mode;
     ui->pseudo_wallpaper_buf = env->wallpaper_buf;
     ui->pseudo_background_color = env->background_color;
     ui->pseudo_decor_theme = env->decor_theme;

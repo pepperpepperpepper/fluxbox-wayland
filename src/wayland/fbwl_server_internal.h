@@ -29,6 +29,7 @@
 #include "wayland/fbwl_idle.h"
 #include "wayland/fbwl_xdg_activation.h"
 #include "wayland/fbwl_xdg_decoration.h"
+#include "wayland/fbwl_wallpaper.h"
 #include "wayland/fbwl_menu.h"
 #include "wayland/fbwl_ui_menu.h"
 #include "wayland/fbwl_ui_toolbar.h"
@@ -250,6 +251,7 @@ struct fbwl_server {
 
     float background_color[4];
     char *wallpaper_path;
+    enum fbwl_wallpaper_mode wallpaper_mode;
     struct wlr_buffer *wallpaper_buf;
 
     struct fbwl_decor_theme decor_theme;
@@ -563,7 +565,7 @@ bool server_menu_load_file(struct fbwl_server *server, const char *path);
 bool server_menu_load_custom_file(struct fbwl_server *server, const char *path);
 
 bool fbwl_server_outputs_init(struct fbwl_server *server);
-bool server_wallpaper_set(struct fbwl_server *server, const char *path);
+bool server_wallpaper_set(struct fbwl_server *server, const char *path, enum fbwl_wallpaper_mode mode);
 void server_pseudo_transparency_refresh(struct fbwl_server *server, const char *why);
 bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_bootstrap_options *opts);
 void fbwl_server_finish(struct fbwl_server *server);

@@ -329,7 +329,7 @@ void server_menu_handle_server_action(struct fbwl_server *server, enum fbwl_menu
             return;
         }
 
-        if (!server_wallpaper_set(server, cmd)) {
+        if (!server_wallpaper_set(server, cmd, FBWL_WALLPAPER_MODE_STRETCH)) {
             wlr_log(WLR_ERROR, "Menu: set-wallpaper failed path=%s", cmd);
             return;
         }

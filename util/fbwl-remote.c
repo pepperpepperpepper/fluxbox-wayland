@@ -134,8 +134,10 @@ int main(int argc, char **argv) {
         {0, 0, 0, 0},
     };
 
+    // Use leading '+' to prevent getopt() from permuting argv, so subcommands can
+    // accept args like "--mode" without being treated as fbwl-remote options.
     int c;
-    while ((c = getopt_long(argc, argv, "h", options, NULL)) != -1) {
+    while ((c = getopt_long(argc, argv, "+h", options, NULL)) != -1) {
         switch (c) {
         case 1:
             wayland_socket_name = optarg;
@@ -150,9 +152,11 @@ int main(int argc, char **argv) {
             }
             break;
         case 'h':
-        default:
             usage(argv[0]);
             return 0;
+        default:
+            usage(argv[0]);
+            return 1;
         }
     }
 

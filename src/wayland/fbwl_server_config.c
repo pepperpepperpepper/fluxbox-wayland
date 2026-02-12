@@ -529,6 +529,40 @@ const char *fbwl_focus_model_str(enum fbwl_focus_model model) {
     }
 }
 
+enum fbwl_wallpaper_mode fbwl_wallpaper_mode_parse(const char *s) {
+    if (s == NULL) {
+        return FBWL_WALLPAPER_MODE_STRETCH;
+    }
+    if (strcasecmp(s, "stretch") == 0 || strcasecmp(s, "scale") == 0 || strcasecmp(s, "full") == 0) {
+        return FBWL_WALLPAPER_MODE_STRETCH;
+    }
+    if (strcasecmp(s, "fill") == 0 || strcasecmp(s, "aspect") == 0 || strcasecmp(s, "cover") == 0) {
+        return FBWL_WALLPAPER_MODE_FILL;
+    }
+    if (strcasecmp(s, "center") == 0) {
+        return FBWL_WALLPAPER_MODE_CENTER;
+    }
+    if (strcasecmp(s, "tile") == 0) {
+        return FBWL_WALLPAPER_MODE_TILE;
+    }
+    return FBWL_WALLPAPER_MODE_STRETCH;
+}
+
+const char *fbwl_wallpaper_mode_str(enum fbwl_wallpaper_mode mode) {
+    switch (mode) {
+    case FBWL_WALLPAPER_MODE_STRETCH:
+        return "stretch";
+    case FBWL_WALLPAPER_MODE_FILL:
+        return "fill";
+    case FBWL_WALLPAPER_MODE_CENTER:
+        return "center";
+    case FBWL_WALLPAPER_MODE_TILE:
+        return "tile";
+    default:
+        return "stretch";
+    }
+}
+
 enum fbwm_window_placement_strategy fbwl_parse_window_placement(const char *s) {
     if (s == NULL) {
         return FBWM_PLACE_ROW_SMART;

@@ -21,6 +21,7 @@ struct fbwl_ui_tooltip_env {
     struct wlr_scene_tree *layer_overlay;
     struct wl_display *wl_display;
     struct wlr_output_layout *output_layout;
+    enum fbwl_wallpaper_mode wallpaper_mode;
     struct wlr_buffer *wallpaper_buf;
     const float *background_color;
     const struct fbwl_decor_theme *decor_theme;

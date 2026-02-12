@@ -295,7 +295,7 @@ static void fbwl_ui_slit_apply_position(struct fbwl_slit_ui *ui) {
     if (pseudo) {
         fbwl_pseudo_bg_update(&ui->pseudo_bg, ui->tree, ui->pseudo_output_layout,
             ui->x, ui->y, 0, 0, ui->width, ui->height,
-            ui->pseudo_wallpaper_buf, ui->pseudo_background_color);
+            ui->pseudo_wallpaper_mode, ui->pseudo_wallpaper_buf, ui->pseudo_background_color);
     } else {
         fbwl_pseudo_bg_destroy(&ui->pseudo_bg);
     }
@@ -360,6 +360,7 @@ static void slit_update_layout(struct fbwl_slit_ui *ui, const struct fbwl_ui_sli
         return;
     }
     ui->pseudo_output_layout = env->output_layout;
+    ui->pseudo_wallpaper_mode = env->wallpaper_mode;
     ui->pseudo_wallpaper_buf = env->wallpaper_buf;
     ui->pseudo_background_color = env->background_color;
     ui->pseudo_decor_theme = env->decor_theme;
@@ -486,7 +487,7 @@ static void slit_update_layout(struct fbwl_slit_ui *ui, const struct fbwl_ui_sli
     if (pseudo) {
         fbwl_pseudo_bg_update(&ui->pseudo_bg, ui->tree, ui->pseudo_output_layout,
             ui->x, ui->y, 0, 0, ui->width, ui->height,
-            ui->pseudo_wallpaper_buf, ui->pseudo_background_color);
+            ui->pseudo_wallpaper_mode, ui->pseudo_wallpaper_buf, ui->pseudo_background_color);
     } else {
         fbwl_pseudo_bg_destroy(&ui->pseudo_bg);
     }
@@ -638,6 +639,7 @@ void fbwl_ui_slit_destroy(struct fbwl_slit_ui *ui) {
     slit_cancel_auto_timer(ui);
     fbwl_pseudo_bg_destroy(&ui->pseudo_bg);
     ui->pseudo_output_layout = NULL;
+    ui->pseudo_wallpaper_mode = FBWL_WALLPAPER_MODE_STRETCH;
     ui->pseudo_wallpaper_buf = NULL;
     ui->pseudo_background_color = NULL;
     ui->pseudo_decor_theme = NULL;
@@ -778,6 +780,7 @@ void fbwl_ui_slit_handle_motion(struct fbwl_slit_ui *ui, const struct fbwl_ui_sl
         return;
     }
     ui->pseudo_output_layout = env->output_layout;
+    ui->pseudo_wallpaper_mode = env->wallpaper_mode;
     ui->pseudo_wallpaper_buf = env->wallpaper_buf;
     ui->pseudo_background_color = env->background_color;
     ui->pseudo_decor_theme = env->decor_theme;

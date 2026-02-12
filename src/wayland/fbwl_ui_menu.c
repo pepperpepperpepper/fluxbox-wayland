@@ -173,7 +173,7 @@ static void fbwl_ui_menu_rebuild(struct fbwl_menu_ui *ui, const struct fbwl_ui_m
             env->decor_theme->menu_hilite[3] * alpha < 0.999f);
     if (pseudo) {
         fbwl_pseudo_bg_update(&ui->pseudo_bg, ui->tree, env->output_layout,
-            ui->x, ui->y, 0, 0, w, h, env->wallpaper_buf, env->background_color);
+            ui->x, ui->y, 0, 0, w, h, env->wallpaper_mode, env->wallpaper_buf, env->background_color);
     } else {
         fbwl_pseudo_bg_destroy(&ui->pseudo_bg);
     }

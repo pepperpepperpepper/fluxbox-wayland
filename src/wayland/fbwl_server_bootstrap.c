@@ -155,6 +155,7 @@ bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_
     if (opts->background_color != NULL) {
         memcpy(server->background_color, opts->background_color, sizeof(server->background_color));
     }
+    server->wallpaper_mode = FBWL_WALLPAPER_MODE_STRETCH;
     server->startup_cmd = opts->startup_cmd;
     server->terminal_cmd = opts->terminal_cmd;
     server->has_pointer = false;

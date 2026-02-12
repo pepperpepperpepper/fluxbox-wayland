@@ -189,11 +189,18 @@ try_wayland_wallpaper() {
     wl_do_last=false
     wl_random_dir=""
     wl_wallpaper=""
+    wl_mode="stretch"
 
     while [ $# -gt 0 ]; do
         case "$1" in
-            -f|-c|-t|-a) shift ;;
-            -F|-C|-T|-A) wl_remember=false ; shift ;;
+            -f) wl_mode="stretch" ; shift ;;
+            -a) wl_mode="fill" ; shift ;;
+            -c) wl_mode="center" ; shift ;;
+            -t) wl_mode="tile" ; shift ;;
+            -F) wl_mode="stretch" ; wl_remember=false ; shift ;;
+            -A) wl_mode="fill" ; wl_remember=false ; shift ;;
+            -C) wl_mode="center" ; wl_remember=false ; shift ;;
+            -T) wl_mode="tile" ; wl_remember=false ; shift ;;
             -r) wl_random_dir="$2" ; shift 2 ;;
             -R) wl_random_dir="$2" ; wl_remember=false ; shift 2 ;;
             -l) wl_do_last=true ; wl_remember=false ; shift ;;
@@ -233,7 +240,10 @@ try_wayland_wallpaper() {
 
     if [ "$wl_do_last" = true ]; then
         if [ -r "$lastwallpaper" ]; then
-            wl_wallpaper=`grep "|${wl_key}$" "$lastwallpaper" | cut -d'|' -f2 | tail -n 1`
+            wl_line=`grep "|${wl_key}$" "$lastwallpaper" | tail -n 1`
+            wl_wallpaper=`echo "$wl_line" | cut -d'|' -f2`
+            wl_prev_mode=`echo "$wl_line" | cut -d'|' -f3`
+            [ -n "$wl_prev_mode" ] && wl_mode="$wl_prev_mode"
         fi
         if [ -z "$wl_wallpaper" ]; then
             echo "$command: No previous wallpaper recorded for Wayland display ${WAYLAND_DISPLAY}" >&2
@@ -249,7 +259,7 @@ try_wayland_wallpaper() {
         exit 1
     fi
 
-    "$wl_remote" --socket "${WAYLAND_DISPLAY}" wallpaper "$wl_wallpaper" >/dev/null 2>&1
+    "$wl_remote" --socket "${WAYLAND_DISPLAY}" wallpaper --mode "$wl_mode" "$wl_wallpaper" >/dev/null 2>&1
     if [ "$?" != "0" ]; then
         echo "$command: failed to set wallpaper via fluxbox-wayland IPC (path must be a readable PNG)" >&2
         exit 1
@@ -268,7 +278,7 @@ try_wayland_wallpaper() {
             /*) wl_abs="$wl_wallpaper" ;;
             *)  wl_abs="$PWD/$wl_wallpaper" ;;
         esac
-        echo "fbwl-remote|$wl_abs||${wl_key}" >> $lastwallpaper
+        echo "fbwl-remote|$wl_abs|$wl_mode|${wl_key}" >> $lastwallpaper
     fi
     exit 0
 }

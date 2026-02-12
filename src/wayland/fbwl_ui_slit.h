@@ -59,6 +59,7 @@ struct fbwl_slit_ui {
     struct wlr_scene_tree *tree;
     struct fbwl_pseudo_bg pseudo_bg;
     struct wlr_output_layout *pseudo_output_layout;
+    enum fbwl_wallpaper_mode pseudo_wallpaper_mode;
     struct wlr_buffer *pseudo_wallpaper_buf;
     const float *pseudo_background_color;
     const struct fbwl_decor_theme *pseudo_decor_theme;
@@ -78,6 +79,7 @@ struct fbwl_ui_slit_env {
     struct wlr_output_layout *output_layout;
     struct wl_list *outputs;
     struct wl_display *wl_display;
+    enum fbwl_wallpaper_mode wallpaper_mode;
     struct wlr_buffer *wallpaper_buf;
     const float *background_color;
     bool force_pseudo_transparency;

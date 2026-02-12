@@ -218,7 +218,11 @@ timeout 5 bash -c "until rg -q 'Focus: cfgdir-client' '$LOG'; do sleep 0.05; don
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" motion "$((OUT_X + OUT_W - 1))" "$((OUT_Y + OUT_H - 1))" >/dev/null 2>&1 || true
-timeout 2 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Focus: clear reason=pointer-leave'; do sleep 0.05; done"
+sleep 0.2
+if tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Focus: clear reason=pointer-leave'; then
+  echo "unexpected focus clear in StrictMouseFocus after leaving view" >&2
+  exit 1
+fi
 
 timeout 5 bash -c "until ./fbwl-remote --socket \"$SOCKET\" get-workspace | rg -q '^ok workspace=2$'; do sleep 0.05; done"
 

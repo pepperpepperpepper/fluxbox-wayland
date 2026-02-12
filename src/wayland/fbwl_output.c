@@ -7,6 +7,7 @@
 
 #include <wlr/render/allocator.h>
 #include <wlr/render/wlr_renderer.h>
+#include <wlr/types/wlr_buffer.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_scene.h>
@@ -138,7 +139,14 @@ static void output_destroy(struct wl_listener *listener, void *data) {
         wlr_scene_node_destroy(&output->background_rect->node);
         output->background_rect = NULL;
     }
+    if (output->wallpaper_tile_buf != NULL) {
+        wlr_buffer_drop(output->wallpaper_tile_buf);
+        output->wallpaper_tile_buf = NULL;
+    }
     wl_list_remove(&output->link);
+    if (wlr_output != NULL && wlr_output->data == output) {
+        wlr_output->data = NULL;
+    }
     free(output);
 
     if (on_destroy != NULL) {
@@ -182,6 +190,7 @@ struct fbwl_output *fbwl_output_create(struct wl_list *outputs, struct wlr_outpu
     output->scene = scene;
     output->on_destroy = on_destroy;
     output->on_destroy_userdata = on_destroy_userdata;
+    wlr_output->data = output;
 
     output->frame.notify = output_frame;
     wl_signal_add(&wlr_output->events.frame, &output->frame);

@@ -16,6 +16,7 @@
 #include <strings.h>
 #include <sys/stat.h>
 
+#include <drm_fourcc.h>
 #include <wayland-server-core.h>
 #include <wlr/backend.h>
 #include <wlr/interfaces/wlr_buffer.h>
@@ -23,6 +24,7 @@
 #include <wlr/types/wlr_output_management_v1.h>
 #include <wlr/types/wlr_output_power_management_v1.h>
 #include <wlr/types/wlr_scene.h>
+#include <wlr/util/box.h>
 #include <wlr/util/log.h>
 
 static uint8_t float_to_u8_clamped(float v) {
@@ -105,6 +107,118 @@ static struct wlr_buffer *wallpaper_buffer_from_png_path(const char *path) {
     return buf;
 }
 
+static struct wlr_buffer *wallpaper_tile_buffer_create(struct wlr_buffer *wallpaper_buf, const struct wlr_box *output_box,
+        const float background_color[4]) {
+    if (wallpaper_buf == NULL || output_box == NULL) {
+        return NULL;
+    }
+
+    if (output_box->width < 1 || output_box->height < 1 || wallpaper_buf->width < 1 || wallpaper_buf->height < 1) {
+        return NULL;
+    }
+
+    void *data = NULL;
+    uint32_t format = 0;
+    size_t stride = 0;
+    if (!wlr_buffer_begin_data_ptr_access(wallpaper_buf, WLR_BUFFER_DATA_PTR_ACCESS_READ, &data, &format, &stride)) {
+        return NULL;
+    }
+
+    if (format != DRM_FORMAT_ARGB8888 && format != DRM_FORMAT_XRGB8888) {
+        wlr_buffer_end_data_ptr_access(wallpaper_buf);
+        return NULL;
+    }
+
+    cairo_surface_t *src = cairo_image_surface_create_for_data(data, CAIRO_FORMAT_ARGB32,
+        wallpaper_buf->width, wallpaper_buf->height, (int)stride);
+    if (src == NULL || cairo_surface_status(src) != CAIRO_STATUS_SUCCESS) {
+        if (src != NULL) {
+            cairo_surface_destroy(src);
+        }
+        wlr_buffer_end_data_ptr_access(wallpaper_buf);
+        return NULL;
+    }
+
+    cairo_surface_t *dst = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, output_box->width, output_box->height);
+    if (dst == NULL || cairo_surface_status(dst) != CAIRO_STATUS_SUCCESS) {
+        cairo_surface_destroy(src);
+        if (dst != NULL) {
+            cairo_surface_destroy(dst);
+        }
+        wlr_buffer_end_data_ptr_access(wallpaper_buf);
+        return NULL;
+    }
+
+    cairo_t *cr = cairo_create(dst);
+    if (background_color != NULL) {
+        cairo_set_source_rgba(cr, background_color[0], background_color[1], background_color[2], 1.0);
+    } else {
+        cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 1.0);
+    }
+    cairo_paint(cr);
+
+    cairo_set_source_surface(cr, src, -(double)output_box->x, -(double)output_box->y);
+    cairo_pattern_t *pat = cairo_get_source(cr);
+    cairo_pattern_set_extend(pat, CAIRO_EXTEND_REPEAT);
+    cairo_pattern_set_filter(pat, CAIRO_FILTER_NEAREST);
+    cairo_paint(cr);
+    cairo_destroy(cr);
+
+    cairo_surface_destroy(src);
+    wlr_buffer_end_data_ptr_access(wallpaper_buf);
+
+    struct wlr_buffer *buf = fbwl_cairo_buffer_create(dst);
+    if (buf == NULL) {
+        cairo_surface_destroy(dst);
+        return NULL;
+    }
+    return buf;
+}
+
+static bool wallpaper_fill_src_box(const struct wlr_buffer *wallpaper_buf, const struct wlr_box *output_box,
+        struct wlr_fbox *out_src_box) {
+    if (wallpaper_buf == NULL || output_box == NULL || out_src_box == NULL) {
+        return false;
+    }
+
+    if (output_box->width < 1 || output_box->height < 1 || wallpaper_buf->width < 1 || wallpaper_buf->height < 1) {
+        return false;
+    }
+
+    const double buf_w = (double)wallpaper_buf->width;
+    const double buf_h = (double)wallpaper_buf->height;
+    const double out_aspect = (double)output_box->width / (double)output_box->height;
+    const double buf_aspect = buf_w / buf_h;
+
+    struct wlr_fbox src = {
+        .x = 0.0,
+        .y = 0.0,
+        .width = buf_w,
+        .height = buf_h,
+    };
+
+    if (buf_aspect > out_aspect) {
+        const double crop_w = buf_h * out_aspect;
+        if (crop_w > 0.0 && crop_w < buf_w) {
+            src.width = crop_w;
+            src.x = (buf_w - crop_w) / 2.0;
+        }
+    } else if (buf_aspect < out_aspect) {
+        const double crop_h = buf_w / out_aspect;
+        if (crop_h > 0.0 && crop_h < buf_h) {
+            src.height = crop_h;
+            src.y = (buf_h - crop_h) / 2.0;
+        }
+    }
+
+    if (src.width <= 0.0 || src.height <= 0.0) {
+        return false;
+    }
+
+    *out_src_box = src;
+    return true;
+}
+
 static void server_background_update_output(struct fbwl_server *server, struct fbwl_output *output) {
     if (server == NULL || output == NULL || server->output_layout == NULL || server->layer_background == NULL ||
             output->wlr_output == NULL) {
@@ -123,7 +237,17 @@ static void server_background_update_output(struct fbwl_server *server, struct f
             wlr_scene_node_destroy(&output->background_rect->node);
             output->background_rect = NULL;
         }
+        if (output->wallpaper_tile_buf != NULL) {
+            wlr_buffer_drop(output->wallpaper_tile_buf);
+            output->wallpaper_tile_buf = NULL;
+        }
         return;
+    }
+
+    if (output->wallpaper_tile_buf != NULL &&
+            (server->wallpaper_buf == NULL || server->wallpaper_mode != FBWL_WALLPAPER_MODE_TILE)) {
+        wlr_buffer_drop(output->wallpaper_tile_buf);
+        output->wallpaper_tile_buf = NULL;
     }
 
     if (server->wallpaper_buf != NULL) {
@@ -132,23 +256,78 @@ static void server_background_update_output(struct fbwl_server *server, struct f
             if (output->background_image == NULL) {
                 wlr_log(WLR_ERROR, "Background: failed to create wallpaper buffer");
             }
-        } else {
-            wlr_scene_buffer_set_buffer(output->background_image, server->wallpaper_buf);
+        }
+
+        struct wlr_buffer *wallpaper_buf = server->wallpaper_buf;
+        if (server->wallpaper_mode == FBWL_WALLPAPER_MODE_TILE) {
+            struct wlr_buffer *tiled = wallpaper_tile_buffer_create(server->wallpaper_buf, &box, server->background_color);
+            if (tiled != NULL) {
+                if (output->wallpaper_tile_buf != NULL) {
+                    wlr_buffer_drop(output->wallpaper_tile_buf);
+                }
+                output->wallpaper_tile_buf = tiled;
+                wallpaper_buf = tiled;
+            } else if (output->wallpaper_tile_buf != NULL) {
+                wlr_buffer_drop(output->wallpaper_tile_buf);
+                output->wallpaper_tile_buf = NULL;
+            }
         }
 
         if (output->background_image != NULL) {
-            wlr_scene_buffer_set_dest_size(output->background_image, box.width, box.height);
-            wlr_scene_node_set_position(&output->background_image->node, box.x, box.y);
-            wlr_scene_node_lower_to_bottom(&output->background_image->node);
+            wlr_scene_buffer_set_buffer(output->background_image, wallpaper_buf);
+        }
 
-            if (output->background_rect != NULL) {
-                wlr_scene_node_destroy(&output->background_rect->node);
-                output->background_rect = NULL;
+        if (output->background_image != NULL) {
+            int dest_x = box.x;
+            int dest_y = box.y;
+            int dest_w = box.width;
+            int dest_h = box.height;
+
+            struct wlr_fbox src = {0};
+            const struct wlr_fbox *src_box = NULL;
+            if (server->wallpaper_mode == FBWL_WALLPAPER_MODE_TILE) {
+                src_box = NULL;
+            } else if (server->wallpaper_mode == FBWL_WALLPAPER_MODE_FILL) {
+                if (wallpaper_fill_src_box(server->wallpaper_buf, &box, &src)) {
+                    src_box = &src;
+                }
+            } else if (server->wallpaper_mode == FBWL_WALLPAPER_MODE_CENTER) {
+                dest_w = wallpaper_buf->width;
+                dest_h = wallpaper_buf->height;
+                dest_x = box.x + (box.width - dest_w) / 2;
+                dest_y = box.y + (box.height - dest_h) / 2;
             }
 
-            wlr_log(WLR_INFO, "Background: wallpaper output name=%s x=%d y=%d w=%d h=%d path=%s",
+            wlr_scene_buffer_set_source_box(output->background_image, src_box);
+            wlr_scene_buffer_set_dest_size(output->background_image, dest_w, dest_h);
+            wlr_scene_node_set_position(&output->background_image->node, dest_x, dest_y);
+
+            if (server->wallpaper_mode == FBWL_WALLPAPER_MODE_CENTER) {
+                if (output->background_rect == NULL) {
+                    output->background_rect =
+                        wlr_scene_rect_create(server->layer_background, box.width, box.height, server->background_color);
+                } else {
+                    wlr_scene_rect_set_size(output->background_rect, box.width, box.height);
+                    wlr_scene_rect_set_color(output->background_rect, server->background_color);
+                }
+                if (output->background_rect != NULL) {
+                    wlr_scene_node_set_position(&output->background_rect->node, box.x, box.y);
+                    wlr_scene_node_lower_to_bottom(&output->background_rect->node);
+                }
+                wlr_scene_node_raise_to_top(&output->background_image->node);
+            } else if (output->background_rect != NULL) {
+                wlr_scene_node_destroy(&output->background_rect->node);
+                output->background_rect = NULL;
+                wlr_scene_node_lower_to_bottom(&output->background_image->node);
+            } else {
+                wlr_scene_node_lower_to_bottom(&output->background_image->node);
+            }
+
+            wlr_log(WLR_INFO, "Background: wallpaper output name=%s x=%d y=%d w=%d h=%d mode=%s path=%s",
                 output->wlr_output->name != NULL ? output->wlr_output->name : "(unnamed)",
-                box.x, box.y, box.width, box.height, server->wallpaper_path != NULL ? server->wallpaper_path : "");
+                box.x, box.y, box.width, box.height,
+                fbwl_wallpaper_mode_str(server->wallpaper_mode),
+                server->wallpaper_path != NULL ? server->wallpaper_path : "");
             return;
         }
     }
@@ -207,13 +386,14 @@ void server_pseudo_transparency_refresh(struct fbwl_server *server, const char *
     server_slit_ui_update_position(server);
 }
 
-bool server_wallpaper_set(struct fbwl_server *server, const char *path) {
+bool server_wallpaper_set(struct fbwl_server *server, const char *path, enum fbwl_wallpaper_mode mode) {
     if (server == NULL) {
         return false;
     }
 
     const char *p = path != NULL ? path : "";
     if (p[0] == '\0' || strcasecmp(p, "none") == 0 || strcasecmp(p, "clear") == 0) {
+        server->wallpaper_mode = mode;
         free(server->wallpaper_path);
         server->wallpaper_path = NULL;
         if (server->wallpaper_buf != NULL) {
@@ -240,6 +420,7 @@ bool server_wallpaper_set(struct fbwl_server *server, const char *path) {
 
     free(server->wallpaper_path);
     server->wallpaper_path = dup;
+    server->wallpaper_mode = mode;
 
     if (server->wallpaper_buf != NULL) {
         wlr_buffer_drop(server->wallpaper_buf);
@@ -248,7 +429,8 @@ bool server_wallpaper_set(struct fbwl_server *server, const char *path) {
 
     server_background_update_all(server);
     server_pseudo_transparency_refresh(server, "wallpaper-set");
-    wlr_log(WLR_INFO, "Background: wallpaper set path=%s", server->wallpaper_path);
+    wlr_log(WLR_INFO, "Background: wallpaper set path=%s mode=%s",
+        server->wallpaper_path, fbwl_wallpaper_mode_str(server->wallpaper_mode));
     return true;
 }
 

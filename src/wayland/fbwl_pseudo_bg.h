@@ -2,6 +2,8 @@
 
 #include <stdbool.h>
 
+#include "wayland/fbwl_wallpaper.h"
+
 struct wlr_buffer;
 struct wlr_output_layout;
 struct wlr_scene_tree;
@@ -25,6 +27,6 @@ void fbwl_pseudo_bg_update(struct fbwl_pseudo_bg *bg,
     int rel_y,
     int width,
     int height,
+    enum fbwl_wallpaper_mode wallpaper_mode,
     struct wlr_buffer *wallpaper_buf,
     const float background_color[4]);
-

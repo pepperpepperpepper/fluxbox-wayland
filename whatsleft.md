@@ -54,3 +54,34 @@ compositor’s internal wallpaper support (via `fbwl-remote wallpaper …`) when
 - [x] `util/fbsetbg`: when `WAYLAND_DISPLAY` is set and the Fluxbox-Wayland IPC socket exists, set wallpaper via
       `fbwl-remote wallpaper <path>` (best-effort), otherwise fall back to classic X11 behavior unchanged.
 - [x] Smoke: deterministic headless test proving `fbsetbg <png>` changes the compositor wallpaper (`scripts/fbwl-smoke-fbsetbg-wayland.sh`).
+
+## Wallpaper Mode Parity — `fbsetbg -a/-f` on Wayland
+
+Goal: honor classic `fbsetbg` mode flags on Wayland by letting the compositor render wallpapers in different modes and
+ensuring pseudo transparency samples match the visible desktop background.
+
+- [x] IPC: extend `wallpaper` command to accept `--mode <stretch|fill|center|tile>` (default: `stretch`)
+- [x] Background: implement `fill` mode (aspect-preserving cover crop) and `center` mode (no scale, centered with background fill)
+- [x] Pseudo transparency: `fbwl_pseudo_bg_update()` should compute wallpaper source mapping using the active wallpaper mode
+- [x] `util/fbsetbg`: pass `-f/-a/-c/-t` as `wallpaper --mode …` and remember/restore mode for `-l` under Wayland
+- [x] Smoke: deterministic headless test proving `-a` (fill) differs from `-f` (stretch)
+
+## Wallpaper Mode Parity — `fbsetbg -t` (tile) on Wayland
+
+Goal: implement true tile mode parity where the wallpaper image repeats unscaled and pseudo transparency samples match the
+tiled desktop background (best-effort, multi-output).
+
+- [x] Background: implement `tile` mode (repeat pattern across the output, aligned in global coords across outputs)
+- [x] Pseudo transparency: ensure `fbwl_pseudo_bg_update()` matches the visible tiled background (no scaling; repeat)
+- [x] Smoke: deterministic headless test proving `--mode tile` repeats (sample pixels beyond the first tile differ as expected)
+
+## Focus Model Parity — StrictMouseFocus vs X11
+
+Goal: match Fluxbox/X11 `MouseFocus` vs `StrictMouseFocus` semantics:
+- `MouseFocus`: focus follows the pointer **only on pointer motion** (no focus shifts on window restack/geometry changes under a stationary cursor)
+- `StrictMouseFocus`: also shifts focus on restack/geometry changes under a stationary cursor
+- Neither model clears focus just because the pointer is on empty desktop (focus stays on last focused window)
+
+- [x] Wayland: stop clearing focus on pointer leaving all views in `StrictMouseFocus` (keep last focused view, like X11)
+- [x] Wayland: cancel `autoRaiseDelay` pending raise when the pointer leaves the focused view (even if focus is not cleared)
+- [x] Smoke: update `scripts/fbwl-smoke-config-dir.sh` focus expectations accordingly (no `Focus: clear reason=pointer-leave` in StrictMouseFocus)
