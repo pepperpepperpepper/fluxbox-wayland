@@ -144,10 +144,136 @@ if hash this_program_does_not_exist-no_really-aA1zZ9 > /dev/null 2>&1; then
 else
     # can rely on return value
     # bash / dash / zsh / sh on Solaris
-    find_it() {
+find_it() {
         [ -n "$1" ] && hash "$1" 2> /dev/null
     }
 fi
+
+# Wayland best-effort: if a Fluxbox-Wayland IPC socket exists, route wallpaper
+# changes through the compositor so classic "fbsetbg <png>" config/menu entries
+# work on Wayland.
+#
+# When the IPC socket is not present, fall back to classic X11 behavior.
+wayland_ipc_socket_path() {
+    wl_sock="$1"
+    [ -z "$wl_sock" ] && wl_sock="${WAYLAND_DISPLAY}"
+    [ -z "$wl_sock" ] && wl_sock="wayland-0"
+
+    wl_runtime_dir="${XDG_RUNTIME_DIR}"
+    [ -z "$wl_runtime_dir" ] && wl_runtime_dir="/tmp"
+
+    wl_sanitized=`echo "$wl_sock" | sed 's/[^A-Za-z0-9_.-]/_/g'`
+    [ -z "$wl_sanitized" ] && wl_sanitized="x"
+    echo "${wl_runtime_dir}/fluxbox-wayland-ipc-${wl_sanitized}.sock"
+}
+
+try_wayland_wallpaper() {
+    [ -z "${WAYLAND_DISPLAY}" ] && return 1
+
+    wl_ipc_socket=`wayland_ipc_socket_path "${WAYLAND_DISPLAY}"`
+    [ -z "$wl_ipc_socket" ] && return 1
+    [ ! -r "$wl_ipc_socket" ] && return 1
+
+    wl_remote="fbwl-remote"
+    if ! find_it "$wl_remote"; then
+        wl_scriptdir=`dirname "$0"`
+        if [ -x "$wl_scriptdir/../fbwl-remote" ]; then
+            wl_remote="$wl_scriptdir/../fbwl-remote"
+        else
+            return 1
+        fi
+    fi
+
+    wl_key="wayland:${WAYLAND_DISPLAY}"
+    wl_remember=true
+    wl_do_last=false
+    wl_random_dir=""
+    wl_wallpaper=""
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            -f|-c|-t|-a) shift ;;
+            -F|-C|-T|-A) wl_remember=false ; shift ;;
+            -r) wl_random_dir="$2" ; shift 2 ;;
+            -R) wl_random_dir="$2" ; wl_remember=false ; shift 2 ;;
+            -l) wl_do_last=true ; wl_remember=false ; shift ;;
+            -h|-p|-i|-d|-u|-U|-b|-B|-z|-Z|--) return 1 ;;
+            -*) return 1 ;;
+            *) wl_wallpaper="$1" ; shift ; break ;;
+        esac
+    done
+
+    if [ -n "$wl_random_dir" ]; then
+        if [ ! -d "$wl_random_dir" ]; then
+            echo "$command: Invalid random wallpaper directory specified: '$wl_random_dir'." >&2
+            exit 1
+        fi
+        wl_oldpwd="$PWD"
+        cd "$wl_random_dir" 2>/dev/null || exit 1
+        wl_available_wallpapers=`find -L -type f ! -regex '.*/\..*'`
+        wl_number_of_wallpapers=`echo "$wl_available_wallpapers" | wc -l`
+        if find_it random_number; then
+            wl_randomnumber=`random_number`
+        elif [ -z "$RANDOM" ]; then
+            if [ -r /dev/urandom ]; then
+                wl_randomnumber=`hexdump -n 2 -e '/2 "%u"' /dev/urandom`
+            else
+                wl_randomnumber=`(echo $$; ps; w; date) 2>&1 | cksum | cut -f1 -d' '`
+            fi
+        else
+            wl_randomnumber="$RANDOM"
+        fi
+        wl_wallpapernumber=`expr $wl_randomnumber % $wl_number_of_wallpapers + 1`
+        wl_picked="`echo "$wl_available_wallpapers" | sed -n ${wl_wallpapernumber}p`"
+        wl_random_abs="`pwd`"
+        cd "$wl_oldpwd" 2>/dev/null || true
+        [ -z "$wl_picked" ] && exit 1
+        wl_wallpaper="${wl_random_abs}/${wl_picked}"
+    fi
+
+    if [ "$wl_do_last" = true ]; then
+        if [ -r "$lastwallpaper" ]; then
+            wl_wallpaper=`grep "|${wl_key}$" "$lastwallpaper" | cut -d'|' -f2 | tail -n 1`
+        fi
+        if [ -z "$wl_wallpaper" ]; then
+            echo "$command: No previous wallpaper recorded for Wayland display ${WAYLAND_DISPLAY}" >&2
+            exit 1
+        fi
+    fi
+
+    if [ -z "$wl_wallpaper" ]; then
+        return 1
+    fi
+    if [ ! -r "$wl_wallpaper" ]; then
+        echo "$command: Can't find wallpaper $wl_wallpaper" >&2
+        exit 1
+    fi
+
+    "$wl_remote" --socket "${WAYLAND_DISPLAY}" wallpaper "$wl_wallpaper" >/dev/null 2>&1
+    if [ "$?" != "0" ]; then
+        echo "$command: failed to set wallpaper via fluxbox-wayland IPC (path must be a readable PNG)" >&2
+        exit 1
+    fi
+
+    if [ ! "$wl_remember" = false ]; then
+        if [ ! -d "$HOME/.fluxbox" ]; then
+            mkdir "$HOME/.fluxbox" 2>/dev/null || true
+        fi
+        [ -r "$lastwallpaper" ] || touch "$lastwallpaper" 2>/dev/null || true
+
+        grep -vs "|${wl_key}$" ${lastwallpaper} > ${lastwallpaper}.tmp
+        mv -f ${lastwallpaper}.tmp ${lastwallpaper}
+
+        case $wl_wallpaper in
+            /*) wl_abs="$wl_wallpaper" ;;
+            *)  wl_abs="$PWD/$wl_wallpaper" ;;
+        esac
+        echo "fbwl-remote|$wl_abs||${wl_key}" >> $lastwallpaper
+    fi
+    exit 0
+}
+
+try_wayland_wallpaper "$@"
 
 message() {
 

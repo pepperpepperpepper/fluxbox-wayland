@@ -37,3 +37,20 @@ Goal: implement Fluxbox/X11 `session.forcePseudoTransparency` semantics on Wayla
 
 - [x] `session.cacheLife` / `session.cacheMax`: applied to the internal icon buffer cache used by menus/iconbar/window icons (`src/wayland/fbwl_ui_menu_icon.c`)
 - [x] `session.colorsPerChannel`: parsed + stored; currently ignored on Wayland (kept for config compatibility)
+
+## CmdLang Parity — Per-Instance Stateful Commands
+
+Goal: match Fluxbox/X11 “command object” semantics for stateful cmdlang commands so that identical `ToggleCmd`/`Delay`
+strings in different bindings do **not** share state.
+
+- [x] Scope `ToggleCmd` and `Delay` state per invoker (keys/mouse binding) (not per `(server, args string)`).
+- [x] Smoke: prove two different bindings with identical `ToggleCmd {…} {…}` args don’t share state (`scripts/fbwl-smoke-keybinding-cmdlang.sh`).
+
+## Wallpaper Utility Parity — `fbsetbg` on Wayland (Best-effort)
+
+Goal: make classic Fluxbox configs/menu entries that call `fbsetbg …` work under `fluxbox-wayland` by routing to the
+compositor’s internal wallpaper support (via `fbwl-remote wallpaper …`) when a Fluxbox-Wayland IPC socket is available.
+
+- [x] `util/fbsetbg`: when `WAYLAND_DISPLAY` is set and the Fluxbox-Wayland IPC socket exists, set wallpaper via
+      `fbwl-remote wallpaper <path>` (best-effort), otherwise fall back to classic X11 behavior unchanged.
+- [x] Smoke: deterministic headless test proving `fbsetbg <png>` changes the compositor wallpaper (`scripts/fbwl-smoke-fbsetbg-wayland.sh`).

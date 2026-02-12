@@ -111,6 +111,7 @@ scripts=(
   scripts/fbwl-smoke-log-protocol.sh
   scripts/fbwl-smoke-background.sh
   scripts/fbwl-smoke-wallpaper.sh
+  scripts/fbwl-smoke-fbsetbg-wayland.sh
   scripts/fbwl-smoke-xvfb.sh
   scripts/fbwl-smoke-xvfb-decor-style.sh
   scripts/fbwl-smoke-xvfb-policy.sh
