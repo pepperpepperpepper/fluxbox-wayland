@@ -7,6 +7,8 @@
 
 #include <wlr/util/log.h>
 
+#include "wayland/fbwl_cmdlang.h"
+#include "wayland/fbwl_keybindings.h"
 #include "wayland/fbwl_server_internal.h"
 
 static char *ipc_trim_inplace(char *s) {
@@ -24,6 +26,12 @@ static char *ipc_trim_inplace(char *s) {
     }
     *end = '\0';
     return s;
+}
+
+static bool ipc_exec_action_nodup_depth(enum fbwl_keybinding_action action, int arg, const char *cmd,
+        struct fbwl_view *target_view, const struct fbwl_keybindings_hooks *hooks, int depth) {
+    (void)depth;
+    return fbwl_keybindings_execute_action(action, arg, cmd, target_view, hooks);
 }
 
 void server_ipc_command(void *userdata, int client_fd, char *line) {
@@ -240,5 +248,42 @@ void server_ipc_command(void *userdata, int client_fd, char *line) {
         return;
     }
 
-    fbwl_ipc_send_line(client_fd, "err unknown_command");
+    // CmdLang parity: attempt to execute unrecognized IPC commands as Fluxbox cmdlang lines.
+    char *rest = ipc_trim_inplace(saveptr);
+    const char *cmdlang_cmd = cmd;
+    if (cmdlang_cmd[0] == ':') {
+        cmdlang_cmd++;
+    }
+
+    const size_t args_len = (rest != NULL && *rest != '\0') ? strlen(rest) : 0;
+    const size_t cmd_len = strlen(cmdlang_cmd);
+
+    char *cmdlang_line = NULL;
+    if (cmd_len == 0 && args_len > 0) {
+        cmdlang_line = strdup(rest);
+    } else if (args_len > 0) {
+        cmdlang_line = malloc(cmd_len + 1 + args_len + 1);
+        if (cmdlang_line != NULL) {
+            snprintf(cmdlang_line, cmd_len + 1 + args_len + 1, "%s %s", cmdlang_cmd, rest);
+        }
+    } else {
+        cmdlang_line = strdup(cmdlang_cmd);
+    }
+
+    if (cmdlang_line == NULL || *cmdlang_line == '\0') {
+        free(cmdlang_line);
+        fbwl_ipc_send_line(client_fd, "err unknown_command");
+        return;
+    }
+
+    struct fbwl_keybindings_hooks hooks = keybindings_hooks(server);
+    const bool ok = fbwl_cmdlang_execute_line(cmdlang_line, NULL, &hooks, 0, ipc_exec_action_nodup_depth);
+    free(cmdlang_line);
+
+    if (!ok) {
+        fbwl_ipc_send_line(client_fd, "err unknown_command");
+        return;
+    }
+
+    fbwl_ipc_send_line(client_fd, "ok");
 }

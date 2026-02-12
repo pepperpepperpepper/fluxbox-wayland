@@ -105,6 +105,11 @@ fbr nextwindow | rg -q '^ok$'
 START=$((OFFSET + 1))
 timeout 5 bash -c "until tail -c +$START '$LOG' | rg -F -q \"Focus: $FOCUSED_VIEW\"; do sleep 0.05; done"
 
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+fbr setalpha 200 150 | rg -q '^ok$'
+START=$((OFFSET + 1))
+timeout 5 bash -c "until tail -c +$START '$LOG' | rg -F -q \"Alpha: $FOCUSED_VIEW focused=200 unfocused=150 reason=setalpha\"; do sleep 0.05; done"
+
 fbr workspace 2 | rg -q '^ok workspace=2$'
 timeout 5 bash -c "until rg -q 'Workspace: apply current=2 reason=ipc' '$LOG'; do sleep 0.05; done"
 fbr get-workspace | rg -q '^ok workspace=2$'

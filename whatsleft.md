@@ -85,3 +85,12 @@ Goal: match Fluxbox/X11 `MouseFocus` vs `StrictMouseFocus` semantics:
 - [x] Wayland: stop clearing focus on pointer leaving all views in `StrictMouseFocus` (keep last focused view, like X11)
 - [x] Wayland: cancel `autoRaiseDelay` pending raise when the pointer leaves the focused view (even if focus is not cleared)
 - [x] Smoke: update `scripts/fbwl-smoke-config-dir.sh` focus expectations accordingly (no `Focus: clear reason=pointer-leave` in StrictMouseFocus)
+
+## Fluxbox-Remote Parity — CmdLang via Wayland IPC
+
+Goal: match Fluxbox/X11 `fluxbox-remote` behavior where arbitrary Fluxbox command lines (the same commands used in
+`~/.fluxbox/keys`, menus, etc) can be executed remotely.
+
+- [x] IPC: when a command is not a built-in IPC command, attempt to execute it via the Fluxbox cmdlang parser
+      (respect `allowRemoteActions`)
+- [x] Smoke: prove a non-IPC command (like `SetAlpha 200 150`) works via `fluxbox-remote --wayland`
