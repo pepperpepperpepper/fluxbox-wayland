@@ -33,13 +33,13 @@ The current Wayland theme implementation is intentionally simplified (mostly col
 
 - [ ] Implement `BindKey` command parity (add/replace bindings at runtime + persist to `session.keyFile` like Fluxbox/X11)
 - [ ] Implement `KeyMode <mode> [return-keybinding]` optional second arg (currently ignored)
-- [ ] Add missing common aliases:
+- [x] Add missing common aliases:
   - `MinimizeWindow` alias for `Minimize`
   - `MaximizeWindow` alias for `Maximize`
 
 ### Session startup parity
 
-- [ ] `util/startfluxbox-wayland`: default to classic `~/.fluxbox/startup` (or fall back to it when `startup-wayland` is absent) so existing Fluxbox setups run unmodified
+- [x] `util/startfluxbox-wayland`: default to classic `~/.fluxbox/startup`; fall back to `startup-wayland` only for backward compatibility
 
 ### Final audit (once above lands)
 

@@ -10,7 +10,9 @@ startfluxbox-wayland \- start a fluxbox-wayland session
 .SH "DESCRIPTION"
 .sp
 \fBstartfluxbox-wayland(1)\fR is a helper script for starting \fBfluxbox-wayland(1)\fR from a tty, SSH shell, or display manager.
-It runs a startup script (by default \fB~/\&.fluxbox/startup-wayland\fR); if it does not exist, it is generated.
+It runs a startup script (by default \fB~/\&.fluxbox/startup\fR).
+If that file does not exist but \fB~/\&.fluxbox/startup-wayland\fR exists, it is used for backward compatibility.
+If neither exists, a default \fB~/\&.fluxbox/startup\fR is generated.
 .sp
 The script also sets Wayland-oriented session environment variables and ensures a usable \fBXDG_RUNTIME_DIR\fR.
 If no DBus session is available and \fBdbus-run-session\fR exists, it runs the startup script under a private DBus session.
@@ -18,7 +20,7 @@ If no DBus session is available and \fBdbus-run-session\fR exists, it runs the s
 .PP
 \fB\-c\fR, \fB\-\-config\fR \fISTARTUPFILE\fR
 .RS 4
-Use an alternate startup script instead of \fB~/\&.fluxbox/startup-wayland\fR.
+Use an alternate startup script instead of \fB~/\&.fluxbox/startup\fR.
 .RE
 .PP
 \fB\-h\fR, \fB\-\-help\fR
@@ -27,9 +29,14 @@ Display a short usage message.
 .RE
 .SH "FILES"
 .PP
-\fB~/\&.fluxbox/startup-wayland\fR
+\fB~/\&.fluxbox/startup\fR
 .RS 4
 Startup script executed before launching \fBfluxbox-wayland(1)\fR. Lines starting with \fB#\fR are treated as comments.
+.RE
+.PP
+\fB~/\&.fluxbox/startup-wayland\fR
+.RS 4
+Legacy startup script name. If \fB~/\&.fluxbox/startup\fR is missing but this file exists, it is used instead.
 .RE
 .SH "ENVIRONMENT"
 .sp
@@ -56,7 +63,7 @@ If unset, defaults to \fB/tmp/xdg-runtime-$UID\fR and is created with mode 0700.
 .RE
 .SH "EXAMPLES"
 .sp
-The generated \fB~/\&.fluxbox/startup-wayland\fR looks like this:
+The generated \fB~/\&.fluxbox/startup\fR looks like this:
 .sp
 .if n \{\
 .RS 4

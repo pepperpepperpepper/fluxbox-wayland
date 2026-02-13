@@ -2,7 +2,9 @@
 
 command="`basename \"$0\"`"
 fluxdir="$HOME/.@pkgprefix@fluxbox@pkgsuffix@"
-startup="$fluxdir/startup-wayland"
+startup="$fluxdir/startup"
+startup_wayland="$fluxdir/startup-wayland"
+use_default_startup=1
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -13,6 +15,7 @@ while [ $# -gt 0 ]; do
             fi
             shift
             startup=$1
+            use_default_startup=0
         ;;
         -h|--help) cat <<EOF
 Usage: $command [-h] [-c startupfile]
@@ -22,6 +25,14 @@ EOF
     esac
     shift
 done
+
+# Parity with classic Fluxbox/X11: prefer ~/.fluxbox/startup by default.
+# Backward compatibility: if startup is missing but startup-wayland exists, use it.
+if [ "$use_default_startup" -eq 1 ]; then
+    if [ ! -x "$startup" ] && [ ! -r "$startup" ] && ( [ -x "$startup_wayland" ] || [ -r "$startup_wayland" ] ); then
+        startup="$startup_wayland"
+    fi
+fi
 
 # Wayland session defaults (useful when started from a tty or SSH shell).
 XDG_SESSION_TYPE=wayland

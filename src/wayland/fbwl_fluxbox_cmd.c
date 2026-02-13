@@ -450,7 +450,8 @@ bool fbwl_fluxbox_cmd_resolve(const char *cmd_name, const char *cmd_args,
         return true;
     }
 
-    if (strcasecmp(cmd_name, "maximize") == 0) {
+    if (strcasecmp(cmd_name, "maximize") == 0 ||
+            strcasecmp(cmd_name, "maximizewindow") == 0) {
         *out_action = FBWL_KEYBIND_TOGGLE_MAXIMIZE;
         return true;
     }
@@ -466,7 +467,9 @@ bool fbwl_fluxbox_cmd_resolve(const char *cmd_name, const char *cmd_args,
         *out_action = FBWL_KEYBIND_TOGGLE_FULLSCREEN;
         return true;
     }
-    if (strcasecmp(cmd_name, "minimize") == 0 || strcasecmp(cmd_name, "iconify") == 0) {
+    if (strcasecmp(cmd_name, "minimize") == 0 ||
+            strcasecmp(cmd_name, "minimizewindow") == 0 ||
+            strcasecmp(cmd_name, "iconify") == 0) {
         *out_action = FBWL_KEYBIND_TOGGLE_MINIMIZE;
         return true;
     }
