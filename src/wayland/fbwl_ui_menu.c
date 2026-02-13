@@ -168,30 +168,49 @@ static void fbwl_ui_menu_rebuild(struct fbwl_menu_ui *ui, const struct fbwl_ui_m
     const int h = count > 0 ? count * item_h : item_h;
 
     const float alpha = (float)ui->alpha / 255.0f;
-    const bool pseudo = env->force_pseudo_transparency &&
-        (env->decor_theme->menu_bg[3] * alpha < 0.999f ||
-            env->decor_theme->menu_hilite[3] * alpha < 0.999f);
+    const bool frame_parentrel = fbwl_texture_is_parentrelative(&env->decor_theme->menu_frame_tex);
+    const bool pseudo = frame_parentrel || (env->force_pseudo_transparency && ui->alpha < 255);
     if (pseudo) {
         fbwl_pseudo_bg_update(&ui->pseudo_bg, ui->tree, env->output_layout,
             ui->x, ui->y, 0, 0, w, h, env->wallpaper_mode, env->wallpaper_buf, env->background_color);
     } else {
         fbwl_pseudo_bg_destroy(&ui->pseudo_bg);
     }
-    float bg[4] = {env->decor_theme->menu_bg[0], env->decor_theme->menu_bg[1], env->decor_theme->menu_bg[2], env->decor_theme->menu_bg[3] * alpha};
-    float hi[4] = {env->decor_theme->menu_hilite[0], env->decor_theme->menu_hilite[1],
-        env->decor_theme->menu_hilite[2], env->decor_theme->menu_hilite[3] * alpha};
 
-    ui->bg = wlr_scene_rect_create(ui->tree, w, h, bg);
+    ui->bg = wlr_scene_buffer_create(ui->tree, NULL);
     if (ui->bg != NULL) {
         wlr_scene_node_set_position(&ui->bg->node, 0, 0);
+        if (!frame_parentrel) {
+            struct wlr_buffer *buf = fbwl_texture_render_buffer(&env->decor_theme->menu_frame_tex, w, h);
+            wlr_scene_buffer_set_buffer(ui->bg, buf);
+            if (buf != NULL) {
+                wlr_buffer_drop(buf);
+            }
+            wlr_scene_buffer_set_dest_size(ui->bg, w, h);
+            wlr_scene_buffer_set_opacity(ui->bg, alpha);
+        } else {
+            wlr_scene_node_set_enabled(&ui->bg->node, false);
+        }
     }
 
     if (ui->selected >= ui->current->item_count) {
         ui->selected = ui->current->item_count > 0 ? ui->current->item_count - 1 : 0;
     }
-    ui->highlight = wlr_scene_rect_create(ui->tree, w, item_h, hi);
+    const bool hilite_parentrel = fbwl_texture_is_parentrelative(&env->decor_theme->menu_hilite_tex);
+    ui->highlight = wlr_scene_buffer_create(ui->tree, NULL);
     if (ui->highlight != NULL) {
         wlr_scene_node_set_position(&ui->highlight->node, 0, (int)ui->selected * item_h);
+        if (!hilite_parentrel) {
+            struct wlr_buffer *buf = fbwl_texture_render_buffer(&env->decor_theme->menu_hilite_tex, w, item_h);
+            wlr_scene_buffer_set_buffer(ui->highlight, buf);
+            if (buf != NULL) {
+                wlr_buffer_drop(buf);
+            }
+            wlr_scene_buffer_set_dest_size(ui->highlight, w, item_h);
+            wlr_scene_buffer_set_opacity(ui->highlight, alpha);
+        } else {
+            wlr_scene_node_set_enabled(&ui->highlight->node, false);
+        }
     }
 
     ui->item_rect_count = ui->current->item_count;

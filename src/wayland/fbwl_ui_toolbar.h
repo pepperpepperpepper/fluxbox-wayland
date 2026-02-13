@@ -160,7 +160,7 @@ struct fbwl_toolbar_ui {
     const float *pseudo_background_color;
     const struct fbwl_decor_theme *pseudo_decor_theme;
     bool pseudo_force_pseudo_transparency;
-    struct wlr_scene_rect *bg;
+    struct wlr_scene_buffer *bg;
     struct wlr_scene_rect *highlight;
     struct wlr_scene_rect **cells;
     struct wlr_scene_buffer **labels;

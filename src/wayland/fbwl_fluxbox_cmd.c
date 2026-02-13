@@ -9,28 +9,23 @@ static bool parse_one_based_workspace(const char *s, int *out_ws0) {
     if (s == NULL || out_ws0 == NULL) {
         return false;
     }
-
     while (*s != '\0' && isspace((unsigned char)*s)) {
         s++;
     }
     if (*s == '\0') {
         return false;
     }
-
     char *end = NULL;
     long ws = strtol(s, &end, 10);
     if (end == s) {
         return false;
     }
-
     if (ws > 0) {
         ws -= 1;
     }
-
     if (ws < -100000 || ws > 100000) {
         return false;
     }
-
     *out_ws0 = (int)ws;
     return true;
 }
@@ -39,14 +34,12 @@ static bool parse_layer_arg(const char *s, int *out_layer) {
     if (s == NULL || out_layer == NULL) {
         return false;
     }
-
     while (*s != '\0' && isspace((unsigned char)*s)) {
         s++;
     }
     if (*s == '\0') {
         return false;
     }
-
     char *endptr = NULL;
     long n = strtol(s, &endptr, 10);
     if (endptr != s && endptr != NULL) {
@@ -58,7 +51,6 @@ static bool parse_layer_arg(const char *s, int *out_layer) {
             return true;
         }
     }
-
     const char *v = s;
     if (strcasecmp(v, "menu") == 0) {
         *out_layer = 0;
@@ -157,11 +149,9 @@ bool fbwl_fluxbox_cmd_resolve(const char *cmd_name, const char *cmd_args,
     if (cmd_name == NULL || *cmd_name == '\0' || out_action == NULL || out_arg == NULL || out_cmd == NULL) {
         return false;
     }
-
     *out_action = FBWL_KEYBIND_EXIT;
     *out_arg = 0;
     *out_cmd = NULL;
-
     if (strcasecmp(cmd_name, "execcommand") == 0 ||
             strcasecmp(cmd_name, "exec") == 0 ||
             strcasecmp(cmd_name, "execute") == 0) {
@@ -172,7 +162,6 @@ bool fbwl_fluxbox_cmd_resolve(const char *cmd_name, const char *cmd_args,
         *out_cmd = cmd_args;
         return true;
     }
-
     if (strcasecmp(cmd_name, "setenv") == 0 ||
             strcasecmp(cmd_name, "export") == 0) {
         if (cmd_args == NULL || *cmd_args == '\0') {
@@ -188,13 +177,11 @@ bool fbwl_fluxbox_cmd_resolve(const char *cmd_name, const char *cmd_args,
         *out_cmd = cmd_args;
         return true;
     }
-
     if (strcasecmp(cmd_name, "commanddialog") == 0 ||
             strcasecmp(cmd_name, "rundialog") == 0) {
         *out_action = FBWL_KEYBIND_COMMAND_DIALOG;
         return true;
     }
-
     if (strcasecmp(cmd_name, "exit") == 0 ||
             strcasecmp(cmd_name, "quit") == 0) {
         *out_action = FBWL_KEYBIND_EXIT;
@@ -530,7 +517,6 @@ bool fbwl_fluxbox_cmd_resolve(const char *cmd_name, const char *cmd_args,
         *out_action = FBWL_KEYBIND_SHADE_OFF;
         return true;
     }
-
     if (strcasecmp(cmd_name, "stick") == 0 || strcasecmp(cmd_name, "stickwindow") == 0) {
         *out_action = FBWL_KEYBIND_TOGGLE_STICK;
         return true;
@@ -543,7 +529,6 @@ bool fbwl_fluxbox_cmd_resolve(const char *cmd_name, const char *cmd_args,
         *out_action = FBWL_KEYBIND_STICK_OFF;
         return true;
     }
-
     if (strcasecmp(cmd_name, "setalpha") == 0) {
         *out_action = FBWL_KEYBIND_SET_ALPHA;
         if (cmd_args != NULL && *cmd_args != '\0') {
@@ -569,7 +554,6 @@ bool fbwl_fluxbox_cmd_resolve(const char *cmd_name, const char *cmd_args,
         *out_cmd = cmd_args;
         return true;
     }
-
     if (strcasecmp(cmd_name, "settitle") == 0) {
         *out_action = FBWL_KEYBIND_SET_TITLE;
         if (cmd_args != NULL && *cmd_args != '\0') {
@@ -581,7 +565,6 @@ bool fbwl_fluxbox_cmd_resolve(const char *cmd_name, const char *cmd_args,
         *out_action = FBWL_KEYBIND_SET_TITLE_DIALOG;
         return true;
     }
-
     if (strcasecmp(cmd_name, "windowmenu") == 0) {
         *out_action = FBWL_KEYBIND_WINDOW_MENU;
         return true;
@@ -601,7 +584,6 @@ bool fbwl_fluxbox_cmd_resolve(const char *cmd_name, const char *cmd_args,
         *out_action = FBWL_KEYBIND_WORKSPACE_MENU;
         return true;
     }
-
     if (strcasecmp(cmd_name, "addworkspace") == 0) {
         *out_action = FBWL_KEYBIND_ADD_WORKSPACE;
         return true;
@@ -624,7 +606,6 @@ bool fbwl_fluxbox_cmd_resolve(const char *cmd_name, const char *cmd_args,
         *out_action = FBWL_KEYBIND_SET_WORKSPACE_NAME_DIALOG;
         return true;
     }
-
     if (strcasecmp(cmd_name, "clientmenu") == 0) {
         *out_action = FBWL_KEYBIND_CLIENT_MENU;
         if (cmd_args != NULL) { while (*cmd_args != '\0' && isspace((unsigned char)*cmd_args)) { cmd_args++; } }

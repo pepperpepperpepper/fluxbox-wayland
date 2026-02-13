@@ -1,5 +1,7 @@
 #pragma once
 
+#include "wayland/fbwl_texture.h"
+
 struct fbwl_decor_theme {
     int border_width;
     int title_height;
@@ -32,4 +34,12 @@ struct fbwl_decor_theme {
     float btn_min_color[4];
     float btn_lhalf_color[4];
     float btn_rhalf_color[4];
+
+    // Fluxbox/X11 style textures (used by the Wayland UI renderer).
+    struct fbwl_texture window_title_focus_tex;
+    struct fbwl_texture window_title_unfocus_tex;
+    struct fbwl_texture menu_frame_tex;
+    struct fbwl_texture menu_hilite_tex;
+    struct fbwl_texture toolbar_tex;
+    struct fbwl_texture slit_tex; // when unset, Fluxbox uses toolbar look
 };

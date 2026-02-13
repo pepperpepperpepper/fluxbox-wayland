@@ -458,6 +458,8 @@ void fbwl_xdg_shell_handle_toplevel_destroy(struct fbwl_view *view,
     fbwl_view_cleanup(view);
 
     if (view->scene_tree != NULL) {
+        fbwl_pseudo_bg_destroy(&view->pseudo_bg);
+        fbwl_pseudo_bg_destroy(&view->decor_titlebar_pseudo_bg);
         wlr_scene_node_destroy(&view->scene_tree->node);
         view->scene_tree = NULL;
         view->content_tree = NULL;

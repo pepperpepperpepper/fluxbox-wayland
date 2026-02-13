@@ -29,7 +29,6 @@ static bool parse_keys_modifier(const char *token, uint32_t *mods) {
     if (token == NULL || mods == NULL) {
         return false;
     }
-
     if (strcasecmp(token, "none") == 0) {
         return true;
     }
@@ -62,7 +61,6 @@ static bool parse_keys_modifier(const char *token, uint32_t *mods) {
         *mods |= WLR_MODIFIER_SHIFT;
         return true;
     }
-
     return false;
 }
 
@@ -70,7 +68,6 @@ static bool next_token_buf(const char **inout, char *buf, size_t buf_size) {
     if (inout == NULL || *inout == NULL || buf == NULL || buf_size < 2) {
         return false;
     }
-
     const char *p = *inout;
     while (*p != '\0' && isspace((unsigned char)*p)) {
         p++;
@@ -79,7 +76,6 @@ static bool next_token_buf(const char **inout, char *buf, size_t buf_size) {
         *inout = p;
         return false;
     }
-
     const char *start = p;
     while (*p != '\0' && !isspace((unsigned char)*p)) {
         p++;
@@ -104,17 +100,14 @@ static bool parse_key_mode_return_binding(const char *s,
     *out_keycode = 0;
     *out_sym = XKB_KEY_NoSymbol;
     *out_modifiers = 0;
-
     if (s == NULL) {
         return false;
     }
-
     uint32_t mods = 0;
     bool have_key = false;
     enum fbwl_keybinding_key_kind kind = FBWL_KEYBIND_KEYSYM;
     uint32_t keycode = 0;
     xkb_keysym_t sym = XKB_KEY_NoSymbol;
-
     const char *p = s;
     char tok[64];
     while (next_token_buf(&p, tok, sizeof(tok))) {
@@ -130,14 +123,12 @@ static bool parse_key_mode_return_binding(const char *s,
         if (strcasecmp(tok, "arg") == 0 || strcasecmp(tok, "changeworkspace") == 0) {
             return false;
         }
-
         sym = xkb_keysym_from_name(tok, XKB_KEYSYM_CASE_INSENSITIVE);
         if (sym != XKB_KEY_NoSymbol) {
             kind = FBWL_KEYBIND_KEYSYM;
             have_key = true;
             continue;
         }
-
         bool is_keycode = true;
         for (const char *q = tok; *q != '\0'; q++) {
             if (!isdigit((unsigned char)*q)) {
@@ -148,7 +139,6 @@ static bool parse_key_mode_return_binding(const char *s,
         if (!is_keycode) {
             return false;
         }
-
         char *end = NULL;
         long code = strtol(tok, &end, 10);
         if (end == tok || end == NULL || *end != '\0' || code < 0 || code > 100000) {
@@ -159,11 +149,9 @@ static bool parse_key_mode_return_binding(const char *s,
         keycode = (uint32_t)code;
         have_key = true;
     }
-
     if (!have_key) {
         return false;
     }
-
     *out_kind = kind;
     *out_keycode = keycode;
     *out_sym = xkb_keysym_to_lower(sym);

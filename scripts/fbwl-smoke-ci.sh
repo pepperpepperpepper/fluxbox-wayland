@@ -156,6 +156,7 @@ scripts=(
   scripts/fbwl-smoke-ssd.sh
   scripts/fbwl-smoke-default-deco.sh
   scripts/fbwl-smoke-style.sh
+  scripts/fbwl-smoke-style-textures.sh
   scripts/fbwl-smoke-menu.sh
   scripts/fbwl-smoke-left-click-menu.sh
   scripts/fbwl-smoke-menu-search.sh

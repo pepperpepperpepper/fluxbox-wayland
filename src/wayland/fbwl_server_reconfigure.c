@@ -113,6 +113,7 @@ void server_reconfigure(struct fbwl_server *server) {
             }
 
             fbwl_ui_menu_icon_cache_configure(server->cache_life_minutes, server->cache_max_kb);
+            fbwl_texture_cache_configure(server->cache_life_minutes, server->cache_max_kb);
 
             server->menu_ui.search_mode = FBWL_MENU_SEARCH_ITEMSTART;
             const char *menu_search = fbwl_resource_db_get(&init, "session.menuSearch");

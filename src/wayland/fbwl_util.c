@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
@@ -21,6 +22,7 @@
 
 #include "wayland/fbwl_output.h"
 #include "wayland/fbwl_server_internal.h"
+#include "wayland/fbwl_ui_text.h"
 #include "wayland/fbwl_view.h"
 
 void fbwl_cleanup_listener(struct wl_listener *listener) {

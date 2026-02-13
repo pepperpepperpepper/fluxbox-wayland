@@ -11,10 +11,13 @@ Completed items are kept below for historical context.
 
 The current Wayland theme implementation is intentionally simplified (mostly colors/fonts). True 1:1 parity requires implementing Fluxbox’s texture/pixmap style engine.
 
-- [ ] Implement Fluxbox texture parsing + rendering:
-  - Texture descriptors (`Flat|Raised|Sunken`, `Solid|Gradient`, gradient directions, `Interlaced`, `Bevel1|Bevel2`)
-  - Pixmap textures (`*.pixmap` keys) with correct search paths (theme dir `pixmaps/`, `~/.fluxbox/pixmaps`, etc) and caching
-  - `ParentRelative` semantics per-element (sample wallpaper/background), not only via `session.forcePseudoTransparency`
+- [x] Implement Fluxbox texture parsing + rendering:
+  - [x] Texture descriptors (`Flat|Raised|Sunken`, `Solid|Gradient`, gradient directions, `Interlaced`, `Bevel1|Bevel2`, `Invert`, `Tiled`, `ParentRelative`)
+  - [x] Pixmap textures (`*.pixmap` keys) for key elements (PNG; XPM when built with `HAVE_XPM`) + search paths (theme dir `pixmaps/`, `~/.fluxbox/pixmaps`, etc)
+  - [x] Apply textures to compositor UI backgrounds: menus, toolbar, slit, window titlebar
+  - [x] `ParentRelative` per-element for the above (wallpaper-backed underlay), independent of `session.forcePseudoTransparency`
+  - [x] Smoke: deterministic validation for gradients/pixmaps/ParentRelative (`scripts/fbwl-smoke-style-textures.sh`)
+  - [x] Add caching for rendered textures/pixmap surfaces (avoid re-rendering on every rebuild; honors `session.cacheLife`/`session.cacheMax`)
 - [ ] Support style font effects: `*.effect` (`shadow`/`halo`) + related `*.shadow.*` / `*.halo.*` keys
 - [ ] Refactor `struct fbwl_decor_theme` to carry per-element textures (not just flat colors) and apply them to:
   - Window decorations (titlebar, borders, buttons, tabs)

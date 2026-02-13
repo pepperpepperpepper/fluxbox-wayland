@@ -159,9 +159,8 @@ static void fbwl_ui_toolbar_apply_position(struct fbwl_toolbar_ui *ui) {
     ui->x = x;
     ui->y = y;
     wlr_scene_node_set_position(&ui->tree->node, ui->x, ui->y);
-    const float alpha = (float)ui->alpha / 255.0f;
-    const bool pseudo = ui->pseudo_force_pseudo_transparency && ui->pseudo_decor_theme != NULL &&
-        ui->pseudo_decor_theme->toolbar_bg[3] * alpha < 0.999f;
+    const bool parentrel = ui->pseudo_decor_theme != NULL && fbwl_texture_is_parentrelative(&ui->pseudo_decor_theme->toolbar_tex);
+    const bool pseudo = parentrel || (ui->pseudo_force_pseudo_transparency && ui->alpha < 255);
     if (pseudo) {
         fbwl_pseudo_bg_update(&ui->pseudo_bg, ui->tree, ui->pseudo_output_layout,
             ui->x, ui->y, 0, 0, ui->width, ui->height,
@@ -414,11 +413,22 @@ void fbwl_ui_toolbar_rebuild(struct fbwl_toolbar_ui *ui, const struct fbwl_ui_to
     memcpy(ui->text_color, env->decor_theme->toolbar_text, sizeof(ui->text_color));
     ui->text_color[3] *= alpha;
     (void)snprintf(ui->font, sizeof(ui->font), "%s", env->decor_theme->toolbar_font);
-    float bg[4] = {env->decor_theme->toolbar_bg[0], env->decor_theme->toolbar_bg[1], env->decor_theme->toolbar_bg[2], env->decor_theme->toolbar_bg[3] * alpha};
     const float *fg = ui->text_color;
-    ui->bg = wlr_scene_rect_create(ui->tree, ui->width, ui->height, bg);
+    const bool parentrel = fbwl_texture_is_parentrelative(&env->decor_theme->toolbar_tex);
+    ui->bg = wlr_scene_buffer_create(ui->tree, NULL);
     if (ui->bg != NULL) {
         wlr_scene_node_set_position(&ui->bg->node, 0, 0);
+        if (!parentrel) {
+            struct wlr_buffer *buf = fbwl_texture_render_buffer(&env->decor_theme->toolbar_tex, ui->width, ui->height);
+            wlr_scene_buffer_set_buffer(ui->bg, buf);
+            if (buf != NULL) {
+                wlr_buffer_drop(buf);
+            }
+            wlr_scene_buffer_set_dest_size(ui->bg, ui->width, ui->height);
+            wlr_scene_buffer_set_opacity(ui->bg, alpha);
+        } else {
+            wlr_scene_node_set_enabled(&ui->bg->node, false);
+        }
     }
     ui->highlight = NULL;
     fbwl_ui_toolbar_build_buttons(ui, env, vertical, fg);
@@ -524,9 +534,8 @@ void fbwl_ui_toolbar_update_position(struct fbwl_toolbar_ui *ui, const struct fb
     ui->base_x = base_x;
     ui->base_y = base_y;
     fbwl_ui_toolbar_apply_position(ui);
-    const float alpha = (float)ui->alpha / 255.0f;
-    const bool pseudo = ui->pseudo_force_pseudo_transparency && ui->pseudo_decor_theme != NULL &&
-        ui->pseudo_decor_theme->toolbar_bg[3] * alpha < 0.999f;
+    const bool parentrel = ui->pseudo_decor_theme != NULL && fbwl_texture_is_parentrelative(&ui->pseudo_decor_theme->toolbar_tex);
+    const bool pseudo = parentrel || (ui->pseudo_force_pseudo_transparency && ui->alpha < 255);
     if (pseudo) {
         fbwl_pseudo_bg_update(&ui->pseudo_bg, ui->tree, ui->pseudo_output_layout,
             ui->x, ui->y, 0, 0, ui->width, ui->height,

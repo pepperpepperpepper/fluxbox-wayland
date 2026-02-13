@@ -744,6 +744,7 @@ bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_
     }
 
     fbwl_ui_menu_icon_cache_configure(server->cache_life_minutes, server->cache_max_kb);
+    fbwl_texture_cache_configure(server->cache_life_minutes, server->cache_max_kb);
 
     fbwm_core_set_workspace_count(&server->wm, workspaces);
     fbwl_keybindings_add_defaults(&server->keybindings, &server->keybinding_count, server->terminal_cmd);

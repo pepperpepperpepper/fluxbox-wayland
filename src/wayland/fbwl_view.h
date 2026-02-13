@@ -59,6 +59,8 @@ struct fbwl_view {
     bool attention_from_xwayland_urgency;
     bool xwayland_urgent;
     struct wlr_scene_tree *decor_tree;
+    struct fbwl_pseudo_bg decor_titlebar_pseudo_bg;
+    struct wlr_scene_buffer *decor_titlebar_tex;
     struct wlr_scene_rect *decor_titlebar;
     struct wlr_scene_buffer *decor_title_text;
     char *decor_title_text_cache;

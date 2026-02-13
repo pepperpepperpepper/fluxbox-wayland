@@ -489,9 +489,31 @@ void fbwl_xwayland_handle_surface_dissociate(struct fbwl_view *view,
 
     if (view->scene_tree != NULL) {
         fbwl_pseudo_bg_destroy(&view->pseudo_bg);
+        fbwl_pseudo_bg_destroy(&view->decor_titlebar_pseudo_bg);
         wlr_scene_node_destroy(&view->scene_tree->node);
         view->scene_tree = NULL;
         view->content_tree = NULL;
+        view->base_layer = NULL;
+        view->decor_tree = NULL;
+        view->decor_titlebar_pseudo_bg = (struct fbwl_pseudo_bg){0};
+        view->decor_titlebar_tex = NULL;
+        view->decor_titlebar = NULL;
+        view->decor_title_text = NULL;
+        view->decor_border_top = NULL;
+        view->decor_border_bottom = NULL;
+        view->decor_border_left = NULL;
+        view->decor_border_right = NULL;
+        view->decor_btn_menu = NULL;
+        view->decor_btn_shade = NULL;
+        view->decor_btn_stick = NULL;
+        view->decor_btn_close = NULL;
+        view->decor_btn_max = NULL;
+        view->decor_btn_min = NULL;
+        view->decor_btn_lhalf = NULL;
+        view->decor_btn_rhalf = NULL;
+        view->decor_tabs_tree = NULL;
+        view->decor_title_text_cache_w = 0;
+        view->decor_title_text_cache_active = false;
     }
 }
 
@@ -629,6 +651,8 @@ void fbwl_xwayland_handle_surface_destroy(struct fbwl_view *view,
     fbwl_view_cleanup(view);
 
     if (view->scene_tree != NULL) {
+        fbwl_pseudo_bg_destroy(&view->pseudo_bg);
+        fbwl_pseudo_bg_destroy(&view->decor_titlebar_pseudo_bg);
         wlr_scene_node_destroy(&view->scene_tree->node);
         view->scene_tree = NULL;
         view->content_tree = NULL;

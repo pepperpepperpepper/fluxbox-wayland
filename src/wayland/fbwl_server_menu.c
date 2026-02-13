@@ -473,6 +473,32 @@ void decor_theme_set_defaults(struct fbwl_decor_theme *theme) {
     theme->btn_rhalf_color[1] = 0.80f;
     theme->btn_rhalf_color[2] = 0.80f;
     theme->btn_rhalf_color[3] = 1.0f;
+
+    // Texture defaults: match the current simplified "flat color" renderer.
+    fbwl_texture_init(&theme->window_title_focus_tex);
+    memcpy(theme->window_title_focus_tex.color, theme->titlebar_active, sizeof(theme->window_title_focus_tex.color));
+    memcpy(theme->window_title_focus_tex.color_to, theme->titlebar_active, sizeof(theme->window_title_focus_tex.color_to));
+
+    fbwl_texture_init(&theme->window_title_unfocus_tex);
+    memcpy(theme->window_title_unfocus_tex.color, theme->titlebar_inactive, sizeof(theme->window_title_unfocus_tex.color));
+    memcpy(theme->window_title_unfocus_tex.color_to, theme->titlebar_inactive, sizeof(theme->window_title_unfocus_tex.color_to));
+
+    fbwl_texture_init(&theme->menu_frame_tex);
+    memcpy(theme->menu_frame_tex.color, theme->menu_bg, sizeof(theme->menu_frame_tex.color));
+    memcpy(theme->menu_frame_tex.color_to, theme->menu_bg, sizeof(theme->menu_frame_tex.color_to));
+
+    fbwl_texture_init(&theme->menu_hilite_tex);
+    memcpy(theme->menu_hilite_tex.color, theme->menu_hilite, sizeof(theme->menu_hilite_tex.color));
+    memcpy(theme->menu_hilite_tex.color_to, theme->menu_hilite, sizeof(theme->menu_hilite_tex.color_to));
+
+    fbwl_texture_init(&theme->toolbar_tex);
+    memcpy(theme->toolbar_tex.color, theme->toolbar_bg, sizeof(theme->toolbar_tex.color));
+    memcpy(theme->toolbar_tex.color_to, theme->toolbar_bg, sizeof(theme->toolbar_tex.color_to));
+
+    // Fluxbox/X11: slit inherits toolbar look unless overridden.
+    fbwl_texture_init(&theme->slit_tex);
+    memcpy(theme->slit_tex.color, theme->toolbar_bg, sizeof(theme->slit_tex.color));
+    memcpy(theme->slit_tex.color_to, theme->toolbar_bg, sizeof(theme->slit_tex.color_to));
 }
 
 void server_menu_create_default(struct fbwl_server *server) {

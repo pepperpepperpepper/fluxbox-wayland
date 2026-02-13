@@ -64,7 +64,7 @@ struct fbwl_slit_ui {
     const float *pseudo_background_color;
     const struct fbwl_decor_theme *pseudo_decor_theme;
     bool pseudo_force_pseudo_transparency;
-    struct wlr_scene_rect *bg;
+    struct wlr_scene_buffer *bg;
 
     struct wl_list items; // struct fbwl_slit_item.link
     size_t items_len;

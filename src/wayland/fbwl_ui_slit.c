@@ -8,6 +8,7 @@
 
 #include <wayland-server-core.h>
 
+#include <wlr/interfaces/wlr_buffer.h>
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/util/log.h>
@@ -289,9 +290,8 @@ static void fbwl_ui_slit_apply_position(struct fbwl_slit_ui *ui) {
     ui->x = x;
     ui->y = y;
     wlr_scene_node_set_position(&ui->tree->node, ui->x, ui->y);
-    const float alpha = (float)ui->alpha / 255.0f;
-    const bool pseudo = ui->pseudo_force_pseudo_transparency && ui->pseudo_decor_theme != NULL &&
-        ui->pseudo_decor_theme->toolbar_bg[3] * alpha < 0.999f;
+    const bool parentrel = ui->pseudo_decor_theme != NULL && fbwl_texture_is_parentrelative(&ui->pseudo_decor_theme->slit_tex);
+    const bool pseudo = parentrel || (ui->pseudo_force_pseudo_transparency && ui->alpha < 255);
     if (pseudo) {
         fbwl_pseudo_bg_update(&ui->pseudo_bg, ui->tree, ui->pseudo_output_layout,
             ui->x, ui->y, 0, 0, ui->width, ui->height,
@@ -383,8 +383,7 @@ static void slit_update_layout(struct fbwl_slit_ui *ui, const struct fbwl_ui_sli
         if (ui->tree == NULL) {
             return;
         }
-        float transparent[4] = {0};
-        ui->bg = wlr_scene_rect_create(ui->tree, 1, 1, transparent);
+        ui->bg = wlr_scene_buffer_create(ui->tree, NULL);
         if (ui->bg != NULL) {
             wlr_scene_node_lower_to_bottom(&ui->bg->node);
         }
@@ -473,17 +472,26 @@ static void slit_update_layout(struct fbwl_slit_ui *ui, const struct fbwl_ui_sli
     fbwl_ui_slit_apply_position(ui);
 
     if (ui->bg != NULL) {
-        wlr_scene_rect_set_size(ui->bg, ui->width, ui->height);
-        float color[4] = {0};
-        const float *src = env->decor_theme != NULL ? env->decor_theme->toolbar_bg : NULL;
-        color_with_alpha(color, src, ui->alpha);
-        wlr_scene_rect_set_color(ui->bg, color);
         wlr_scene_node_set_position(&ui->bg->node, 0, 0);
         wlr_scene_node_lower_to_bottom(&ui->bg->node);
+        const float alpha = (float)ui->alpha / 255.0f;
+        const bool parentrel = env->decor_theme != NULL && fbwl_texture_is_parentrelative(&env->decor_theme->slit_tex);
+        if (env->decor_theme != NULL && !parentrel) {
+            struct wlr_buffer *buf = fbwl_texture_render_buffer(&env->decor_theme->slit_tex, ui->width, ui->height);
+            wlr_scene_buffer_set_buffer(ui->bg, buf);
+            if (buf != NULL) {
+                wlr_buffer_drop(buf);
+            }
+            wlr_scene_buffer_set_dest_size(ui->bg, ui->width, ui->height);
+            wlr_scene_buffer_set_opacity(ui->bg, alpha);
+            wlr_scene_node_set_enabled(&ui->bg->node, true);
+        } else {
+            wlr_scene_buffer_set_buffer(ui->bg, NULL);
+            wlr_scene_node_set_enabled(&ui->bg->node, false);
+        }
     }
-    const float alpha = (float)ui->alpha / 255.0f;
-    const bool pseudo = ui->pseudo_force_pseudo_transparency && ui->pseudo_decor_theme != NULL &&
-        ui->pseudo_decor_theme->toolbar_bg[3] * alpha < 0.999f;
+    const bool parentrel = ui->pseudo_decor_theme != NULL && fbwl_texture_is_parentrelative(&ui->pseudo_decor_theme->slit_tex);
+    const bool pseudo = parentrel || (ui->pseudo_force_pseudo_transparency && ui->alpha < 255);
     if (pseudo) {
         fbwl_pseudo_bg_update(&ui->pseudo_bg, ui->tree, ui->pseudo_output_layout,
             ui->x, ui->y, 0, 0, ui->width, ui->height,

@@ -352,6 +352,10 @@ fluxbox_wayland_SOURCES = \
 				src/wayland/fbwl_string_list.h \
 				src/wayland/fbwl_util.c \
 				src/wayland/fbwl_util.h \
+				src/wayland/fbwl_texture.c \
+				src/wayland/fbwl_texture.h \
+				src/wayland/fbwl_texture_render.c \
+				src/wayland/fbwl_texture_render_internal.h \
 				src/wayland/fbwl_pseudo_bg.h \
 		src/wayland/fbwl_ui_cmd_dialog.c \
 		src/wayland/fbwl_ui_cmd_dialog.h \
@@ -466,6 +470,8 @@ fluxbox_wayland_SOURCES = \
 				src/wayland/fbwl_view.c \
 				src/wayland/fbwl_view_maximize.c \
 				src/wayland/fbwl_view_decor.c \
+				src/wayland/fbwl_view_decor_tabs.c \
+				src/wayland/fbwl_view_decor_tabs.h \
 				src/wayland/fbwl_view.h \
 				src/wayland/fbwl_view_attention.c \
 			src/wayland/fbwl_view_attention.h \

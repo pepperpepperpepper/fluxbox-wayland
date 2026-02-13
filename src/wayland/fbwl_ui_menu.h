@@ -66,8 +66,8 @@ struct fbwl_menu_ui {
 
     struct wlr_scene_tree *tree;
     struct fbwl_pseudo_bg pseudo_bg;
-    struct wlr_scene_rect *bg;
-    struct wlr_scene_rect *highlight;
+    struct wlr_scene_buffer *bg;
+    struct wlr_scene_buffer *highlight;
     struct wlr_scene_rect **item_rects;
     size_t item_rect_count;
     struct wlr_scene_buffer **item_labels;
