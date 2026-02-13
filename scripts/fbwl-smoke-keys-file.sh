@@ -149,7 +149,7 @@ if [[ -f "$MARK_MOUSE2" ]]; then
 fi
 
 rm -f "$MARK_MODE" "$MARK_MODE_MOUSE"
-./fbwl-input-injector --socket "$SOCKET" key alt-escape
+./fbwl-input-injector --socket "$SOCKET" key escape
 
 ./fbwl-input-injector --socket "$SOCKET" key alt-return
 timeout 2 bash -c "until [[ -f '$MARK_OVERRIDE2' ]]; do sleep 0.05; done"

@@ -19,6 +19,9 @@
 
 #include <xkbcommon/xkbcommon-keysyms.h>
 
+#define FBWL_KEYMOD_MASK (WLR_MODIFIER_SHIFT | WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT | WLR_MODIFIER_LOGO | \
+    WLR_MODIFIER_MOD2 | WLR_MODIFIER_MOD3 | WLR_MODIFIER_MOD5)
+
 static void seat_notify_activity(void *userdata) {
     struct fbwl_server *server = userdata;
     fbwl_idle_notify_activity(&server->idle);
@@ -194,6 +197,28 @@ static void keychain_restore(struct fbwl_server *server, const char *why) {
     keychain_clear(server);
 }
 
+static bool key_mode_return_matches(const struct fbwl_server *server, uint32_t keycode, xkb_keysym_t sym,
+        uint32_t modifiers) {
+    if (server == NULL || !server->key_mode_return_active || server->key_mode == NULL) {
+        return false;
+    }
+
+    modifiers &= FBWL_KEYMOD_MASK;
+    if (server->key_mode_return_modifiers != modifiers) {
+        return false;
+    }
+
+    if (server->key_mode_return_kind == FBWL_KEYBIND_KEYCODE) {
+        return server->key_mode_return_keycode == keycode;
+    }
+
+    if (server->key_mode_return_kind == FBWL_KEYBIND_KEYSYM) {
+        return server->key_mode_return_sym == xkb_keysym_to_lower(sym);
+    }
+
+    return false;
+}
+
 static bool seat_keybindings_handle(void *userdata, uint32_t keycode, xkb_keysym_t sym, uint32_t modifiers) {
     struct fbwl_server *server = userdata;
     if (server == NULL) {
@@ -209,6 +234,11 @@ static bool seat_keybindings_handle(void *userdata, uint32_t keycode, xkb_keysym
 
     if (server->keychain_active && sym == XKB_KEY_Escape) {
         keychain_restore(server, "escape");
+        return true;
+    }
+
+    if (!server->keychain_active && key_mode_return_matches(server, keycode, sym, modifiers)) {
+        fbwl_server_key_mode_set(server, NULL);
         return true;
     }
 

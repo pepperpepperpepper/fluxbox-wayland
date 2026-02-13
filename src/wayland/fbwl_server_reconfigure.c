@@ -518,6 +518,11 @@ void server_reconfigure(struct fbwl_server *server) {
         fbwl_mousebindings_free(&server->mousebindings, &server->mousebinding_count);
         free(server->key_mode);
         server->key_mode = NULL;
+        server->key_mode_return_active = false;
+        server->key_mode_return_kind = FBWL_KEYBIND_KEYSYM;
+        server->key_mode_return_keycode = 0;
+        server->key_mode_return_sym = XKB_KEY_NoSymbol;
+        server->key_mode_return_modifiers = 0;
 
         fbwl_keybindings_add_defaults(&server->keybindings, &server->keybinding_count, server->terminal_cmd);
         (void)fbwl_keys_parse_file(keys_file, server_keybindings_add_from_keys_file, server, NULL);

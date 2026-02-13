@@ -187,6 +187,11 @@ bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_
     server->last_button = 0;
     free(server->key_mode);
     server->key_mode = NULL;
+    server->key_mode_return_active = false;
+    server->key_mode_return_kind = FBWL_KEYBIND_KEYSYM;
+    server->key_mode_return_keycode = 0;
+    server->key_mode_return_sym = XKB_KEY_NoSymbol;
+    server->key_mode_return_modifiers = 0;
     fbwl_ipc_init(&server->ipc);
 #ifdef HAVE_SYSTEMD
     wl_list_init(&server->sni.items);

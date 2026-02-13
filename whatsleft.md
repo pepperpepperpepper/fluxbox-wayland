@@ -32,7 +32,7 @@ The current Wayland theme implementation is intentionally simplified (mostly col
 ### Keys / CmdLang (`fluxbox-keys(5)`)
 
 - [ ] Implement `BindKey` command parity (add/replace bindings at runtime + persist to `session.keyFile` like Fluxbox/X11)
-- [ ] Implement `KeyMode <mode> [return-keybinding]` optional second arg (currently ignored)
+- [x] Implement `KeyMode <mode> [return-keybinding]` optional second arg (return binding now works; smoke-covered)
 - [x] Add missing common aliases:
   - `MinimizeWindow` alias for `Minimize`
   - `MaximizeWindow` alias for `Maximize`

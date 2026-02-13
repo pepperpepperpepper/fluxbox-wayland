@@ -416,6 +416,11 @@ struct fbwl_server {
     struct fbwl_keybinding *keybindings;
     size_t keybinding_count;
     char *key_mode;
+    bool key_mode_return_active;
+    enum fbwl_keybinding_key_kind key_mode_return_kind;
+    uint32_t key_mode_return_keycode;
+    xkb_keysym_t key_mode_return_sym;
+    uint32_t key_mode_return_modifiers;
     bool change_workspace_binding_active;
     bool keychain_active;
     char *keychain_saved_mode;

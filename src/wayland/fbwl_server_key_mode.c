@@ -8,10 +8,13 @@
 #include <strings.h>
 
 #include <wlr/types/wlr_output_layout.h>
+#include <wlr/types/wlr_keyboard.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/util/log.h>
 #include <wlr/xwayland.h>
+
+#include <xkbcommon/xkbcommon-keysyms.h>
 
 #include "wayland/fbwl_server_keybinding_actions.h"
 #include "wayland/fbwl_server_internal.h"
@@ -19,12 +22,162 @@
 #include "wayland/fbwl_view.h"
 #include "wayland/fbwl_xwayland.h"
 
+#define FBWL_KEYMOD_MASK (WLR_MODIFIER_SHIFT | WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT | WLR_MODIFIER_LOGO | \
+    WLR_MODIFIER_MOD2 | WLR_MODIFIER_MOD3 | WLR_MODIFIER_MOD5)
+
+static bool parse_keys_modifier(const char *token, uint32_t *mods) {
+    if (token == NULL || mods == NULL) {
+        return false;
+    }
+
+    if (strcasecmp(token, "none") == 0) {
+        return true;
+    }
+    if (strcasecmp(token, "mod1") == 0 || strcasecmp(token, "alt") == 0) {
+        *mods |= WLR_MODIFIER_ALT;
+        return true;
+    }
+    if (strcasecmp(token, "mod2") == 0) {
+        *mods |= WLR_MODIFIER_MOD2;
+        return true;
+    }
+    if (strcasecmp(token, "mod3") == 0) {
+        *mods |= WLR_MODIFIER_MOD3;
+        return true;
+    }
+    if (strcasecmp(token, "mod4") == 0 || strcasecmp(token, "super") == 0 ||
+            strcasecmp(token, "logo") == 0 || strcasecmp(token, "win") == 0) {
+        *mods |= WLR_MODIFIER_LOGO;
+        return true;
+    }
+    if (strcasecmp(token, "mod5") == 0) {
+        *mods |= WLR_MODIFIER_MOD5;
+        return true;
+    }
+    if (strcasecmp(token, "control") == 0 || strcasecmp(token, "ctrl") == 0) {
+        *mods |= WLR_MODIFIER_CTRL;
+        return true;
+    }
+    if (strcasecmp(token, "shift") == 0) {
+        *mods |= WLR_MODIFIER_SHIFT;
+        return true;
+    }
+
+    return false;
+}
+
+static bool next_token_buf(const char **inout, char *buf, size_t buf_size) {
+    if (inout == NULL || *inout == NULL || buf == NULL || buf_size < 2) {
+        return false;
+    }
+
+    const char *p = *inout;
+    while (*p != '\0' && isspace((unsigned char)*p)) {
+        p++;
+    }
+    if (*p == '\0') {
+        *inout = p;
+        return false;
+    }
+
+    const char *start = p;
+    while (*p != '\0' && !isspace((unsigned char)*p)) {
+        p++;
+    }
+    size_t len = (size_t)(p - start);
+    if (len + 1 > buf_size) {
+        return false;
+    }
+    memcpy(buf, start, len);
+    buf[len] = '\0';
+    *inout = p;
+    return true;
+}
+
+static bool parse_key_mode_return_binding(const char *s,
+        enum fbwl_keybinding_key_kind *out_kind, uint32_t *out_keycode, xkb_keysym_t *out_sym,
+        uint32_t *out_modifiers) {
+    if (out_kind == NULL || out_keycode == NULL || out_sym == NULL || out_modifiers == NULL) {
+        return false;
+    }
+    *out_kind = FBWL_KEYBIND_KEYSYM;
+    *out_keycode = 0;
+    *out_sym = XKB_KEY_NoSymbol;
+    *out_modifiers = 0;
+
+    if (s == NULL) {
+        return false;
+    }
+
+    uint32_t mods = 0;
+    bool have_key = false;
+    enum fbwl_keybinding_key_kind kind = FBWL_KEYBIND_KEYSYM;
+    uint32_t keycode = 0;
+    xkb_keysym_t sym = XKB_KEY_NoSymbol;
+
+    const char *p = s;
+    char tok[64];
+    while (next_token_buf(&p, tok, sizeof(tok))) {
+        if (strncasecmp(tok, "on", 2) == 0) {
+            continue;
+        }
+        if (parse_keys_modifier(tok, &mods)) {
+            continue;
+        }
+        if (have_key) {
+            return false;
+        }
+        if (strcasecmp(tok, "arg") == 0 || strcasecmp(tok, "changeworkspace") == 0) {
+            return false;
+        }
+
+        sym = xkb_keysym_from_name(tok, XKB_KEYSYM_CASE_INSENSITIVE);
+        if (sym != XKB_KEY_NoSymbol) {
+            kind = FBWL_KEYBIND_KEYSYM;
+            have_key = true;
+            continue;
+        }
+
+        bool is_keycode = true;
+        for (const char *q = tok; *q != '\0'; q++) {
+            if (!isdigit((unsigned char)*q)) {
+                is_keycode = false;
+                break;
+            }
+        }
+        if (!is_keycode) {
+            return false;
+        }
+
+        char *end = NULL;
+        long code = strtol(tok, &end, 10);
+        if (end == tok || end == NULL || *end != '\0' || code < 0 || code > 100000) {
+            return false;
+        }
+
+        kind = FBWL_KEYBIND_KEYCODE;
+        keycode = (uint32_t)code;
+        have_key = true;
+    }
+
+    if (!have_key) {
+        return false;
+    }
+
+    *out_kind = kind;
+    *out_keycode = keycode;
+    *out_sym = xkb_keysym_to_lower(sym);
+    *out_modifiers = mods & FBWL_KEYMOD_MASK;
+    return true;
+}
+
 void fbwl_server_key_mode_set(struct fbwl_server *server, const char *mode) {
     if (server == NULL) {
         return;
     }
 
     char *new_mode = NULL;
+    const char *rest = NULL;
     if (mode != NULL && *mode != '\0') {
         const char *p = mode;
         while (*p != '\0' && isspace((unsigned char)*p)) {
@@ -35,6 +188,7 @@ void fbwl_server_key_mode_set(struct fbwl_server *server, const char *mode) {
             p++;
         }
         size_t len = (size_t)(p - start);
+        rest = p;
         if (len > 0 && start[len - 1] == ':') {
             len--;
         }
@@ -54,6 +208,42 @@ void fbwl_server_key_mode_set(struct fbwl_server *server, const char *mode) {
 
     free(server->key_mode);
     server->key_mode = new_mode;
+
+    server->key_mode_return_active = false;
+    server->key_mode_return_kind = FBWL_KEYBIND_KEYSYM;
+    server->key_mode_return_keycode = 0;
+    server->key_mode_return_sym = xkb_keysym_to_lower(XKB_KEY_Escape);
+    server->key_mode_return_modifiers = 0;
+
+    if (server->key_mode != NULL) {
+        server->key_mode_return_active = true;
+
+        enum fbwl_keybinding_key_kind kind = FBWL_KEYBIND_KEYSYM;
+        uint32_t keycode = 0;
+        xkb_keysym_t sym = XKB_KEY_NoSymbol;
+        uint32_t mods = 0;
+
+        bool parsed = false;
+        if (rest != NULL) {
+            const char *t = rest;
+            while (*t != '\0' && isspace((unsigned char)*t)) {
+                t++;
+            }
+            if (*t != '\0') {
+                parsed = parse_key_mode_return_binding(t, &kind, &keycode, &sym, &mods);
+                if (!parsed) {
+                    wlr_log(WLR_ERROR, "KeyMode: invalid return-keybinding: %s", t);
+                }
+            }
+        }
+
+        if (parsed) {
+            server->key_mode_return_kind = kind;
+            server->key_mode_return_keycode = keycode;
+            server->key_mode_return_sym = sym;
+            server->key_mode_return_modifiers = mods;
+        }
+    }
 
     wlr_log(WLR_INFO, "KeyMode: set to %s", server->key_mode != NULL ? server->key_mode : "default");
 }

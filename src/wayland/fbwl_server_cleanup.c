@@ -155,6 +155,11 @@ void fbwl_server_finish(struct fbwl_server *server) {
     server->marked_windows.cap = 0;
     free(server->key_mode);
     server->key_mode = NULL;
+    server->key_mode_return_active = false;
+    server->key_mode_return_kind = FBWL_KEYBIND_KEYSYM;
+    server->key_mode_return_keycode = 0;
+    server->key_mode_return_sym = XKB_KEY_NoSymbol;
+    server->key_mode_return_modifiers = 0;
     free(server->keychain_saved_mode);
     server->keychain_saved_mode = NULL;
     server->keychain_active = false;
