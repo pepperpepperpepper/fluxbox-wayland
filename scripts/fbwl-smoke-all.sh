@@ -92,6 +92,7 @@ scripts=(
   scripts/fbwl-smoke-keybinding-head-mark.sh
   scripts/fbwl-smoke-resource-style-cmds.sh
   scripts/fbwl-smoke-keys-file.sh
+  scripts/fbwl-smoke-bindkey.sh
   scripts/fbwl-smoke-keys-chaining.sh
   scripts/fbwl-smoke-changeworkspace-event.sh
   scripts/fbwl-smoke-setenv-export.sh

@@ -13,6 +13,7 @@
 
 #include <wlr/util/log.h>
 
+#include "wayland/fbwl_keys_parse.h"
 #include "wayland/fbwl_server_internal.h"
 #include "wayland/fbwl_style_parse.h"
 #include "wayland/fbwl_view.h"
@@ -638,4 +639,171 @@ void server_keybindings_set_resource_value_dialog(void *userdata) {
     fbwl_ui_cmd_dialog_open_prompt(&server->cmd_dialog_ui, server->scene, server->layer_overlay,
         &server->decor_theme, server->output_layout, "SetResourceValue ", "",
         cmd_dialog_submit_set_resource_value, server);
+}
+
+static bool bindkey_validate_add_keybinding(void *userdata, enum fbwl_keybinding_key_kind key_kind,
+        uint32_t keycode, xkb_keysym_t sym, uint32_t modifiers, enum fbwl_keybinding_action action, int arg,
+        const char *cmd, const char *mode) {
+    (void)userdata;
+    (void)key_kind;
+    (void)keycode;
+    (void)sym;
+    (void)modifiers;
+    (void)action;
+    (void)arg;
+    (void)cmd;
+    (void)mode;
+    return true;
+}
+
+static bool bindkey_validate_add_mousebinding(void *userdata, enum fbwl_mousebinding_context context,
+        enum fbwl_mousebinding_event_kind event_kind, int button, uint32_t modifiers, bool is_double,
+        enum fbwl_keybinding_action action, int arg, const char *cmd, const char *mode) {
+    (void)userdata;
+    (void)context;
+    (void)event_kind;
+    (void)button;
+    (void)modifiers;
+    (void)is_double;
+    (void)action;
+    (void)arg;
+    (void)cmd;
+    (void)mode;
+    return true;
+}
+
+static bool cmd_contains_startmoving(const char *s) {
+    if (s == NULL) {
+        return false;
+    }
+    const char *needle = "startmoving";
+    for (const char *p = s; *p != '\0'; p++) {
+        const char *h = p;
+        const char *n = needle;
+        while (*h != '\0' && *n != '\0' && tolower((unsigned char)*h) == *n) {
+            h++;
+            n++;
+        }
+        if (*n == '\0') {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool bindkey_add_keybinding(void *userdata, enum fbwl_keybinding_key_kind key_kind,
+        uint32_t keycode, xkb_keysym_t sym, uint32_t modifiers, enum fbwl_keybinding_action action, int arg,
+        const char *cmd, const char *mode) {
+    struct fbwl_server *server = userdata;
+    if (server == NULL) {
+        return false;
+    }
+    if (key_kind == FBWL_KEYBIND_PLACEHOLDER) {
+        return fbwl_keybindings_add_placeholder(&server->keybindings, &server->keybinding_count, modifiers,
+            action, arg, cmd, mode);
+    }
+    if (key_kind == FBWL_KEYBIND_CHANGE_WORKSPACE) {
+        return fbwl_keybindings_add_change_workspace(&server->keybindings, &server->keybinding_count,
+            action, arg, cmd, mode);
+    }
+    if (key_kind == FBWL_KEYBIND_KEYCODE) {
+        return fbwl_keybindings_add_keycode(&server->keybindings, &server->keybinding_count, keycode, modifiers,
+            action, arg, cmd, mode);
+    }
+    return fbwl_keybindings_add(&server->keybindings, &server->keybinding_count, sym, modifiers, action, arg, cmd, mode);
+}
+
+static bool bindkey_add_mousebinding(void *userdata, enum fbwl_mousebinding_context context,
+        enum fbwl_mousebinding_event_kind event_kind, int button, uint32_t modifiers, bool is_double,
+        enum fbwl_keybinding_action action, int arg, const char *cmd, const char *mode) {
+    struct fbwl_server *server = userdata;
+    if (server != NULL && server->ignore_border && context == FBWL_MOUSEBIND_WINDOW_BORDER) {
+        if (action == FBWL_KEYBIND_START_MOVING || (action == FBWL_KEYBIND_MACRO && cmd_contains_startmoving(cmd))) {
+            wlr_log(WLR_INFO, "BindKey: ignoring StartMoving on window border (session.ignoreBorder=true)");
+            return false;
+        }
+    }
+    return fbwl_mousebindings_add(&server->mousebindings, &server->mousebinding_count, context, event_kind, button,
+        modifiers, is_double, action, arg, cmd, mode);
+}
+
+void server_keybindings_bind_key(void *userdata, const char *binding) {
+    struct fbwl_server *server = userdata;
+    if (server == NULL || server->keys_file == NULL || *server->keys_file == '\0') {
+        wlr_log(WLR_ERROR, "BindKey: missing session.keyFile");
+        return;
+    }
+    if (binding == NULL) {
+        wlr_log(WLR_ERROR, "BindKey: missing keybinding");
+        return;
+    }
+
+    char *tmp = strdup(binding);
+    if (tmp == NULL) {
+        wlr_log(WLR_ERROR, "BindKey: OOM");
+        return;
+    }
+    char *line = trim_inplace(tmp);
+    if (line == NULL || *line == '\0') {
+        free(tmp);
+        wlr_log(WLR_ERROR, "BindKey: empty keybinding");
+        return;
+    }
+    if (strchr(line, '\n') != NULL || strchr(line, '\r') != NULL) {
+        free(tmp);
+        wlr_log(WLR_ERROR, "BindKey: invalid keybinding (contains newline)");
+        return;
+    }
+
+    char validate_path[] = "/tmp/fbwl-bindkey-XXXXXX";
+    int fd = mkstemp(validate_path);
+    if (fd < 0) {
+        free(tmp);
+        wlr_log(WLR_ERROR, "BindKey: mkstemp failed: %s", strerror(errno));
+        return;
+    }
+
+    FILE *vf = fdopen(fd, "w");
+    if (vf == NULL) {
+        close(fd);
+        unlink(validate_path);
+        free(tmp);
+        wlr_log(WLR_ERROR, "BindKey: fdopen failed: %s", strerror(errno));
+        return;
+    }
+
+    fprintf(vf, "%s\n", line);
+    fclose(vf);
+
+    size_t added_keys = 0;
+    size_t added_mouse = 0;
+    (void)fbwl_keys_parse_file(validate_path, bindkey_validate_add_keybinding, NULL, &added_keys);
+    (void)fbwl_keys_parse_file_mouse(validate_path, bindkey_validate_add_mousebinding, NULL, &added_mouse);
+
+    if (added_keys + added_mouse == 0) {
+        unlink(validate_path);
+        free(tmp);
+        wlr_log(WLR_ERROR, "BindKey: invalid keybinding: %s", line);
+        return;
+    }
+
+    FILE *f = fopen(server->keys_file, "a");
+    if (f == NULL) {
+        unlink(validate_path);
+        free(tmp);
+        wlr_log(WLR_ERROR, "BindKey: failed to open %s: %s", server->keys_file, strerror(errno));
+        return;
+    }
+    fprintf(f, "%s\n", line);
+    fclose(f);
+
+    size_t runtime_keys = 0;
+    size_t runtime_mouse = 0;
+    (void)fbwl_keys_parse_file(validate_path, bindkey_add_keybinding, server, &runtime_keys);
+    (void)fbwl_keys_parse_file_mouse(validate_path, bindkey_add_mousebinding, server, &runtime_mouse);
+    unlink(validate_path);
+
+    free(tmp);
+
+    wlr_log(WLR_INFO, "BindKey: ok (%s) runtime_keys=%zu runtime_mouse=%zu", server->keys_file, runtime_keys, runtime_mouse);
 }

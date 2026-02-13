@@ -211,6 +211,9 @@ static bool execute_action_depth(enum fbwl_keybinding_action action, int arg, co
         }
         hooks->key_mode_set(hooks->userdata, cmd);
         return true;
+    case FBWL_KEYBIND_BIND_KEY:
+        server_keybindings_bind_key(hooks->userdata, cmd);
+        return true;
     case FBWL_KEYBIND_IF:
         return fbwl_cmdlang_execute_if(cmd, view, hooks, depth, execute_action_depth);
     case FBWL_KEYBIND_FOREACH:

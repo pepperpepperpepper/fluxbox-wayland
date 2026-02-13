@@ -273,6 +273,21 @@ bool fbwl_fluxbox_cmd_resolve(const char *cmd_name, const char *cmd_args,
         return true;
     }
 
+    if (strcasecmp(cmd_name, "bindkey") == 0) {
+        if (cmd_args == NULL || *cmd_args == '\0') {
+            return false;
+        }
+        while (*cmd_args != '\0' && isspace((unsigned char)*cmd_args)) {
+            cmd_args++;
+        }
+        if (*cmd_args == '\0') {
+            return false;
+        }
+        *out_action = FBWL_KEYBIND_BIND_KEY;
+        *out_cmd = cmd_args;
+        return true;
+    }
+
     if (strcasecmp(cmd_name, "nextwindow") == 0) {
         *out_action = FBWL_KEYBIND_FOCUS_NEXT;
         if (cmd_args != NULL && *cmd_args != '\0') {
