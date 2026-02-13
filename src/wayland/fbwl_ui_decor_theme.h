@@ -1,6 +1,7 @@
 #pragma once
 
 #include "wayland/fbwl_texture.h"
+#include "wayland/fbwl_text_effect.h"
 
 struct fbwl_decor_theme {
     int border_width;
@@ -12,6 +13,20 @@ struct fbwl_decor_theme {
     char window_font[128];
     char menu_font[128];
     char toolbar_font[128];
+
+    // Fluxbox/X11 font effects (shadow/halo). These match the style resources
+    // `*.font.effect`, `*.font.shadow.*`, and `*.font.halo.*`.
+    struct fbwl_text_effect window_label_focus_effect;
+    struct fbwl_text_effect window_label_unfocus_effect;
+    struct fbwl_text_effect menu_frame_effect;
+    struct fbwl_text_effect menu_title_effect;
+    struct fbwl_text_effect toolbar_workspace_effect;
+    struct fbwl_text_effect toolbar_iconbar_focused_effect;
+    struct fbwl_text_effect toolbar_iconbar_unfocused_effect;
+    struct fbwl_text_effect toolbar_clock_effect;
+    struct fbwl_text_effect toolbar_label_effect;
+    struct fbwl_text_effect toolbar_windowlabel_effect;
+
     float titlebar_active[4];
     float titlebar_inactive[4];
     float border_color[4];

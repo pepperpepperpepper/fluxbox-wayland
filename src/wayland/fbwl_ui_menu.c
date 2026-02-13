@@ -122,7 +122,8 @@ static void fbwl_ui_menu_update_item_label(struct fbwl_menu_ui *ui, size_t idx) 
         pad_x += item_h;
     }
 
-    struct wlr_buffer *text_buf = fbwl_text_buffer_create(render, w, item_h, pad_x, use_fg, ui->env.decor_theme->menu_font);
+    struct wlr_buffer *text_buf = fbwl_text_buffer_create(render, w, item_h, pad_x, use_fg, ui->env.decor_theme->menu_font,
+        &ui->env.decor_theme->menu_frame_effect);
     if (text_buf == NULL) {
         return;
     }
@@ -296,7 +297,8 @@ static void fbwl_ui_menu_rebuild(struct fbwl_menu_ui *ui, const struct fbwl_ui_m
         } else if (i == ui->selected) {
             use_fg = hi_fg;
         }
-        struct wlr_buffer *text_buf = fbwl_text_buffer_create(render, w, item_h, pad_x, use_fg, env->decor_theme->menu_font);
+        struct wlr_buffer *text_buf = fbwl_text_buffer_create(render, w, item_h, pad_x, use_fg, env->decor_theme->menu_font,
+            &env->decor_theme->menu_frame_effect);
         if (text_buf != NULL) {
             struct wlr_scene_buffer *sb = wlr_scene_buffer_create(ui->tree, text_buf);
             if (sb != NULL) {

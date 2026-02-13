@@ -10,6 +10,7 @@
 #include <wlr/types/wlr_scene.h>
 #include <wlr/util/log.h>
 
+#include "wayland/fbwl_ui_decor_theme.h"
 #include "wayland/fbwl_ui_toolbar.h"
 #include "wayland/fbwl_ui_text.h"
 #include "wmcore/fbwm_core.h"
@@ -173,7 +174,8 @@ void fbwl_ui_toolbar_build_buttons(struct fbwl_toolbar_ui *ui, const struct fbwl
             continue;
         }
 
-        struct wlr_buffer *buf = fbwl_text_buffer_create(label, w, h, pad, fg, ui->font);
+        struct wlr_buffer *buf = fbwl_text_buffer_create(label, w, h, pad, fg, ui->font,
+            env->decor_theme != NULL ? &env->decor_theme->toolbar_label_effect : NULL);
         if (buf == NULL) {
             continue;
         }

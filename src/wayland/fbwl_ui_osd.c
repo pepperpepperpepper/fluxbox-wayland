@@ -124,7 +124,7 @@ static void fbwl_ui_osd_show_text(struct fbwl_osd_ui *ui,
 
     const float fg[4] = {1.0f, 1.0f, 1.0f, 1.0f};
     struct wlr_buffer *buf = fbwl_text_buffer_create(msg != NULL ? msg : "", ui->width, ui->height, 8, fg,
-        decor_theme->window_font);
+        decor_theme->window_font, &decor_theme->window_label_focus_effect);
     if (buf != NULL) {
         if (ui->label != NULL) {
             wlr_scene_buffer_set_buffer(ui->label, buf);

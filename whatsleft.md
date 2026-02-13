@@ -18,7 +18,7 @@ The current Wayland theme implementation is intentionally simplified (mostly col
   - [x] `ParentRelative` per-element for the above (wallpaper-backed underlay), independent of `session.forcePseudoTransparency`
   - [x] Smoke: deterministic validation for gradients/pixmaps/ParentRelative (`scripts/fbwl-smoke-style-textures.sh`)
   - [x] Add caching for rendered textures/pixmap surfaces (avoid re-rendering on every rebuild; honors `session.cacheLife`/`session.cacheMax`)
-- [ ] Support style font effects: `*.effect` (`shadow`/`halo`) + related `*.shadow.*` / `*.halo.*` keys
+- [x] Support style font effects: `*.font.effect` (`shadow`/`halo`) + related `*.font.shadow.*` / `*.font.halo.*` keys (best-effort; also accepts legacy `*.effect` forms)
 - [ ] Refactor `struct fbwl_decor_theme` to carry per-element textures (not just flat colors) and apply them to:
   - Window decorations (titlebar, borders, buttons, tabs)
   - Menus (title/frame/hilite)

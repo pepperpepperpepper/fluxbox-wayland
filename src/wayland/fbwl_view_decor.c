@@ -296,7 +296,9 @@ void fbwl_view_decor_update_title_text(struct fbwl_view *view, const struct fbwl
     view->decor_title_text_cache_w = text_w;
     view->decor_title_text_cache_active = view->decor_active;
     const float *fg = view->decor_active ? theme->title_text_active : theme->title_text_inactive;
-    struct wlr_buffer *buf = fbwl_text_buffer_create(title, text_w, title_h, 8, fg, theme->window_font);
+    const struct fbwl_text_effect *effect =
+        view->decor_active ? &theme->window_label_focus_effect : &theme->window_label_unfocus_effect;
+    struct wlr_buffer *buf = fbwl_text_buffer_create(title, text_w, title_h, 8, fg, theme->window_font, effect);
     if (buf == NULL) {
         wlr_scene_buffer_set_buffer(view->decor_title_text, NULL);
         view->decor_title_text_cache_w = 0;

@@ -320,7 +320,9 @@ static void fbwl_ui_toolbar_clock_render(struct fbwl_toolbar_ui *ui) {
     const int w = vertical ? ui->thickness : ui->clock_w;
     const int h = vertical ? ui->clock_w : ui->thickness;
     const int pad = ui->thickness >= 24 ? 8 : 2;
-    struct wlr_buffer *buf = fbwl_text_buffer_create(ui->clock_text, w, h, pad, ui->text_color, ui->font);
+    const struct fbwl_text_effect *effect =
+        ui->pseudo_decor_theme != NULL ? &ui->pseudo_decor_theme->toolbar_clock_effect : NULL;
+    struct wlr_buffer *buf = fbwl_text_buffer_create(ui->clock_text, w, h, pad, ui->text_color, ui->font, effect);
     if (buf == NULL) {
         wlr_scene_buffer_set_buffer(ui->clock_label, NULL);
         return;

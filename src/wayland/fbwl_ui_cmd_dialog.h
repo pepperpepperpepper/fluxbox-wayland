@@ -12,6 +12,7 @@ struct wlr_scene_rect;
 struct wlr_scene_tree;
 
 struct fbwl_decor_theme;
+struct fbwl_text_effect;
 
 typedef bool (*fbwl_cmd_dialog_submit_fn)(void *userdata, const char *text);
 
@@ -25,6 +26,7 @@ struct fbwl_cmd_dialog_ui {
 
     char *text;
     char font[128];
+    const struct fbwl_text_effect *effect;
     char prefix[64];
     fbwl_cmd_dialog_submit_fn submit;
     void *submit_userdata;

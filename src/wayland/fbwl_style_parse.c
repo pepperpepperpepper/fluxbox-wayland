@@ -12,6 +12,7 @@
 #include <wlr/util/log.h>
 
 #include "wayland/fbwl_texture.h"
+#include "wayland/fbwl_style_parse_font_effects.h"
 #include "wayland/fbwl_util.h"
 
 static char *trim_inplace(char *s) {
@@ -488,6 +489,11 @@ bool fbwl_style_load_file(struct fbwl_decor_theme *theme, const char *path) {
             char resolved[256] = {0};
             (void)resolve_pixmap_path(resolved, style_dir, p);
             (void)snprintf(theme->slit_tex.pixmap, sizeof(theme->slit_tex.pixmap), "%s", resolved);
+            continue;
+        }
+
+        // Font effects (`*.font.effect`, `*.font.shadow.*`, `*.font.halo.*`).
+        if (fbwl_style_parse_font_effects(theme, key, val)) {
             continue;
         }
 

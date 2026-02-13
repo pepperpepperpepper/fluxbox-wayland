@@ -34,6 +34,8 @@ toolbar.color: #000000
 toolbar.colorTo: #0e1a27
 toolbar.textColor: #333333
 toolbar.font: lucidasans-10
+toolbar.font.effect: halo
+toolbar.font.halo.color: #ff00ff
 toolbar.clock.color: #40545d
 toolbar.clock.textColor: #ffffff
 toolbar.height: 55
@@ -43,6 +45,12 @@ menu.frame.color: #40545d
 menu.frame.colorTo: #0e1a27
 menu.frame.textColor: #ffffff
 menu.frame.font: lucidasans-10
+menu.frame.font.effect: shadow
+menu.frame.font.shadow.color: #00ff00
+menu.frame.font.shadow.x: 2
+menu.frame.font.shadow.y: 2
+menu.title.font.effect: halo
+menu.title.font.halo.color: #ff00ff
 menu.frame.disableColor: #777777
 menu.hilite.color: #80949d
 menu.hilite.colorTo: #4e5a67
@@ -58,6 +66,10 @@ window.title.unfocus.colorTo: #667788
 window.button.focus.color: rgb:9B/9B/9B
 window.button.focus.colorTo: rgb:42/42/42
 window.font: lucidasans-10
+window.font.effect: shadow
+window.font.shadow.color: #0000ff
+window.font.shadow.x: 2
+window.font.shadow.y: 2
 EOF
 
 : >"$LOG"
@@ -102,6 +114,34 @@ if rg -q 'Style: ignored key=window\\.title\\.focus\\.colorTo' "$LOG"; then
 fi
 if rg -q 'Style: ignored key=menu\\.frame\\.font' "$LOG"; then
   echo "unexpected: menu.frame.font should be parsed (not ignored)" >&2
+  exit 1
+fi
+if rg -q 'Style: ignored key=toolbar\\.font\\.effect' "$LOG"; then
+  echo "unexpected: toolbar.font.effect should be parsed (not ignored)" >&2
+  exit 1
+fi
+if rg -q 'Style: ignored key=menu\\.frame\\.font\\.effect' "$LOG"; then
+  echo "unexpected: menu.frame.font.effect should be parsed (not ignored)" >&2
+  exit 1
+fi
+if rg -q 'Style: ignored key=menu\\.frame\\.font\\.shadow\\.x' "$LOG"; then
+  echo "unexpected: menu.frame.font.shadow.x should be parsed (not ignored)" >&2
+  exit 1
+fi
+if rg -q 'Style: ignored key=menu\\.frame\\.font\\.shadow\\.y' "$LOG"; then
+  echo "unexpected: menu.frame.font.shadow.y should be parsed (not ignored)" >&2
+  exit 1
+fi
+if rg -q 'Style: ignored key=window\\.font\\.effect' "$LOG"; then
+  echo "unexpected: window.font.effect should be parsed (not ignored)" >&2
+  exit 1
+fi
+if rg -q 'Style: ignored key=window\\.font\\.shadow\\.x' "$LOG"; then
+  echo "unexpected: window.font.shadow.x should be parsed (not ignored)" >&2
+  exit 1
+fi
+if rg -q 'Style: ignored key=window\\.font\\.shadow\\.y' "$LOG"; then
+  echo "unexpected: window.font.shadow.y should be parsed (not ignored)" >&2
   exit 1
 fi
 

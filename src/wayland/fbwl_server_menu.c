@@ -345,6 +345,27 @@ static bool server_window_menu_load_file(struct fbwl_server *server, const char 
     return true;
 }
 
+static void text_effect_set_defaults(struct fbwl_text_effect *effect) {
+    if (effect == NULL) {
+        return;
+    }
+
+    memset(effect, 0, sizeof(*effect));
+    effect->kind = FBWL_TEXT_EFFECT_NONE;
+
+    effect->shadow_color[0] = 0.0f;
+    effect->shadow_color[1] = 0.0f;
+    effect->shadow_color[2] = 0.0f;
+    effect->shadow_color[3] = 1.0f;
+    effect->shadow_x = 2;
+    effect->shadow_y = 2;
+
+    effect->halo_color[0] = 1.0f;
+    effect->halo_color[1] = 1.0f;
+    effect->halo_color[2] = 1.0f;
+    effect->halo_color[3] = 1.0f;
+}
+
 void decor_theme_set_defaults(struct fbwl_decor_theme *theme) {
     if (theme == NULL) {
         return;
@@ -363,6 +384,17 @@ void decor_theme_set_defaults(struct fbwl_decor_theme *theme) {
     theme->menu_font[sizeof(theme->menu_font) - 1] = '\0';
     strncpy(theme->toolbar_font, "Sans", sizeof(theme->toolbar_font));
     theme->toolbar_font[sizeof(theme->toolbar_font) - 1] = '\0';
+
+    text_effect_set_defaults(&theme->window_label_focus_effect);
+    text_effect_set_defaults(&theme->window_label_unfocus_effect);
+    text_effect_set_defaults(&theme->menu_frame_effect);
+    text_effect_set_defaults(&theme->menu_title_effect);
+    text_effect_set_defaults(&theme->toolbar_workspace_effect);
+    text_effect_set_defaults(&theme->toolbar_iconbar_focused_effect);
+    text_effect_set_defaults(&theme->toolbar_iconbar_unfocused_effect);
+    text_effect_set_defaults(&theme->toolbar_clock_effect);
+    text_effect_set_defaults(&theme->toolbar_label_effect);
+    text_effect_set_defaults(&theme->toolbar_windowlabel_effect);
 
     theme->titlebar_active[0] = 0.20f;
     theme->titlebar_active[1] = 0.20f;

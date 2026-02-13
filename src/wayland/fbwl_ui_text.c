@@ -16,6 +16,8 @@
 #include <wayland-server-core.h>
 #include <wlr/interfaces/wlr_buffer.h>
 
+#include "wayland/fbwl_text_effect.h"
+
 struct fbwl_cairo_buffer {
     struct wlr_buffer base;
     cairo_surface_t *surface;
@@ -158,7 +160,7 @@ static void normalize_font_spec(const char *in, char *out, size_t out_size) {
 }
 
 struct wlr_buffer *fbwl_text_buffer_create(const char *text, int width, int height,
-        int pad_x, const float rgba[static 4], const char *font) {
+        int pad_x, const float rgba[static 4], const char *font, const struct fbwl_text_effect *effect) {
     if (width < 1 || height < 1 || rgba == NULL) {
         return NULL;
     }
@@ -215,9 +217,38 @@ struct wlr_buffer *fbwl_text_buffer_create(const char *text, int width, int heig
     int text_h = 0;
     pango_layout_get_pixel_size(layout, &text_w, &text_h);
 
-    cairo_set_source_rgba(cr, rgba[0], rgba[1], rgba[2], rgba[3]);
     const int x = pad_x > 0 ? pad_x : 0;
     const int y = text_h < height ? (height - text_h) / 2 : 0;
+
+    if (effect != NULL && effect->kind == FBWL_TEXT_EFFECT_SHADOW) {
+        float shadow[4] = {
+            effect->shadow_color[0],
+            effect->shadow_color[1],
+            effect->shadow_color[2],
+            effect->shadow_color[3] * rgba[3],
+        };
+        cairo_set_source_rgba(cr, shadow[0], shadow[1], shadow[2], shadow[3]);
+        cairo_move_to(cr, x + effect->shadow_x, y + effect->shadow_y);
+        pango_cairo_show_layout(cr, layout);
+    } else if (effect != NULL && effect->kind == FBWL_TEXT_EFFECT_HALO) {
+        float halo[4] = {
+            effect->halo_color[0],
+            effect->halo_color[1],
+            effect->halo_color[2],
+            effect->halo_color[3] * rgba[3],
+        };
+        cairo_set_source_rgba(cr, halo[0], halo[1], halo[2], halo[3]);
+        cairo_move_to(cr, x + 1, y + 1);
+        pango_cairo_show_layout(cr, layout);
+        cairo_move_to(cr, x - 1, y + 1);
+        pango_cairo_show_layout(cr, layout);
+        cairo_move_to(cr, x - 1, y - 1);
+        pango_cairo_show_layout(cr, layout);
+        cairo_move_to(cr, x + 1, y - 1);
+        pango_cairo_show_layout(cr, layout);
+    }
+
+    cairo_set_source_rgba(cr, rgba[0], rgba[1], rgba[2], rgba[3]);
     cairo_move_to(cr, x, y);
     pango_cairo_show_layout(cr, layout);
 

@@ -462,11 +462,14 @@ fluxbox_wayland_SOURCES = \
 	src/wayland/fbwl_xdg_activation.h \
 	src/wayland/fbwl_xdg_decoration.c \
 	src/wayland/fbwl_xdg_decoration.h \
-			src/wayland/fbwl_scene_layers.c \
-			src/wayland/fbwl_scene_layers.h \
+				src/wayland/fbwl_scene_layers.c \
+				src/wayland/fbwl_scene_layers.h \
 				src/wayland/fbwl_style_parse.c \
+				src/wayland/fbwl_style_parse_font_effects.c \
 				src/wayland/fbwl_style_parse.h \
+				src/wayland/fbwl_style_parse_font_effects.h \
 				src/wayland/fbwl_ui_decor_theme.h \
+				src/wayland/fbwl_text_effect.h \
 				src/wayland/fbwl_view.c \
 				src/wayland/fbwl_view_maximize.c \
 				src/wayland/fbwl_view_decor.c \

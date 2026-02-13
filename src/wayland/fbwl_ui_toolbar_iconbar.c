@@ -15,6 +15,7 @@
 #include "wmcore/fbwm_core.h"
 #include "wayland/fbwl_icon_theme.h"
 #include "wayland/fbwl_tabs.h"
+#include "wayland/fbwl_ui_decor_theme.h"
 #include "wayland/fbwl_ui_menu_icon.h"
 #include "wayland/fbwl_ui_toolbar.h"
 #include "wayland/fbwl_ui_toolbar_iconbar_pattern.h"
@@ -471,7 +472,13 @@ void fbwl_ui_toolbar_build_iconbar(struct fbwl_toolbar_ui *ui, const struct fbwl
             }
         }
 
-        struct wlr_buffer *buf = fbwl_text_buffer_create(label_text != NULL ? label_text : "", text_w, h, pad, fg, ui->font);
+        const struct fbwl_text_effect *effect = NULL;
+        if (env != NULL && env->decor_theme != NULL) {
+            const bool urgent = view != NULL && fbwl_view_is_urgent(view);
+            const bool focused_or_urgent = view != NULL && (view == env->focused_view || urgent);
+            effect = focused_or_urgent ? &env->decor_theme->toolbar_iconbar_focused_effect : &env->decor_theme->toolbar_iconbar_unfocused_effect;
+        }
+        struct wlr_buffer *buf = fbwl_text_buffer_create(label_text != NULL ? label_text : "", text_w, h, pad, fg, ui->font, effect);
         if (buf != NULL) {
             struct wlr_scene_buffer *sb = wlr_scene_buffer_create(ui->tree, buf);
             if (sb != NULL) {

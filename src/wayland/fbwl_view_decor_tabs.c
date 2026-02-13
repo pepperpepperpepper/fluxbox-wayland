@@ -478,7 +478,9 @@ void fbwl_view_decor_tabs_ui_build(struct fbwl_view *view, const struct fbwl_dec
         }
 
         const char *label = fbwl_view_display_title(tab_view);
-        struct wlr_buffer *buf = fbwl_text_buffer_create(label, text_w, item_h, pad, fg, theme->window_font);
+        const struct fbwl_text_effect *effect =
+            is_active_tab ? &theme->window_label_focus_effect : &theme->window_label_unfocus_effect;
+        struct wlr_buffer *buf = fbwl_text_buffer_create(label, text_w, item_h, pad, fg, theme->window_font, effect);
         if (buf != NULL) {
             struct wlr_scene_buffer *sb = wlr_scene_buffer_create(view->decor_tabs_tree, buf);
             if (sb != NULL) {
@@ -500,4 +502,3 @@ void fbwl_view_decor_tabs_ui_build(struct fbwl_view *view, const struct fbwl_dec
         vertical ? 1 : 0,
         view->x + bar_x, view->y + bar_y, bar_w, bar_h, tab_count);
 }
-

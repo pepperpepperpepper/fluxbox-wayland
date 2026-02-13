@@ -57,7 +57,7 @@ static void fbwl_ui_cmd_dialog_render(struct fbwl_cmd_dialog_ui *ui) {
     (void)snprintf(render, need, "%s%s", prefix, txt);
 
     const float fg[4] = {1.0f, 1.0f, 1.0f, 1.0f};
-    struct wlr_buffer *buf = fbwl_text_buffer_create(render, ui->width, ui->height, 8, fg, ui->font);
+    struct wlr_buffer *buf = fbwl_text_buffer_create(render, ui->width, ui->height, 8, fg, ui->font, ui->effect);
     free(render);
     if (buf == NULL) {
         wlr_scene_buffer_set_buffer(ui->label, NULL);
@@ -119,6 +119,7 @@ void fbwl_ui_cmd_dialog_close(struct fbwl_cmd_dialog_ui *ui, const char *why) {
     free(ui->text);
     ui->text = NULL;
     ui->font[0] = '\0';
+    ui->effect = NULL;
     ui->prefix[0] = '\0';
     ui->submit = NULL;
     ui->submit_userdata = NULL;
@@ -145,6 +146,7 @@ void fbwl_ui_cmd_dialog_open_prompt(struct fbwl_cmd_dialog_ui *ui,
         ui->width = 200;
     }
     (void)snprintf(ui->font, sizeof(ui->font), "%s", decor_theme->window_font);
+    ui->effect = &decor_theme->window_label_focus_effect;
     if (prefix != NULL && *prefix != '\0') {
         (void)snprintf(ui->prefix, sizeof(ui->prefix), "%s", prefix);
     } else {
