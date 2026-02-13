@@ -154,7 +154,7 @@ OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 NODECO_PID=$!
 
 START=$((OFFSET + 1))
-timeout 5 bash -c "until tail -c +$START '$LOG' | rg -q 'Apps: applied .*app_id=fbwl-apps-nodeco .*deco=0 .*layer=6'; do sleep 0.05; done"
+timeout 5 bash -c "until tail -c +$START '$LOG' | rg -q 'Apps: applied .*app_id=fbwl-apps-nodeco .*deco=0x0 .*layer=6'; do sleep 0.05; done"
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-smoke-client --socket "$SOCKET" --app-id fbwl-apps-placed --title apps-placed --stay-ms 10000 >/dev/null 2>&1 &

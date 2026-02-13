@@ -181,25 +181,7 @@ static void view_frame_offsets(const struct fbwl_server *server, const struct fb
     if (server == NULL || view == NULL) {
         return;
     }
-    if (!view->decor_enabled || view->fullscreen) {
-        return;
-    }
-
-    const int border = server->decor_theme.border_width;
-    const int title_h = server->decor_theme.title_height;
-
-    if (out_left != NULL) {
-        *out_left = border;
-    }
-    if (out_top != NULL) {
-        *out_top = title_h + border;
-    }
-    if (out_right != NULL) {
-        *out_right = border;
-    }
-    if (out_bottom != NULL) {
-        *out_bottom = border;
-    }
+    fbwl_view_decor_frame_extents(view, &server->decor_theme, out_left, out_top, out_right, out_bottom);
 }
 
 static void view_prepare_for_manual_geometry(struct fbwl_server *server, struct fbwl_view *view) {

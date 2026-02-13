@@ -108,6 +108,7 @@ scripts=(
   scripts/fbwl-smoke-allow-remote-actions.sh
   scripts/fbwl-smoke-no-focus-while-typing.sh
   scripts/fbwl-smoke-apps-rules.sh
+  scripts/fbwl-smoke-apps-deco-mask.sh
   scripts/fbwl-smoke-apps-hidden.sh
   scripts/fbwl-smoke-apps-tab.sh
   scripts/fbwl-smoke-apps-matchlimit.sh

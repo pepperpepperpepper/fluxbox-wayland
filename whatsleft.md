@@ -24,10 +24,11 @@ The current Wayland theme implementation is intentionally simplified (mostly col
 
 ### Apps file (`fluxbox-apps(5)`)
 
-- [ ] `[Deco] {value}` parity:
+- [x] `[Deco] {value}` parity:
   - Accept the full preset set: `NORMAL`, `NONE`, `BORDER`, `TAB`, `TINY`, `TOOL`
-  - Support bitmask form and map flags onto the Wayland decoration implementation (titlebar/handle/border/buttons/tabs/focus-enabled)
-  - Ensure `apps` save/round-trip preserves unknown/bitmask values instead of collapsing to `{normal|none}`
+  - Support bitmask form and map flags onto the Wayland decoration implementation (titlebar/handle/border/buttons/tabs)
+  - Ensure `apps` save/round-trip preserves unknown/bitmask values (saved as `0x...`)
+  - Smoke: `scripts/fbwl-smoke-apps-deco-mask.sh`
 
 ### Keys / CmdLang (`fluxbox-keys(5)`)
 

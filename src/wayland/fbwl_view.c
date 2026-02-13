@@ -1,4 +1,5 @@
 #include "wayland/fbwl_view.h"
+#include "wayland/fbwl_deco_mask.h"
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -511,17 +512,20 @@ void fbwl_view_apply_tabs_maxover_box(const struct fbwl_view *view, struct wlr_b
     }
     const struct fbwl_screen_config *cfg = fbwl_server_screen_config_for_view(server, view);
     const struct fbwl_tabs_config *tabs = cfg != NULL ? &cfg->tabs : &server->tabs;
-    if (tabs->intitlebar || tabs->max_over) {
+    const bool intitlebar = tabs->intitlebar && (view->decor_mask & FBWL_DECORM_TITLEBAR) != 0;
+    if (intitlebar || tabs->max_over) {
         return;
     }
-    if (!view->decor_enabled || view->tab_group == NULL) {
+    if (!view->decor_enabled || view->tab_group == NULL || (view->decor_mask & FBWL_DECORM_TAB) == 0) {
         return;
     }
 
-    int border = server->decor_theme.border_width;
-    if (border < 0) {
-        border = 0;
-    }
+    int frame_left = 0;
+    int frame_top = 0;
+    int frame_right = 0;
+    int frame_bottom = 0;
+    fbwl_view_decor_frame_extents(view, &server->decor_theme, &frame_left, &frame_top, &frame_right, &frame_bottom);
+    int border = frame_left > frame_right ? frame_left : frame_right;
 
     int thickness = 0;
     switch (tabs->placement) {
@@ -699,17 +703,14 @@ void fbwl_view_place_initial(struct fbwl_view *view, struct fbwm_core *wm, struc
     }
     int frame_left = 0;
     int frame_top = 0;
-    int frame_w = fbwl_view_current_width(view);
-    int frame_h = fbwl_view_current_height(view);
-    if (view->decor_enabled && !view->fullscreen) {
-        const struct fbwl_decor_theme *theme = &view->server->decor_theme;
-        const int border = theme->border_width;
-        const int title_h = theme->title_height;
-        frame_left = border;
-        frame_top = title_h + border;
-        frame_w += 2 * border;
-        frame_h += title_h + 2 * border;
+    int frame_right = 0;
+    int frame_bottom = 0;
+    const struct fbwl_decor_theme *theme = view->server != NULL ? &view->server->decor_theme : NULL;
+    if (theme != NULL) {
+        fbwl_view_decor_frame_extents(view, theme, &frame_left, &frame_top, &frame_right, &frame_bottom);
     }
+    int frame_w = fbwl_view_current_width(view) + frame_left + frame_right;
+    int frame_h = fbwl_view_current_height(view) + frame_top + frame_bottom;
     int x = 0;
     int y = 0;
 
@@ -788,16 +789,13 @@ void fbwl_view_set_maximized(struct fbwl_view *view, bool maximized, struct wlr_
         const struct fbwl_decor_theme *theme = view->server != NULL ? &view->server->decor_theme : NULL;
         int frame_left = 0;
         int frame_top = 0;
-        int w = box.width;
-        int h = box.height;
-        if (view->decor_enabled && theme != NULL) {
-            const int border = theme->border_width;
-            const int title_h = theme->title_height;
-            frame_left = border;
-            frame_top = title_h + border;
-            w = box.width - 2 * border;
-            h = box.height - title_h - 2 * border;
+        int frame_right = 0;
+        int frame_bottom = 0;
+        if (theme != NULL) {
+            fbwl_view_decor_frame_extents(view, theme, &frame_left, &frame_top, &frame_right, &frame_bottom);
         }
+        int w = box.width - frame_left - frame_right;
+        int h = box.height - frame_top - frame_bottom;
         if (w < 1 || h < 1) {
             if (view->type == FBWL_VIEW_XDG && view->xdg_toplevel->base->initialized) {
                 wlr_xdg_surface_schedule_configure(view->xdg_toplevel->base);

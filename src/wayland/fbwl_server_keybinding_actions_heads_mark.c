@@ -96,17 +96,13 @@ static bool view_frame_metrics(const struct fbwl_server *server, const struct fb
 
     int left = 0;
     int top = 0;
-    int border = 0;
-    int frame_w = w;
-    int frame_h = h;
-    if (view->decor_enabled && !view->fullscreen) {
-        border = server->decor_theme.border_width;
-        const int title_h = server->decor_theme.title_height;
-        left = border;
-        top = title_h + border;
-        frame_w += 2 * border;
-        frame_h += title_h + 2 * border;
-    }
+    int right = 0;
+    int bottom = 0;
+    fbwl_view_decor_frame_extents(view, &server->decor_theme, &left, &top, &right, &bottom);
+
+    const int border = left > right ? left : right;
+    const int frame_w = w + left + right;
+    const int frame_h = h + top + bottom;
 
     *out_frame_x = view->x - left;
     *out_frame_y = view->y - top;
@@ -203,17 +199,18 @@ static void view_move_to_head(struct fbwl_server *server, struct fbwl_view *view
             h = view->saved_h > 0 ? view->saved_h : cur_h;
         }
 
-        if (view->decor_enabled) {
-            const int border = server->decor_theme.border_width;
-            const int title_h = server->decor_theme.title_height;
-            if (view->maximized_h || view->maximized) {
-                x += border;
-                w -= 2 * border;
-            }
-            if (view->maximized_v || view->maximized) {
-                y += title_h + border;
-                h -= title_h + 2 * border;
-            }
+        int frame_left = 0;
+        int frame_top = 0;
+        int frame_right = 0;
+        int frame_bottom = 0;
+        fbwl_view_decor_frame_extents(view, &server->decor_theme, &frame_left, &frame_top, &frame_right, &frame_bottom);
+        if (view->maximized_h || view->maximized) {
+            x += frame_left;
+            w -= frame_left + frame_right;
+        }
+        if (view->maximized_v || view->maximized) {
+            y += frame_top;
+            h -= frame_top + frame_bottom;
         }
         if (w < 1 || h < 1) {
             return;

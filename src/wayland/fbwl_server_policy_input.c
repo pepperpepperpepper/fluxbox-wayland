@@ -152,14 +152,15 @@ static void tile_view_half(struct fbwl_server *server, struct fbwl_view *view, b
     int y = frame_y;
     int w = frame_w;
     int h = frame_h;
-    if (view->decor_enabled) {
-        const int border = server->decor_theme.border_width;
-        const int title_h = server->decor_theme.title_height;
-        x += border;
-        y += title_h + border;
-        w -= 2 * border;
-        h -= title_h + 2 * border;
-    }
+    int frame_left = 0;
+    int frame_top = 0;
+    int frame_right = 0;
+    int frame_bottom = 0;
+    fbwl_view_decor_frame_extents(view, &server->decor_theme, &frame_left, &frame_top, &frame_right, &frame_bottom);
+    x += frame_left;
+    y += frame_top;
+    w -= frame_left + frame_right;
+    h -= frame_top + frame_bottom;
     if (w < 1 || h < 1) {
         return;
     }

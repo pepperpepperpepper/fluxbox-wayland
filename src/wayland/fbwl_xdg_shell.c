@@ -48,21 +48,9 @@ static bool point_in_view_frame(const struct fbwl_view *view, int content_w, int
         return false;
     }
 
-    int left = 0;
-    int top = 0;
-    int right = 0;
-    int bottom = 0;
-    if (view->decor_enabled && !view->fullscreen && view->server != NULL) {
-        const int border = view->server->decor_theme.border_width;
-        const int title_h = view->server->decor_theme.title_height;
-        if (border > 0) {
-            left = border;
-            right = border;
-            bottom = border;
-        }
-        if (title_h > 0) {
-            top = title_h + border;
-        }
+    int left = 0, top = 0, right = 0, bottom = 0;
+    if (view->server != NULL) {
+        fbwl_view_decor_frame_extents(view, &view->server->decor_theme, &left, &top, &right, &bottom);
     }
 
     const double frame_x = (double)view->x - (double)left;
@@ -249,7 +237,7 @@ void fbwl_xdg_shell_handle_toplevel_map(struct fbwl_view *view,
         view->apps_rules_applied = true;
 
         wlr_log(WLR_INFO,
-            "Apps: applied title=%s app_id=%s workspace_id=%d sticky=%d jump=%d minimized=%d maximized=%d fullscreen=%d shaded=%d alpha=%d,%d focus_protect=0x%x group_id=%d deco=%d layer=%d head=%d dims=%d%sx%d%s pos=%d%s,%d%s anchor=%d",
+            "Apps: applied title=%s app_id=%s workspace_id=%d sticky=%d jump=%d minimized=%d maximized=%d fullscreen=%d shaded=%d alpha=%d,%d focus_protect=0x%x group_id=%d deco=0x%x layer=%d head=%d dims=%d%sx%d%s pos=%d%s,%d%s anchor=%d",
             fbwl_view_display_title(view),
             fbwl_view_app_id(view) != NULL ? fbwl_view_app_id(view) : "(no-app-id)",
             apps_rule->set_workspace ? apps_rule->workspace : -1,
@@ -263,7 +251,7 @@ void fbwl_xdg_shell_handle_toplevel_map(struct fbwl_view *view,
             apps_rule->set_alpha ? apps_rule->alpha_unfocused : -1,
             apps_rule->set_focus_protection ? (unsigned int)apps_rule->focus_protection : 0u,
             apps_rule->group_id,
-            apps_rule->set_decor ? (apps_rule->decor_enabled ? 1 : 0) : -1,
+            apps_rule->set_decor ? (unsigned int)apps_rule->decor_mask : 0u,
             apps_rule->set_layer ? apps_rule->layer : -1,
             apps_rule->set_head ? apps_rule->head : -1,
             apps_rule->set_dimensions ? apps_rule->width : -1,

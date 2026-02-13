@@ -9,6 +9,7 @@
 #include <wlr/util/log.h>
 #include <wlr/xwayland.h>
 
+#include "wayland/fbwl_deco_mask.h"
 #include "wayland/fbwl_icon_theme.h"
 #include "wayland/fbwl_server_internal.h"
 #include "wayland/fbwl_ui_decor_theme.h"
@@ -43,6 +44,49 @@ static int decor_theme_button_size(const struct fbwl_decor_theme *theme) {
         size = 1;
     }
     return size;
+}
+
+static bool view_decor_button_allowed(const struct fbwl_view *view, enum fbwl_decor_hit_kind kind) {
+    if (view == NULL) {
+        return false;
+    }
+    if ((view->decor_mask & FBWL_DECORM_TITLEBAR) == 0) {
+        return false;
+    }
+
+    switch (kind) {
+    case FBWL_DECOR_HIT_BTN_MENU:
+        return (view->decor_mask & FBWL_DECORM_MENU) != 0;
+    case FBWL_DECOR_HIT_BTN_SHADE:
+        return (view->decor_mask & FBWL_DECORM_SHADE) != 0;
+    case FBWL_DECOR_HIT_BTN_STICK:
+        return (view->decor_mask & FBWL_DECORM_STICKY) != 0;
+    case FBWL_DECOR_HIT_BTN_CLOSE:
+        return (view->decor_mask & FBWL_DECORM_CLOSE) != 0;
+    case FBWL_DECOR_HIT_BTN_MAX:
+        return (view->decor_mask & FBWL_DECORM_MAXIMIZE) != 0;
+    case FBWL_DECOR_HIT_BTN_MIN:
+        return (view->decor_mask & FBWL_DECORM_ICONIFY) != 0;
+    case FBWL_DECOR_HIT_BTN_LHALF:
+    case FBWL_DECOR_HIT_BTN_RHALF:
+        return (view->decor_mask & FBWL_DECORM_MAXIMIZE) != 0;
+    default:
+        return false;
+    }
+}
+
+static size_t view_decor_visible_buttons(const struct fbwl_view *view,
+        const enum fbwl_decor_hit_kind *buttons, size_t len) {
+    if (view == NULL || buttons == NULL || len == 0) {
+        return 0;
+    }
+    size_t n = 0;
+    for (size_t i = 0; i < len; i++) {
+        if (view_decor_button_allowed(view, buttons[i])) {
+            n++;
+        }
+    }
+    return n;
 }
 
 static struct wlr_scene_rect *decor_button_rect(struct fbwl_view *view, enum fbwl_decor_hit_kind kind) {
@@ -189,7 +233,7 @@ static void view_tabs_ui_build(struct fbwl_view *view, const struct fbwl_decor_t
 
     view_tabs_ui_clear(view);
 
-    if (!view->decor_enabled || view->fullscreen || view->tab_group == NULL) {
+    if (!view->decor_enabled || view->fullscreen || view->tab_group == NULL || (view->decor_mask & FBWL_DECORM_TAB) == 0) {
         return;
     }
 
@@ -216,14 +260,18 @@ static void view_tabs_ui_build(struct fbwl_view *view, const struct fbwl_decor_t
     if (border < 0) {
         border = 0;
     }
+    if ((view->decor_mask & FBWL_DECORM_BORDER) == 0) {
+        border = 0;
+    }
 
     int title_h = theme->title_height;
     if (title_h < 1) {
         title_h = 24;
     }
 
+    const bool intitlebar = tabs->intitlebar && (view->decor_mask & FBWL_DECORM_TITLEBAR) != 0;
     const enum fbwl_tabs_edge edge = tabs_placement_edge(tabs->placement);
-    const bool vertical = !tabs->intitlebar && (edge == FBWL_TABS_EDGE_LEFT || edge == FBWL_TABS_EDGE_RIGHT);
+    const bool vertical = !intitlebar && (edge == FBWL_TABS_EDGE_LEFT || edge == FBWL_TABS_EDGE_RIGHT);
 
     int thickness = title_h;
     if (vertical) {
@@ -236,16 +284,16 @@ static void view_tabs_ui_build(struct fbwl_view *view, const struct fbwl_decor_t
         }
     }
 
-    int frame_x = 0;
-    int frame_y = 0;
-    int frame_w = w;
-    int frame_h = h;
-    if (view->decor_enabled) {
-        frame_x = -border;
-        frame_y = -title_h - border;
-        frame_w = w + 2 * border;
-        frame_h = h + title_h + 2 * border;
-    }
+    int left = 0;
+    int top = 0;
+    int right = 0;
+    int bottom = 0;
+    fbwl_view_decor_frame_extents(view, theme, &left, &top, &right, &bottom);
+
+    int frame_x = -left;
+    int frame_y = -top;
+    int frame_w = w + left + right;
+    int frame_h = h + top + bottom;
     if (frame_w < 1 || frame_h < 1) {
         return;
     }
@@ -255,15 +303,17 @@ static void view_tabs_ui_build(struct fbwl_view *view, const struct fbwl_decor_t
     int region_w = 0;
     int region_h = 0;
 
-    if (tabs->intitlebar) {
+    if (intitlebar) {
         // Inside titlebar: always horizontal.
         const int btn_size = decor_theme_button_size(theme);
         const size_t left_len = view->server->titlebar_left_len;
         const size_t right_len = view->server->titlebar_right_len;
+        const size_t left_vis = view_decor_visible_buttons(view, view->server->titlebar_left, left_len);
+        const size_t right_vis = view_decor_visible_buttons(view, view->server->titlebar_right, right_len);
         const int reserved_left = theme->button_margin +
-            (left_len > 0 ? ((int)left_len * btn_size) + ((int)(left_len - 1) * theme->button_spacing) + theme->button_margin : 0);
+            (left_vis > 0 ? ((int)left_vis * btn_size) + ((int)(left_vis - 1) * theme->button_spacing) + theme->button_margin : 0);
         const int reserved_right = theme->button_margin +
-            (right_len > 0 ? ((int)right_len * btn_size) + ((int)(right_len - 1) * theme->button_spacing) + theme->button_margin : 0);
+            (right_vis > 0 ? ((int)right_vis * btn_size) + ((int)(right_vis - 1) * theme->button_spacing) + theme->button_margin : 0);
 
         region_x = reserved_left;
         region_y = -title_h;
@@ -492,7 +542,7 @@ static void view_tabs_ui_build(struct fbwl_view *view, const struct fbwl_decor_t
 
     wlr_log(WLR_INFO, "TabsUI: bar title=%s intitlebar=%d placement=%s vertical=%d x=%d y=%d w=%d h=%d tabs=%zu",
         fbwl_view_display_title(view),
-        tabs->intitlebar ? 1 : 0,
+        intitlebar ? 1 : 0,
         fbwl_toolbar_placement_str(tabs->placement),
         vertical ? 1 : 0,
         view->x + bar_x, view->y + bar_y, bar_w, bar_h, tab_count);
@@ -502,9 +552,78 @@ void fbwl_view_decor_apply_enabled(struct fbwl_view *view) {
     if (view == NULL || view->decor_tree == NULL) {
         return;
     }
-    const bool show = view->decor_enabled && !view->fullscreen;
+    const bool show = view->decor_enabled && !view->fullscreen && fbwl_deco_mask_has_frame(view->decor_mask);
     wlr_scene_node_set_enabled(&view->decor_tree->node, show);
 }
+
+void fbwl_view_decor_frame_extents(const struct fbwl_view *view, const struct fbwl_decor_theme *theme,
+        int *left, int *top, int *right, int *bottom) {
+    if (left != NULL) {
+        *left = 0;
+    }
+    if (top != NULL) {
+        *top = 0;
+    }
+    if (right != NULL) {
+        *right = 0;
+    }
+    if (bottom != NULL) {
+        *bottom = 0;
+    }
+
+    if (view == NULL || theme == NULL || !view->decor_enabled || view->fullscreen) {
+        return;
+    }
+
+    const uint32_t mask = view->decor_mask;
+    if (!fbwl_deco_mask_has_frame(mask)) {
+        return;
+    }
+
+    int border = theme->border_width;
+    if (border < 0) {
+        border = 0;
+    }
+    int title_h = theme->title_height;
+    if (title_h < 0) {
+        title_h = 0;
+    }
+
+    const bool has_titlebar = (mask & FBWL_DECORM_TITLEBAR) != 0;
+    const bool has_border = (mask & FBWL_DECORM_BORDER) != 0;
+    const bool has_handle = (mask & FBWL_DECORM_HANDLE) != 0 && !view->shaded;
+
+    if (has_border && border > 0) {
+        if (left != NULL) {
+            *left = border;
+        }
+        if (right != NULL) {
+            *right = border;
+        }
+        if (bottom != NULL) {
+            *bottom = border;
+        }
+    } else if (has_handle && border > 0) {
+        if (bottom != NULL) {
+            *bottom = border;
+        }
+    }
+
+    if (has_titlebar && title_h > 0) {
+        int t = title_h;
+        if (has_border && border > 0) {
+            t += border;
+        }
+        if (top != NULL) {
+            *top = t;
+        }
+    } else if (has_border && border > 0) {
+        if (top != NULL) {
+            *top = border;
+        }
+    }
+}
+
 void fbwl_view_decor_set_active(struct fbwl_view *view, const struct fbwl_decor_theme *theme, bool active) {
     if (view == NULL || theme == NULL) {
         return;
@@ -522,25 +641,26 @@ void fbwl_view_decor_update_title_text(struct fbwl_view *view, const struct fbwl
     if (view == NULL || view->decor_tree == NULL || theme == NULL) {
         return;
     }
-    const int title_h = theme->title_height;
-    const int w = fbwl_view_current_width(view);
-    if (w < 1 || title_h < 1) {
-        return;
-    }
     if (view->decor_title_text == NULL) {
         view->decor_title_text = wlr_scene_buffer_create(view->decor_tree, NULL);
         if (view->decor_title_text == NULL) {
             return;
         }
     }
-    if (!view->decor_enabled || view->fullscreen) {
+
+    const bool titlebar_on = view->decor_enabled && !view->fullscreen && (view->decor_mask & FBWL_DECORM_TITLEBAR) != 0;
+    const int title_h = titlebar_on ? theme->title_height : 0;
+    const int w = fbwl_view_current_width(view);
+
+    if (!titlebar_on || w < 1 || title_h < 1) {
         wlr_scene_buffer_set_buffer(view->decor_title_text, NULL);
         view->decor_title_text_cache_w = 0;
         return;
     }
 
     const struct fbwl_tabs_config *tabs = view_tabs_cfg(view);
-    if (tabs != NULL && tabs->intitlebar && view->tab_group != NULL && fbwl_tabs_group_mapped_count(view) >= 2) {
+    if (tabs != NULL && tabs->intitlebar && (view->decor_mask & FBWL_DECORM_TAB) != 0 &&
+            view->tab_group != NULL && fbwl_tabs_group_mapped_count(view) >= 2) {
         wlr_scene_buffer_set_buffer(view->decor_title_text, NULL);
         view->decor_title_text_cache_w = 0;
         return;
@@ -553,12 +673,15 @@ void fbwl_view_decor_update_title_text(struct fbwl_view *view, const struct fbwl
         return;
     }
     const int btn_size = decor_theme_button_size(theme);
-    const size_t left_len = view->server != NULL ? view->server->titlebar_left_len : 0;
-    const size_t right_len = view->server != NULL ? view->server->titlebar_right_len : 0;
+    const struct fbwl_server *server = view->server;
+    const size_t left_len = server != NULL ? server->titlebar_left_len : 0;
+    const size_t right_len = server != NULL ? server->titlebar_right_len : 0;
+    const size_t left_vis = server != NULL ? view_decor_visible_buttons(view, server->titlebar_left, left_len) : 0;
+    const size_t right_vis = server != NULL ? view_decor_visible_buttons(view, server->titlebar_right, right_len) : 0;
     const int reserved_left = theme->button_margin +
-        (left_len > 0 ? ((int)left_len * btn_size) + ((int)(left_len - 1) * theme->button_spacing) + theme->button_margin : 0);
+        (left_vis > 0 ? ((int)left_vis * btn_size) + ((int)(left_vis - 1) * theme->button_spacing) + theme->button_margin : 0);
     const int reserved_right = theme->button_margin +
-        (right_len > 0 ? ((int)right_len * btn_size) + ((int)(right_len - 1) * theme->button_spacing) + theme->button_margin : 0);
+        (right_vis > 0 ? ((int)right_vis * btn_size) + ((int)(right_vis - 1) * theme->button_spacing) + theme->button_margin : 0);
     int text_x = reserved_left;
     int text_w = w - reserved_left - reserved_right;
     if (text_w < 1) {
@@ -612,32 +735,69 @@ void fbwl_view_decor_update(struct fbwl_view *view, const struct fbwl_decor_them
     if (view->shaded) {
         h = 0;
     }
-    const int border = theme->border_width;
-    const int title_h = theme->title_height;
+
+    const uint32_t mask = view->decor_mask;
+    int border_px = theme->border_width;
+    if (border_px < 0) {
+        border_px = 0;
+    }
+    int title_h_px = theme->title_height;
+    if (title_h_px < 0) {
+        title_h_px = 0;
+    }
+
+    const bool titlebar_on = view->decor_enabled && !view->fullscreen && (mask & FBWL_DECORM_TITLEBAR) != 0;
+    const bool border_on = view->decor_enabled && !view->fullscreen && (mask & FBWL_DECORM_BORDER) != 0;
+    const bool handle_on = view->decor_enabled && !view->fullscreen && !view->shaded && (mask & FBWL_DECORM_HANDLE) != 0;
+
+    const int frame_title_h = titlebar_on ? title_h_px : 0;
+    const int bottom_thick = border_on ? border_px : (handle_on ? border_px : 0);
+
+    const bool show_titlebar = titlebar_on && frame_title_h > 0;
+    const bool show_border = border_on && border_px > 0;
+    const bool show_bottom = bottom_thick > 0;
+
     if (view->decor_titlebar != NULL) {
-        wlr_scene_rect_set_size(view->decor_titlebar, w, title_h);
-        wlr_scene_node_set_position(&view->decor_titlebar->node, 0, -title_h);
-        const float *color = view->decor_active ? theme->titlebar_active : theme->titlebar_inactive;
-        wlr_scene_rect_set_color(view->decor_titlebar, color);
+        wlr_scene_node_set_enabled(&view->decor_titlebar->node, show_titlebar);
+        if (show_titlebar) {
+            wlr_scene_rect_set_size(view->decor_titlebar, w, frame_title_h);
+            wlr_scene_node_set_position(&view->decor_titlebar->node, 0, -frame_title_h);
+            const float *color = view->decor_active ? theme->titlebar_active : theme->titlebar_inactive;
+            wlr_scene_rect_set_color(view->decor_titlebar, color);
+        }
     }
     if (view->decor_border_top != NULL) {
-        wlr_scene_rect_set_size(view->decor_border_top, w + 2 * border, border);
-        wlr_scene_node_set_position(&view->decor_border_top->node, -border, -title_h - border);
+        wlr_scene_node_set_enabled(&view->decor_border_top->node, show_border);
+        if (show_border) {
+            wlr_scene_rect_set_size(view->decor_border_top, w + 2 * border_px, border_px);
+            wlr_scene_node_set_position(&view->decor_border_top->node, -border_px, -frame_title_h - border_px);
+        }
     }
     if (view->decor_border_bottom != NULL) {
-        wlr_scene_rect_set_size(view->decor_border_bottom, w + 2 * border, border);
-        wlr_scene_node_set_position(&view->decor_border_bottom->node, -border, h);
+        wlr_scene_node_set_enabled(&view->decor_border_bottom->node, show_bottom);
+        if (show_bottom) {
+            const int bw = border_on ? (w + 2 * border_px) : w;
+            const int bx = border_on ? -border_px : 0;
+            wlr_scene_rect_set_size(view->decor_border_bottom, bw, bottom_thick);
+            wlr_scene_node_set_position(&view->decor_border_bottom->node, bx, h);
+        }
     }
     if (view->decor_border_left != NULL) {
-        wlr_scene_rect_set_size(view->decor_border_left, border, title_h + border + h + border);
-        wlr_scene_node_set_position(&view->decor_border_left->node, -border, -title_h - border);
+        wlr_scene_node_set_enabled(&view->decor_border_left->node, show_border);
+        if (show_border) {
+            wlr_scene_rect_set_size(view->decor_border_left, border_px, frame_title_h + border_px + h + border_px);
+            wlr_scene_node_set_position(&view->decor_border_left->node, -border_px, -frame_title_h - border_px);
+        }
     }
     if (view->decor_border_right != NULL) {
-        wlr_scene_rect_set_size(view->decor_border_right, border, title_h + border + h + border);
-        wlr_scene_node_set_position(&view->decor_border_right->node, w, -title_h - border);
+        wlr_scene_node_set_enabled(&view->decor_border_right->node, show_border);
+        if (show_border) {
+            wlr_scene_rect_set_size(view->decor_border_right, border_px, frame_title_h + border_px + h + border_px);
+            wlr_scene_node_set_position(&view->decor_border_right->node, w, -frame_title_h - border_px);
+        }
     }
     const int btn_size = decor_theme_button_size(theme);
-    const int btn_y = -title_h + theme->button_margin;
+    const int btn_y = -frame_title_h + theme->button_margin;
     struct wlr_scene_rect *btns[] = { view->decor_btn_menu, view->decor_btn_shade, view->decor_btn_stick,
         view->decor_btn_close, view->decor_btn_max, view->decor_btn_min, view->decor_btn_lhalf, view->decor_btn_rhalf };
     for (size_t i = 0; i < sizeof(btns) / sizeof(btns[0]); i++) {
@@ -647,10 +807,14 @@ void fbwl_view_decor_update(struct fbwl_view *view, const struct fbwl_decor_them
     }
 
     const struct fbwl_server *server = view->server;
-    if (server != NULL) {
+    if (server != NULL && show_titlebar) {
         int btn_x = theme->button_margin;
         for (size_t i = 0; i < server->titlebar_left_len; i++) {
-            struct wlr_scene_rect *rect = decor_button_rect(view, server->titlebar_left[i]);
+            const enum fbwl_decor_hit_kind kind = server->titlebar_left[i];
+            if (!view_decor_button_allowed(view, kind)) {
+                continue;
+            }
+            struct wlr_scene_rect *rect = decor_button_rect(view, kind);
             if (rect != NULL) {
                 wlr_scene_rect_set_size(rect, btn_size, btn_size);
                 wlr_scene_node_set_position(&rect->node, btn_x, btn_y);
@@ -660,7 +824,11 @@ void fbwl_view_decor_update(struct fbwl_view *view, const struct fbwl_decor_them
         }
         btn_x = w - theme->button_margin - btn_size;
         for (size_t i = server->titlebar_right_len; i-- > 0; ) {
-            struct wlr_scene_rect *rect = decor_button_rect(view, server->titlebar_right[i]);
+            const enum fbwl_decor_hit_kind kind = server->titlebar_right[i];
+            if (!view_decor_button_allowed(view, kind)) {
+                continue;
+            }
+            struct wlr_scene_rect *rect = decor_button_rect(view, kind);
             if (rect != NULL) {
                 wlr_scene_rect_set_size(rect, btn_size, btn_size);
                 wlr_scene_node_set_position(&rect->node, btn_x, btn_y);
@@ -697,6 +865,7 @@ void fbwl_view_decor_create(struct fbwl_view *view, const struct fbwl_decor_them
         view->decor_btn_rhalf = wlr_scene_rect_create(view->decor_tree, 1, 1, theme->btn_rhalf_color);
     }
     view->decor_enabled = false;
+    view->decor_mask = FBWL_DECOR_NORMAL;
     view->decor_active = false;
     wlr_scene_node_set_enabled(&view->decor_tree->node, false);
     fbwl_view_decor_update(view, theme);
@@ -715,6 +884,9 @@ struct fbwl_decor_hit fbwl_view_decor_hit_test(const struct fbwl_view *view, con
             !view->decor_enabled || view->fullscreen) {
         return hit;
     }
+    if (!fbwl_deco_mask_has_frame(view->decor_mask)) {
+        return hit;
+    }
     const int w = fbwl_view_current_width(view);
     int h = fbwl_view_current_height(view);
     if (w < 1 || (!view->shaded && h < 1)) {
@@ -723,56 +895,79 @@ struct fbwl_decor_hit fbwl_view_decor_hit_test(const struct fbwl_view *view, con
     if (view->shaded) {
         h = 0;
     }
-    const int border = theme->border_width;
-    const int title_h = theme->title_height;
+
+    int left = 0;
+    int top = 0;
+    int right = 0;
+    int bottom = 0;
+    fbwl_view_decor_frame_extents(view, theme, &left, &top, &right, &bottom);
+
+    int border = (view->decor_mask & FBWL_DECORM_BORDER) != 0 ? theme->border_width : 0;
+    if (border < 0) {
+        border = 0;
+    }
+    const bool titlebar_on = (view->decor_mask & FBWL_DECORM_TITLEBAR) != 0;
+    int title_h = titlebar_on ? theme->title_height : 0;
+    if (title_h < 0) {
+        title_h = 0;
+    }
+
     const int btn_size = decor_theme_button_size(theme);
     const int btn_margin = theme->button_margin;
     const double x = lx - view->x;
     const double y = ly - view->y;
-    if (x < -border || x >= w + border) {
+    if (x < -left || x >= w + right) {
         return hit;
     }
-    if (y < -title_h - border || y >= h + border) {
+    if (y < -top || y >= h + bottom) {
         return hit;
     }
     // Titlebar buttons
-    if (y >= -title_h + btn_margin && y < -title_h + btn_margin + btn_size) {
+    if (titlebar_on && y >= -title_h + btn_margin && y < -title_h + btn_margin + btn_size) {
         const struct fbwl_server *server = view->server;
         const size_t right_len = server != NULL ? server->titlebar_right_len : 0;
         const size_t left_len = server != NULL ? server->titlebar_left_len : 0;
         int btn_x = w - btn_margin - btn_size;
         for (size_t i = right_len; i-- > 0; ) {
+            const enum fbwl_decor_hit_kind kind = server->titlebar_right[i];
+            if (!view_decor_button_allowed(view, kind)) {
+                continue;
+            }
             if (x >= btn_x && x < btn_x + btn_size) {
-                hit.kind = server->titlebar_right[i];
+                hit.kind = kind;
                 return hit;
             }
             btn_x -= btn_size + theme->button_spacing;
         }
         btn_x = btn_margin;
         for (size_t i = 0; i < left_len; i++) {
+            const enum fbwl_decor_hit_kind kind = server->titlebar_left[i];
+            if (!view_decor_button_allowed(view, kind)) {
+                continue;
+            }
             if (x >= btn_x && x < btn_x + btn_size) {
-                hit.kind = server->titlebar_left[i];
+                hit.kind = kind;
                 return hit;
             }
             btn_x += btn_size + theme->button_spacing;
         }
     }
     // Titlebar drag
-    if (y >= -title_h && y < 0) {
+    if (titlebar_on && y >= -title_h && y < 0) {
         hit.kind = FBWL_DECOR_HIT_TITLEBAR;
         return hit;
     }
     uint32_t edges = WLR_EDGE_NONE;
-    if (x >= -border && x < 0) {
+    if (border > 0 && x >= -border && x < 0) {
         edges |= WLR_EDGE_LEFT;
     }
-    if (x >= w && x < w + border) {
+    if (border > 0 && x >= w && x < w + border) {
         edges |= WLR_EDGE_RIGHT;
     }
-    if (y >= -title_h - border && y < -title_h) {
+    if (border > 0 && y >= -title_h - border && y < -title_h) {
         edges |= WLR_EDGE_TOP;
     }
-    if (y >= h && y < h + border) {
+    if (bottom > 0 && y >= h && y < h + bottom) {
         edges |= WLR_EDGE_BOTTOM;
     }
     if (edges != WLR_EDGE_NONE) {
@@ -783,7 +978,7 @@ struct fbwl_decor_hit fbwl_view_decor_hit_test(const struct fbwl_view *view, con
 }
 
 bool fbwl_view_tabs_bar_contains(const struct fbwl_view *view, double lx, double ly) {
-    if (view == NULL || view->decor_tree == NULL || !view->decor_enabled || view->fullscreen) {
+    if (view == NULL || view->decor_tree == NULL || !view->decor_enabled || view->fullscreen || (view->decor_mask & FBWL_DECORM_TAB) == 0) {
         return false;
     }
     if (view->decor_tab_count < 1 || view->decor_tab_item_lx == NULL || view->decor_tab_item_w == NULL) {

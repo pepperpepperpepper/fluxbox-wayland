@@ -186,26 +186,10 @@ static void view_frame_extents(const struct fbwl_view *view, int *left, int *top
     if (bottom != NULL) {
         *bottom = 0;
     }
-    if (view == NULL || !view->decor_enabled || view->fullscreen || view->server == NULL) {
+    if (view == NULL || view->server == NULL) {
         return;
     }
-    const int border = view->server->decor_theme.border_width;
-    const int title_h = view->server->decor_theme.title_height;
-    if (border < 0 || title_h < 0) {
-        return;
-    }
-    if (left != NULL) {
-        *left = border;
-    }
-    if (right != NULL) {
-        *right = border;
-    }
-    if (top != NULL) {
-        *top = title_h + border;
-    }
-    if (bottom != NULL) {
-        *bottom = border;
-    }
+    fbwl_view_decor_frame_extents(view, &view->server->decor_theme, left, top, right, bottom);
 }
 
 void fbwl_grab_begin_move(struct fbwl_grab *grab, struct fbwl_view *view, struct wlr_cursor *cursor,

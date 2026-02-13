@@ -144,15 +144,16 @@ static bool fbwl_wm_view_get_box(const struct fbwm_view *wm_view, struct fbwm_bo
     int fw = w;
     int fh = h;
 
-    if (view->decor_enabled && !view->fullscreen) {
-        const struct fbwl_decor_theme *theme = &view->server->decor_theme;
-        const int border = theme->border_width;
-        const int title_h = theme->title_height;
-
-        x -= border;
-        y -= title_h + border;
-        fw += 2 * border;
-        fh += title_h + 2 * border;
+    if (view->server != NULL) {
+        int left = 0;
+        int top = 0;
+        int right = 0;
+        int bottom = 0;
+        fbwl_view_decor_frame_extents(view, &view->server->decor_theme, &left, &top, &right, &bottom);
+        x -= left;
+        y -= top;
+        fw += left + right;
+        fh += top + bottom;
     }
 
     *out = (struct fbwm_box){

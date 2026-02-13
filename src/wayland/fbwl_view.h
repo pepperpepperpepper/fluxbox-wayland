@@ -40,6 +40,7 @@ struct fbwl_view {
     struct wlr_scene_tree *base_layer;
     struct fbwl_pseudo_bg pseudo_bg;
     bool decor_enabled;
+    uint32_t decor_mask;
     bool decor_active;
     bool decor_forced;
     bool xdg_decoration_server_side;
@@ -201,6 +202,8 @@ void fbwl_view_decor_update_title_text(struct fbwl_view *view, const struct fbwl
 void fbwl_view_decor_update(struct fbwl_view *view, const struct fbwl_decor_theme *theme);
 void fbwl_view_decor_create(struct fbwl_view *view, const struct fbwl_decor_theme *theme);
 void fbwl_view_decor_set_enabled(struct fbwl_view *view, bool enabled);
+void fbwl_view_decor_frame_extents(const struct fbwl_view *view, const struct fbwl_decor_theme *theme,
+        int *left, int *top, int *right, int *bottom);
 struct fbwl_decor_hit fbwl_view_decor_hit_test(const struct fbwl_view *view, const struct fbwl_decor_theme *theme,
         double lx, double ly);
 

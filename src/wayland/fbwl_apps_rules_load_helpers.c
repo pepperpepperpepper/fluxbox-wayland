@@ -347,7 +347,7 @@ void apps_rule_apply_attrs(struct fbwl_apps_rule *rule, const struct fbwl_apps_r
     }
     if (attrs->set_decor) {
         rule->set_decor = true;
-        rule->decor_enabled = attrs->decor_enabled;
+        rule->decor_mask = attrs->decor_mask;
     }
     if (attrs->set_layer) {
         rule->set_layer = true;

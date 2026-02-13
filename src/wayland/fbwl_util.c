@@ -1,6 +1,8 @@
 #include "wayland/fbwl_util.h"
+#include "wayland/fbwl_deco_mask.h"
 
 #include <ctype.h>
+#include <errno.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -758,4 +760,84 @@ void fbwl_view_pseudo_bg_update(struct fbwl_view *view, const char *why) {
         bounds.min_x, bounds.min_y, rel_x, rel_y, w, h,
         view->server->wallpaper_mode,
         view->server->wallpaper_buf, view->server->background_color);
+}
+
+bool fbwl_deco_mask_parse(const char *s, uint32_t *out_mask) {
+    if (out_mask != NULL) {
+        *out_mask = 0u;
+    }
+    if (s == NULL || out_mask == NULL) {
+        return false;
+    }
+
+    while (*s != '\0' && isspace((unsigned char)*s)) {
+        s++;
+    }
+    if (*s == '\0') {
+        return false;
+    }
+
+    if (strcasecmp(s, "none") == 0) {
+        *out_mask = FBWL_DECOR_NONE;
+        return true;
+    }
+    if (strcasecmp(s, "normal") == 0) {
+        *out_mask = FBWL_DECOR_NORMAL;
+        return true;
+    }
+    if (strcasecmp(s, "tiny") == 0) {
+        *out_mask = FBWL_DECOR_TINY;
+        return true;
+    }
+    if (strcasecmp(s, "tool") == 0) {
+        *out_mask = FBWL_DECOR_TOOL;
+        return true;
+    }
+    if (strcasecmp(s, "border") == 0) {
+        *out_mask = FBWL_DECOR_BORDER;
+        return true;
+    }
+    if (strcasecmp(s, "tab") == 0) {
+        *out_mask = FBWL_DECOR_TAB;
+        return true;
+    }
+
+    errno = 0;
+    char *end = NULL;
+    long long v = strtoll(s, &end, 0);
+    if (end == s || end == NULL) {
+        return false;
+    }
+    while (*end != '\0' && isspace((unsigned char)*end)) {
+        end++;
+    }
+    if (*end != '\0') {
+        return false;
+    }
+    if (errno == ERANGE) {
+        return false;
+    }
+
+    *out_mask = (uint32_t)v;
+    return true;
+}
+
+const char *fbwl_deco_mask_preset_name(uint32_t mask) {
+    switch (mask) {
+    case 0u:
+        return "NONE";
+    case 0xffffffffu:
+    case FBWL_DECOR_NORMAL:
+        return "NORMAL";
+    case FBWL_DECOR_TOOL:
+        return "TOOL";
+    case FBWL_DECOR_TINY:
+        return "TINY";
+    case FBWL_DECOR_BORDER:
+        return "BORDER";
+    case FBWL_DECOR_TAB:
+        return "TAB";
+    default:
+        return NULL;
+    }
 }

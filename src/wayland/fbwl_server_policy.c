@@ -23,6 +23,7 @@
 
 #include "wayland/fbwl_apps_remember.h"
 #include "wayland/fbwl_cursor.h"
+#include "wayland/fbwl_deco_mask.h"
 #include "wayland/fbwl_output.h"
 #include "wayland/fbwl_screen_map.h"
 #include "wayland/fbwl_server_internal.h"
@@ -245,17 +246,11 @@ void server_grab_update(struct fbwl_server *server) {
         if (server->grab.mode == FBWL_CURSOR_MOVE) {
             int pos_x = server->grab.pending_x;
             int pos_y = server->grab.pending_y;
-            if (view->decor_enabled && !view->fullscreen) {
-                const int border = server->decor_theme.border_width;
-                const int title_h = server->decor_theme.title_height;
-                if (border > 0) {
-                    pos_x -= border;
-                    pos_y -= border;
-                }
-                if (title_h > 0) {
-                    pos_y -= title_h;
-                }
-            }
+            int frame_left = 0;
+            int frame_top = 0;
+            fbwl_view_decor_frame_extents(view, &server->decor_theme, &frame_left, &frame_top, NULL, NULL);
+            pos_x -= frame_left;
+            pos_y -= frame_top;
             fbwl_ui_osd_show_window_position(&server->move_osd_ui, server->scene, server->layer_top,
                 &server->decor_theme, server->output_layout, pos_x, pos_y);
         } else if (server->grab.mode == FBWL_CURSOR_RESIZE) {
@@ -574,7 +569,9 @@ void server_apps_rules_apply_pre_map(struct fbwl_view *view,
 
     if (rule->set_decor) {
         view->decor_forced = true;
-        fbwl_view_decor_set_enabled(view, rule->decor_enabled);
+        view->decor_mask = rule->decor_mask;
+        fbwl_view_decor_set_enabled(view, fbwl_deco_mask_has_frame(rule->decor_mask));
+        fbwl_view_decor_update(view, &server->decor_theme);
     }
 
     if (rule->set_alpha) {
@@ -917,7 +914,7 @@ void server_apps_rules_save_on_close(struct fbwl_view *view) {
         rule->focus_protection = view->focus_protection;
     }
     if (rule->set_decor) {
-        rule->decor_enabled = view->decor_enabled;
+        rule->decor_mask = view->decor_enabled ? view->decor_mask : FBWL_DECOR_NONE;
     }
 
     if (rule->set_head && out != NULL && server->output_layout != NULL) {
@@ -943,18 +940,14 @@ void server_apps_rules_save_on_close(struct fbwl_view *view) {
         }
 
         if (rule->set_position) {
-            const struct fbwl_decor_theme *theme = &server->decor_theme;
-            const int border = view->decor_enabled ? theme->border_width : 0;
-            const int title_h = view->decor_enabled ? theme->title_height : 0;
+            int frame_left = 0;
+            int frame_top = 0;
+            int frame_right = 0;
+            int frame_bottom = 0;
+            fbwl_view_decor_frame_extents(view, &server->decor_theme, &frame_left, &frame_top, &frame_right, &frame_bottom);
 
-            const int frame_left = view->decor_enabled ? border : 0;
-            const int frame_top = view->decor_enabled ? title_h + border : 0;
-            int frame_w = gw;
-            int frame_h = gh;
-            if (view->decor_enabled) {
-                frame_w += 2 * border;
-                frame_h += title_h + 2 * border;
-            }
+            const int frame_w = gw + frame_left + frame_right;
+            const int frame_h = gh + frame_top + frame_bottom;
 
             const int frame_x = gx - frame_left;
             const int frame_y = gy - frame_top;

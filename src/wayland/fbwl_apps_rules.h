@@ -101,7 +101,7 @@ struct fbwl_apps_rule {
     uint32_t focus_protection;
 
     bool set_decor;
-    bool decor_enabled;
+    uint32_t decor_mask;
 
     bool set_layer;
     int layer;

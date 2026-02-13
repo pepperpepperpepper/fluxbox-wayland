@@ -7,6 +7,8 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include "wayland/fbwl_deco_mask.h"
+
 static void apps_rules_write_match_terms(FILE *f, const struct fbwl_apps_rule *rule) {
     if (f == NULL || rule == NULL) {
         return;
@@ -175,7 +177,12 @@ static void apps_rules_write_attrs(FILE *f, const struct fbwl_apps_rule *rule, c
         fprintf(f, "}\n");
     }
     if (rule->set_decor) {
-        fprintf(f, "%s[Deco] {%s}\n", indent, rule->decor_enabled ? "normal" : "none");
+        const char *preset = fbwl_deco_mask_preset_name(rule->decor_mask);
+        if (preset != NULL) {
+            fprintf(f, "%s[Deco] {%s}\n", indent, preset);
+        } else {
+            fprintf(f, "%s[Deco] {0x%x}\n", indent, rule->decor_mask);
+        }
     }
     if (rule->set_layer) {
         fprintf(f, "%s[Layer] {%d}\n", indent, rule->layer);

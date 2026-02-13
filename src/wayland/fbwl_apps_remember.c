@@ -289,17 +289,12 @@ void fbwl_apps_remember_apply_pre_map(struct fbwl_view *view, const struct fbwl_
 
     int frame_left = 0;
     int frame_top = 0;
-    int frame_w = desired_w;
-    int frame_h = desired_h;
-    if (view->decor_enabled && !view->fullscreen) {
-        const struct fbwl_decor_theme *theme = &server->decor_theme;
-        const int border = theme->border_width;
-        const int title_h = theme->title_height;
-        frame_left = border;
-        frame_top = title_h + border;
-        frame_w += 2 * border;
-        frame_h += title_h + 2 * border;
-    }
+    int frame_right = 0;
+    int frame_bottom = 0;
+    fbwl_view_decor_frame_extents(view, &server->decor_theme, &frame_left, &frame_top, &frame_right, &frame_bottom);
+
+    int frame_w = desired_w + frame_left + frame_right;
+    int frame_h = desired_h + frame_top + frame_bottom;
 
     if (rule->set_position && desired_w > 0 && desired_h > 0) {
         int x_off = rule->x_percent ? scale_percent(rule->x, screen.width) : rule->x;

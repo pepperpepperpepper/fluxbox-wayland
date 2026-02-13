@@ -94,16 +94,19 @@ void fbwl_view_set_maximized_axes(struct fbwl_view *view, bool maximized_h, bool
         h = view->saved_h > 0 ? view->saved_h : cur_h;
     }
 
-    if (server != NULL && view->decor_enabled) {
-        const int border = server->decor_theme.border_width;
-        const int title_h = server->decor_theme.title_height;
+    if (server != NULL) {
+        int frame_left = 0;
+        int frame_top = 0;
+        int frame_right = 0;
+        int frame_bottom = 0;
+        fbwl_view_decor_frame_extents(view, &server->decor_theme, &frame_left, &frame_top, &frame_right, &frame_bottom);
         if (maximized_h) {
-            x += border;
-            w -= 2 * border;
+            x += frame_left;
+            w -= frame_left + frame_right;
         }
         if (maximized_v) {
-            y += title_h + border;
-            h -= title_h + 2 * border;
+            y += frame_top;
+            h -= frame_top + frame_bottom;
         }
     }
     if (w < 1 || h < 1) {

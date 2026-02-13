@@ -285,17 +285,13 @@ static bool view_frame_metrics(const struct fbwl_server *server, const struct fb
 
     int left = 0;
     int top = 0;
-    int border = 0;
-    int frame_w = w;
-    int frame_h = h;
-    if (view->decor_enabled && !view->fullscreen) {
-        border = server->decor_theme.border_width;
-        const int title_h = server->decor_theme.title_height;
-        left = border;
-        top = title_h + border;
-        frame_w += 2 * border;
-        frame_h += title_h + 2 * border;
-    }
+    int right = 0;
+    int bottom = 0;
+    fbwl_view_decor_frame_extents(view, &server->decor_theme, &left, &top, &right, &bottom);
+
+    const int border = left > right ? left : right;
+    const int frame_w = w + left + right;
+    const int frame_h = h + top + bottom;
 
     *out_frame_x = view->x - left;
     *out_frame_y = view->y - top;

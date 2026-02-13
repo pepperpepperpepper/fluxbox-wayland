@@ -8,6 +8,8 @@
 
 #include <wlr/util/log.h>
 
+#include "wayland/fbwl_deco_mask.h"
+
 char *trim_inplace(char *s);
 bool parse_layer(const char *s, int *out);
 bool parse_two_ints_with_percent(const char *s, int *out_a, bool *out_a_pct, int *out_b, bool *out_b_pct);
@@ -548,16 +550,13 @@ bool fbwl_apps_rules_load_file(struct fbwl_apps_rule **rules, size_t *rule_count
         }
 
         if (strcasecmp(key, "deco") == 0) {
-            if (label == NULL || *label == '\0') {
+            target->set_decor = true;
+            uint32_t mask = 0u;
+            if (label == NULL || *label == '\0' || !fbwl_deco_mask_parse(label, &mask)) {
                 rewrite_safe = false;
                 continue;
             }
-            target->set_decor = true;
-            if (strcasecmp(label, "none") == 0) {
-                target->decor_enabled = false;
-            } else {
-                target->decor_enabled = true;
-            }
+            target->decor_mask = mask;
             continue;
         }
 
