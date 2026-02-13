@@ -6,7 +6,7 @@ This repo is an experimental/WIP port of Fluxbox concepts from X11 to Wayland:
 
 - **`fluxbox-wayland` is a compositor**, not an X11 window manager running “on top of” Wayland.
 - It manages native Wayland `xdg_toplevel` apps and can optionally run X11 apps via **XWayland**.
-- A lot of classic Fluxbox config formats are intentionally reused (subset), so existing `~/.fluxbox` setups can be adapted over time.
+- Classic Fluxbox config formats are intentionally reused with an explicit **1:1 parity** target; remaining gaps are tracked in `whatsleft.md`.
 
 Project notes / work tracking:
 

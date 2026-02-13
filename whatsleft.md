@@ -1,6 +1,49 @@
 # What's Left
 
-This file tracks the remaining parity work items migrated out of `plan.md`.
+This file tracks parity work items migrated out of `plan.md`.
+
+The **top section** is the active checklist for reaching **1:1 Fluxbox/X11 config parity** (i.e. classic `~/.fluxbox` configs work unchanged).
+Completed items are kept below for historical context.
+
+## Remaining for 1:1 parity
+
+### Styles / Themes (`fluxbox-style(5)`)
+
+The current Wayland theme implementation is intentionally simplified (mostly colors/fonts). True 1:1 parity requires implementing Fluxbox’s texture/pixmap style engine.
+
+- [ ] Implement Fluxbox texture parsing + rendering:
+  - Texture descriptors (`Flat|Raised|Sunken`, `Solid|Gradient`, gradient directions, `Interlaced`, `Bevel1|Bevel2`)
+  - Pixmap textures (`*.pixmap` keys) with correct search paths (theme dir `pixmaps/`, `~/.fluxbox/pixmaps`, etc) and caching
+  - `ParentRelative` semantics per-element (sample wallpaper/background), not only via `session.forcePseudoTransparency`
+- [ ] Support style font effects: `*.effect` (`shadow`/`halo`) + related `*.shadow.*` / `*.halo.*` keys
+- [ ] Refactor `struct fbwl_decor_theme` to carry per-element textures (not just flat colors) and apply them to:
+  - Window decorations (titlebar, borders, buttons, tabs)
+  - Menus (title/frame/hilite)
+  - Toolbar + slit (and per-tool subcomponents where applicable)
+- [ ] Add smoke coverage for gradients/pixmaps/parentrelative and update the screenshot gallery once rendering matches X11 styles
+
+### Apps file (`fluxbox-apps(5)`)
+
+- [ ] `[Deco] {value}` parity:
+  - Accept the full preset set: `NORMAL`, `NONE`, `BORDER`, `TAB`, `TINY`, `TOOL`
+  - Support bitmask form and map flags onto the Wayland decoration implementation (titlebar/handle/border/buttons/tabs/focus-enabled)
+  - Ensure `apps` save/round-trip preserves unknown/bitmask values instead of collapsing to `{normal|none}`
+
+### Keys / CmdLang (`fluxbox-keys(5)`)
+
+- [ ] Implement `BindKey` command parity (add/replace bindings at runtime + persist to `session.keyFile` like Fluxbox/X11)
+- [ ] Implement `KeyMode <mode> [return-keybinding]` optional second arg (currently ignored)
+- [ ] Add missing common aliases:
+  - `MinimizeWindow` alias for `Minimize`
+  - `MaximizeWindow` alias for `Maximize`
+
+### Session startup parity
+
+- [ ] `util/startfluxbox-wayland`: default to classic `~/.fluxbox/startup` (or fall back to it when `startup-wayland` is absent) so existing Fluxbox setups run unmodified
+
+### Final audit (once above lands)
+
+- [ ] Re-audit against upstream manpages (`fluxbox(1)`, `fluxbox-keys(5)`, `fluxbox-apps(5)`, `fluxbox-menu(5)`, `fluxbox-style(5)`) and add smokes for any newly found gaps
 
 ## Pseudo Transparency on Wayland
 
