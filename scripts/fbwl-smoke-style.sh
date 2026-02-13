@@ -12,9 +12,12 @@ export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/xdg-runtime-$UID}"
 mkdir -p "$XDG_RUNTIME_DIR"
 chmod 0700 "$XDG_RUNTIME_DIR"
 
+source scripts/fbwl-smoke-report-lib.sh
+
 SOCKET="${SOCKET:-wayland-fbwl-test-$UID-$$}"
 LOG="${LOG:-/tmp/fluxbox-wayland-style-$UID-$$.log}"
 STYLE_FILE="${STYLE_FILE:-/tmp/fbwl-style-$UID-$$.cfg}"
+REPORT_DIR="${FBWL_REPORT_DIR:-${FBWL_SMOKE_REPORT_DIR:-}}"
 
 cleanup() {
   rm -f "$STYLE_FILE"
@@ -71,6 +74,8 @@ timeout 5 bash -c "until rg -q 'Style: loaded .*\\(border=10 title_h=40\\)' '$LO
 timeout 5 bash -c "until rg -q 'Style: ignored key=toolbar\\.clock\\.color' '$LOG'; do sleep 0.05; done"
 timeout 5 bash -c "until rg -q 'Toolbar: built .* h=55 ' '$LOG'; do sleep 0.05; done"
 
+fbwl_report_init "$REPORT_DIR" "$SOCKET" "$XDG_RUNTIME_DIR"
+
 if rg -q 'Style: ignored key=borderWidth' "$LOG"; then
   echo "unexpected: borderWidth should be parsed (not ignored)" >&2
   exit 1
@@ -105,6 +110,8 @@ CLIENT_PID=$!
 
 timeout 5 bash -c "until rg -q 'Surface size: client-style 32x32' '$LOG'; do sleep 0.05; done"
 timeout 5 bash -c "until rg -q 'Place: client-style ' '$LOG'; do sleep 0.05; done"
+
+fbwl_report_shot "style.png" "Style applied (thick border + tall titlebar)"
 
 place_line="$(rg -m1 'Place: client-style ' "$LOG")"
 if [[ "$place_line" =~ x=([-0-9]+)\ y=([-0-9]+) ]]; then

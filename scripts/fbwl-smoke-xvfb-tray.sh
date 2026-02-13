@@ -52,6 +52,7 @@ MARK_SECONDARY="${MARK_SECONDARY:-/tmp/fbwl-tray-xvfb-secondary-activated-$UID-$
 MARK_CONTEXT="${MARK_CONTEXT:-/tmp/fbwl-tray-xvfb-context-menu-$UID-$$}"
 ICON_RGB="${ICON_RGB:-#00ff00}"
 ICON_RGB2="${ICON_RGB2:-#ff0000}"
+REPORT_DIR="${FBWL_REPORT_DIR:-${FBWL_SMOKE_REPORT_DIR:-}}"
 
 : >"$XVFB_LOG"
 : >"$LOG"
@@ -59,6 +60,7 @@ rm -f "$MARK_ACT" "$MARK_SECONDARY" "$MARK_CONTEXT"
 
 ROOT="$ROOT" \
 XDG_RUNTIME_DIR="$XDG_RUNTIME_DIR" \
+REPORT_DIR="$REPORT_DIR" \
 DISPLAY_NUM="$DISPLAY_NUM" \
 SOCKET="$SOCKET" \
 XVFB_LOG="$XVFB_LOG" \
@@ -89,6 +91,9 @@ dbus-run-session -- bash -c '
   cd "$ROOT"
   : >"$XVFB_LOG"
   : >"$LOG"
+
+  source scripts/fbwl-smoke-report-lib.sh
+  fbwl_report_init "$REPORT_DIR" "$SOCKET" "$XDG_RUNTIME_DIR"
 
   Xvfb ":$DISPLAY_NUM" -screen 0 1280x720x24 -nolisten tcp -extension GLX >"$XVFB_LOG" 2>&1 &
   XVFB_PID=$!
@@ -150,11 +155,15 @@ dbus-run-session -- bash -c '
   timeout 5 bash -c "until rg -q \"SNI: icon updated id=.*fbwl/TestItem\" \"$LOG\"; do sleep 0.05; done"
   ./fbwl-screencopy-client --socket "$SOCKET" --sample-x "$CLICK_X" --sample-y "$CLICK_Y" --expect-rgb "$ICON_RGB" >/dev/null
 
+  fbwl_report_shot "tray-00-initial.png" "Tray icon (SNI item, initial)"
+
   ./fbwl-input-injector --socket "$SOCKET" click "$CLICK_X" "$CLICK_Y"
   timeout 5 bash -c "until test -f \"$MARK_ACT\"; do sleep 0.05; done"
 
   timeout 5 bash -c "until [[ \"\$(rg -c \"SNI: icon updated id=.*fbwl/TestItem\" \"$LOG\" 2>/dev/null || echo 0)\" -ge 2 ]]; do sleep 0.05; done"
   ./fbwl-screencopy-client --socket "$SOCKET" --sample-x "$CLICK_X" --sample-y "$CLICK_Y" --expect-rgb "$ICON_RGB2" >/dev/null
+
+  fbwl_report_shot "tray-01-updated.png" "Tray icon after activate (icon update)"
 
   ./fbwl-input-injector --socket "$SOCKET" click-middle "$CLICK_X" "$CLICK_Y"
   timeout 5 bash -c "until test -f \"$MARK_SECONDARY\"; do sleep 0.05; done"

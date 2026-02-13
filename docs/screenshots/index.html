@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>fluxbox-wayland screenshots</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #0b0c0f;
+        --fg: #e8e9ed;
+        --muted: #9aa0aa;
+        --card: #141722;
+        --border: #2a2f44;
+        --shadow: rgba(0, 0, 0, 0.35);
+        --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      }
+      @media (prefers-color-scheme: light) {
+        :root {
+          --bg: #fafafa;
+          --fg: #111318;
+          --muted: #4b5563;
+          --card: #ffffff;
+          --border: #e5e7eb;
+          --shadow: rgba(17, 24, 39, 0.08);
+        }
+      }
+      body {
+        margin: 0;
+        font-family: var(--sans);
+        background: var(--bg);
+        color: var(--fg);
+      }
+      header {
+        padding: 24px 20px 12px;
+        border-bottom: 1px solid var(--border);
+        background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0));
+      }
+      h1 {
+        margin: 0 0 6px;
+        font-size: 20px;
+        font-weight: 650;
+        letter-spacing: 0.2px;
+      }
+      .meta {
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--muted);
+        line-height: 1.5;
+        white-space: pre-wrap;
+      }
+      main {
+        padding: 18px 20px 40px;
+        max-width: 1400px;
+        margin: 0 auto;
+      }
+      .err {
+        margin: 14px 0;
+        padding: 12px 14px;
+        border: 1px solid #ef4444;
+        border-radius: 10px;
+        background: rgba(239, 68, 68, 0.08);
+        color: #ef4444;
+        font-family: var(--mono);
+        font-size: 12px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+        gap: 14px;
+      }
+      figure {
+        margin: 0;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        overflow: hidden;
+        background: var(--card);
+        box-shadow: 0 8px 22px var(--shadow);
+      }
+      figure img {
+        width: 100%;
+        height: auto;
+        display: block;
+        background: #000;
+      }
+      figcaption {
+        padding: 10px 12px 12px;
+        border-top: 1px solid var(--border);
+      }
+      .cap {
+        font-size: 13px;
+        margin: 0 0 6px;
+        line-height: 1.4;
+      }
+      .file {
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--muted);
+        overflow-wrap: anywhere;
+      }
+      a { color: inherit; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>fluxbox-wayland screenshots</h1>
+      <div id="meta" class="meta">Loading…</div>
+    </header>
+    <main>
+      <div id="err" class="err" style="display:none"></div>
+      <div id="grid" class="grid"></div>
+    </main>
+    <script>
+      function showError(msg) {
+        const el = document.getElementById("err");
+        el.textContent = msg;
+        el.style.display = "block";
+      }
+
+      function parseManifest(tsv) {
+        const meta = [];
+        const items = [];
+        const lines = tsv.split(/\r?\n/);
+        for (const raw of lines) {
+          const line = raw.trimEnd();
+          if (!line) continue;
+          if (line.startsWith("#")) {
+            meta.push(line.replace(/^#\s?/, ""));
+            continue;
+          }
+          const parts = line.split("\t");
+          const file = (parts[0] || "").trim();
+          const caption = (parts.slice(1).join("\t") || file).trim();
+          if (!file) continue;
+          items.push({ file, caption });
+        }
+        return { meta, items };
+      }
+
+      async function main() {
+        const res = await fetch("manifest.tsv", { cache: "no-store" });
+        if (!res.ok) throw new Error(`failed to fetch manifest.tsv: HTTP ${res.status}`);
+        const text = await res.text();
+        const { meta, items } = parseManifest(text);
+
+        const metaEl = document.getElementById("meta");
+        metaEl.textContent = meta.length ? meta.join("\n") : "manifest.tsv loaded";
+
+        const grid = document.getElementById("grid");
+        grid.replaceChildren();
+
+        for (const item of items) {
+          const fig = document.createElement("figure");
+          const img = document.createElement("img");
+          img.loading = "lazy";
+          img.alt = item.caption;
+          img.src = item.file;
+
+          const cap = document.createElement("figcaption");
+          const p1 = document.createElement("p");
+          p1.className = "cap";
+          p1.textContent = item.caption;
+
+          const p2 = document.createElement("div");
+          p2.className = "file";
+          const a = document.createElement("a");
+          a.href = item.file;
+          a.textContent = item.file;
+          p2.appendChild(a);
+
+          cap.appendChild(p1);
+          cap.appendChild(p2);
+          fig.appendChild(img);
+          fig.appendChild(cap);
+          grid.appendChild(fig);
+        }
+
+        if (!items.length) {
+          showError("no screenshots listed in manifest.tsv");
+        }
+      }
+
+      main().catch((e) => showError(String(e && e.message ? e.message : e)));
+    </script>
+  </body>
+</html>

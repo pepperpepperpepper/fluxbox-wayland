@@ -14,9 +14,12 @@ export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/xdg-runtime-$UID}"
 mkdir -p "$XDG_RUNTIME_DIR"
 chmod 0700 "$XDG_RUNTIME_DIR"
 
+source scripts/fbwl-smoke-report-lib.sh
+
 SOCKET="wayland-fbwl-tabsui-click-$UID-$$"
 LOG="/tmp/fluxbox-wayland-tabsui-click-$UID-$$.log"
 CFG_DIR="$(mktemp -d)"
+REPORT_DIR="${FBWL_REPORT_DIR:-${FBWL_SMOKE_REPORT_DIR:-}}"
 
 cleanup() {
   if [[ -n "${C0_PID:-}" ]]; then kill "$C0_PID" 2>/dev/null || true; fi
@@ -55,6 +58,8 @@ timeout 5 bash -c "until rg -q 'Running fluxbox-wayland' '$LOG'; do sleep 0.05; 
 timeout 5 bash -c "until rg -q 'Style: loaded ' '$LOG'; do sleep 0.05; done"
 timeout 5 bash -c "until rg -q 'Output: ' '$LOG'; do sleep 0.05; done"
 
+fbwl_report_init "$REPORT_DIR" "$SOCKET" "$XDG_RUNTIME_DIR"
+
 t0="tab0-tabsui-click"
 t1="tab1-tabsui-click"
 
@@ -68,6 +73,8 @@ timeout 10 bash -c "until rg -q 'Tabs: attach reason=autotab' '$LOG'; do sleep 0
 
 tab0_line="$(rg "TabsUI: tab idx=0 title=$t0 " "$LOG" | tail -n 1)"
 tab1_line="$(rg "TabsUI: tab idx=1 title=$t1 " "$LOG" | tail -n 1)"
+
+fbwl_report_shot "tabs-ui.png" "Tabs UI (autotab placement)"
 
 if [[ "$tab0_line" =~ active=([01])[[:space:]]lx=([-0-9]+)[[:space:]]ly=([-0-9]+)[[:space:]]w=([0-9]+)[[:space:]]h=([0-9]+) ]]; then
   TAB0_ACTIVE="${BASH_REMATCH[1]}"

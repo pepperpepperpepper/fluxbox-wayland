@@ -15,6 +15,9 @@ export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/xdg-runtime-$UID}"
 mkdir -p "$XDG_RUNTIME_DIR"
 chmod 0700 "$XDG_RUNTIME_DIR"
 
+source scripts/fbwl-smoke-report-lib.sh
+REPORT_DIR="${FBWL_REPORT_DIR:-${FBWL_SMOKE_REPORT_DIR:-}}"
+
 make_wallpaper_png() {
   local path="$1"
   local r="$2"
@@ -75,6 +78,8 @@ run_case() (
 
   : >"$LOG"
   : >"$SC_LOG"
+
+  fbwl_report_init "$REPORT_DIR" "$SOCKET" "$XDG_RUNTIME_DIR"
 
   cat >"$CFGDIR/init" <<EOF
 session.screen0.focusModel: ClickToFocus
@@ -165,6 +170,8 @@ EOF
   ./fbwl-input-injector --socket "$SOCKET" key alt-f >/dev/null 2>&1
   START=$((OFFSET + 1))
   timeout 5 bash -c "until tail -c +$START '$LOG' | rg -q 'Alpha: $top_title focused=0 unfocused=0 reason=setalpha'; do sleep 0.05; done"
+
+  fbwl_report_shot "pseudo-transparency-${label}.png" "Pseudo transparency (${label})"
 
   local sample_x=$((top_x + 20))
   local sample_y=$((top_y + 20))

@@ -1,6 +1,35 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+fbwl_report_clean_prefix() {
+  local s="${1:-}"
+  s="${s//$'\t'/_}"
+  s="${s//$'\r'/_}"
+  s="${s//$'\n'/_}"
+  s="${s// /_}"
+  s="${s//\//_}"
+  s="${s//\\/__}"
+  printf '%s' "$s"
+}
+
+fbwl_report_clean_filename() {
+  local s="${1:-}"
+  s="${s##*/}"
+  s="${s//$'\t'/_}"
+  s="${s//$'\r'/_}"
+  s="${s//$'\n'/_}"
+  s="${s// /_}"
+  s="${s//\//_}"
+  s="${s//\\/__}"
+  if [[ -z "$s" ]]; then
+    s="shot.png"
+  fi
+  if [[ "$s" == .* ]]; then
+    s="shot$s"
+  fi
+  printf '%s' "$s"
+}
+
 fbwl_report_init() {
   local report_dir="${1:-}"
   local socket="${2:-}"
@@ -65,14 +94,20 @@ fbwl_report_shot() {
     return 1
   fi
 
-  local out_path="$FBWL_REPORT_DIR/$file"
+  local prefix_clean
+  prefix_clean="$(fbwl_report_clean_prefix "${FBWL_REPORT_PREFIX:-}")"
+  local file_clean
+  file_clean="$(fbwl_report_clean_filename "$file")"
+  local file_out="${prefix_clean}${file_clean}"
+
+  local out_path="$FBWL_REPORT_DIR/$file_out"
 
   local caption_clean="$caption"
   caption_clean="${caption_clean//$'\t'/ }"
   caption_clean="${caption_clean//$'\r'/ }"
   caption_clean="${caption_clean//$'\n'/ }"
   if [[ -z "$caption_clean" ]]; then
-    caption_clean="$file"
+    caption_clean="$file_out"
   fi
 
   env \
@@ -81,5 +116,5 @@ fbwl_report_shot() {
     XDG_SESSION_TYPE=wayland \
     grim -t png "$out_path" >/dev/null 2>&1
 
-  printf '%s\t%s\n' "$file" "$caption_clean" >>"$FBWL_REPORT_MANIFEST"
+  printf '%s\t%s\n' "$file_out" "$caption_clean" >>"$FBWL_REPORT_MANIFEST"
 }

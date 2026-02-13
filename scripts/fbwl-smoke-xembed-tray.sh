@@ -44,6 +44,7 @@ export MESA_LOADER_DRIVER_OVERRIDE=swrast
 SOCKET="${SOCKET:-wayland-fbwl-xembed-tray-$UID-$$}"
 LOG="${LOG:-/tmp/fluxbox-wayland-xembed-tray-$UID-$$.log}"
 ICON_RGB="${ICON_RGB:-#00ff00}"
+REPORT_DIR="${FBWL_REPORT_DIR:-${FBWL_SMOKE_REPORT_DIR:-}}"
 
 : >"$LOG"
 
@@ -54,6 +55,7 @@ dbus-run-session -- bash -c '
   SOCKET="'"$SOCKET"'"
   LOG="'"$LOG"'"
   ICON_RGB="'"$ICON_RGB"'"
+  REPORT_DIR="'"$REPORT_DIR"'"
 
   cleanup() {
     if [[ -n "${XEMBED_PID:-}" ]]; then kill "$XEMBED_PID" 2>/dev/null || true; fi
@@ -64,6 +66,9 @@ dbus-run-session -- bash -c '
 
   cd "$ROOT"
   : >"$LOG"
+
+  source scripts/fbwl-smoke-report-lib.sh
+  fbwl_report_init "$REPORT_DIR" "$SOCKET" "$XDG_RUNTIME_DIR"
 
   FBWL_XEMBED_SNI_PROXY=auto WLR_BACKENDS=headless WLR_RENDERER=pixman ./fluxbox-wayland \
     --socket "$SOCKET" \
@@ -119,6 +124,8 @@ dbus-run-session -- bash -c '
     exit 1
   fi
 
+  fbwl_report_shot "xembed-tray.png" "XEmbed tray icon (via xembed→SNI proxy)"
+
   ./fbwl-remote --socket "$SOCKET" quit | rg -q \"^ok quitting$\"
   timeout 5 bash -c "while kill -0 \"$FBW_PID\" 2>/dev/null; do sleep 0.05; done"
   wait "$FBW_PID"
@@ -129,4 +136,3 @@ dbus-run-session -- bash -c '
 
   echo "ok: xembed tray proxy smoke passed (socket=$SOCKET display=$DISPLAY_NAME log=$LOG)"
 '
-

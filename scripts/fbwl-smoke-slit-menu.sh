@@ -14,6 +14,8 @@ export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/xdg-runtime-$UID}"
 mkdir -p "$XDG_RUNTIME_DIR"
 chmod 0700 "$XDG_RUNTIME_DIR"
 
+source scripts/fbwl-smoke-report-lib.sh
+
 export XWAYLAND_NO_GLAMOR=1
 export __EGL_VENDOR_LIBRARY_FILENAMES="/usr/share/glvnd/egl_vendor.d/50_mesa.json"
 export __GLX_VENDOR_LIBRARY_NAME=mesa
@@ -38,6 +40,7 @@ SOCKET="wayland-fbwl-slit-menu-$UID-$$"
 LOG="/tmp/fluxbox-wayland-slit-menu-$UID-$$.log"
 CFG_DIR="$(mktemp -d "/tmp/fbwl-slit-menu-$UID-XXXXXX")"
 MARK_ONSLIT="/tmp/fbwl-mousebind-onslit-$UID-$$"
+REPORT_DIR="${FBWL_REPORT_DIR:-${FBWL_SMOKE_REPORT_DIR:-}}"
 
 cat >"$CFG_DIR/init" <<EOF
 session.screen0.toolbar.visible: false
@@ -64,6 +67,8 @@ EOF
 
 rm -f "$CFG_DIR/slitlist.saved"
 : >"$LOG"
+
+fbwl_report_init "$REPORT_DIR" "$SOCKET" "$XDG_RUNTIME_DIR"
 
 WLR_BACKENDS=headless WLR_RENDERER=pixman WLR_HEADLESS_OUTPUTS=1 \
   ./fluxbox-wayland --socket "$SOCKET" --config-dir "$CFG_DIR" >"$LOG" 2>&1 &
@@ -149,6 +154,8 @@ OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" type clients
 ./fbwl-input-injector --socket "$SOCKET" key enter
 timeout 2 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Menu: enter-submenu reason=activate label=Clients'; do sleep 0.05; done"
+
+fbwl_report_shot "slit-menu.png" "Slit menu (Clients submenu)"
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ITEM_H=24

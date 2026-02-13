@@ -25,6 +25,8 @@ export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/xdg-runtime-$UID}"
 mkdir -p "$XDG_RUNTIME_DIR"
 chmod 0700 "$XDG_RUNTIME_DIR"
 
+source scripts/fbwl-smoke-report-lib.sh
+
 export XWAYLAND_NO_GLAMOR=1
 export __EGL_VENDOR_LIBRARY_FILENAMES="/usr/share/glvnd/egl_vendor.d/50_mesa.json"
 export __GLX_VENDOR_LIBRARY_NAME=mesa
@@ -52,6 +54,7 @@ SOCKET="${SOCKET:-wayland-fbwl-xvfb-xwayland-$UID-$$}"
 XVFB_LOG="${XVFB_LOG:-/tmp/xvfb-xwayland-$UID-$$.log}"
 LOG="${LOG:-/tmp/fluxbox-wayland-xvfb-xwayland-$UID-$$.log}"
 TITLE="${TITLE:-xw-test-xvfb}"
+REPORT_DIR="${FBWL_REPORT_DIR:-${FBWL_SMOKE_REPORT_DIR:-}}"
 
 dump_tail() {
   local path="${1:-}"
@@ -109,6 +112,8 @@ trap cleanup EXIT
 
 : >"$XVFB_LOG"
 : >"$LOG"
+
+fbwl_report_init "$REPORT_DIR" "$SOCKET" "$XDG_RUNTIME_DIR"
 
 Xvfb ":$DISPLAY_NUM" -screen 0 1280x720x24 -nolisten tcp -extension GLX >"$XVFB_LOG" 2>&1 &
 XVFB_PID=$!
@@ -204,6 +209,8 @@ if (( NEW_W != 128 + 50 || NEW_H != 96 + 60 )); then
 fi
 
 timeout 10 bash -c "until rg -q \"Surface size: $TITLE ${NEW_W}x${NEW_H}\" '$LOG'; do sleep 0.05; done"
+
+fbwl_report_shot "xwayland.png" "XWayland client (after move/resize)"
 
 kill "$FBW_PID" 2>/dev/null || true
 wait "$FBW_PID" 2>/dev/null || true

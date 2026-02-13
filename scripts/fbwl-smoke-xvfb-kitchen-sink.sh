@@ -257,7 +257,7 @@ fbwl_report_shot "01-menu.png" "Root menu open"
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" click "$((MENU_X + 10))" "$((MENU_Y + 10))"
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Menu: exec '
+rg -q 'Menu: exec ' < <(tail -c +$((OFFSET + 1)) "$LOG")
 timeout 5 bash -c "until [[ -f '$MENU_MARKER' ]]; do sleep 0.05; done"
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
@@ -271,12 +271,12 @@ else
 fi
 
 ./fbwl-input-injector --socket "$SOCKET" click $((TB_X0 + TB_LX + TB_W / 2)) $((TB_Y0 + TB_H / 2))
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Toolbar: click tool=nextworkspace cmd=nextworkspace'
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Workspace: apply current=2 reason=switch-next'
+rg -q 'Toolbar: click tool=nextworkspace cmd=nextworkspace' < <(tail -c +$((OFFSET + 1)) "$LOG")
+rg -q 'Workspace: apply current=2 reason=switch-next' < <(tail -c +$((OFFSET + 1)) "$LOG")
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" key alt-3
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'OSD: show workspace=3'
+rg -q 'OSD: show workspace=3' < <(tail -c +$((OFFSET + 1)) "$LOG")
 fbwl_report_shot "02-osd.png" "Workspace OSD"
 timeout 5 bash -c "until rg -q 'OSD: hide reason=timer' '$LOG'; do sleep 0.05; done"
 
@@ -305,8 +305,8 @@ if ((REPORT_USE_WESTON_TERMINAL)); then
 
     OFFSET=$(wc -c <"$LOG" | tr -d ' ')
     ./fbwl-input-injector --socket "$SOCKET" click $((TB_X0 + LX + W / 2)) $((TB_Y0 + TB_H / 2))
-    tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Toolbar: click iconbar idx=[0-9]+ title=$view"
-    tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Focus: $view"
+    rg -q "Toolbar: click iconbar idx=[0-9]+ title=$view" < <(tail -c +$((OFFSET + 1)) "$LOG")
+    rg -q "Focus: $view" < <(tail -c +$((OFFSET + 1)) "$LOG")
   done
 else
   timeout 5 bash -c "until rg -q 'Focus: ks-ib-a' '$LOG' && rg -q 'Focus: ks-ib-b' '$LOG'; do sleep 0.05; done"
@@ -336,12 +336,12 @@ fi
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" click $((TB_X0 + LX + W / 2)) $((TB_Y0 + TB_H / 2))
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Toolbar: click iconbar idx=[0-9]+ title=$OTHER_VIEW"
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Focus: $OTHER_VIEW"
+rg -q "Toolbar: click iconbar idx=[0-9]+ title=$OTHER_VIEW" < <(tail -c +$((OFFSET + 1)) "$LOG")
+rg -q "Focus: $OTHER_VIEW" < <(tail -c +$((OFFSET + 1)) "$LOG")
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" key alt-i
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Minimize: $OTHER_VIEW on reason=keybinding"
+rg -q "Minimize: $OTHER_VIEW on reason=keybinding" < <(tail -c +$((OFFSET + 1)) "$LOG")
 timeout 5 bash -c "until rg -q \"Toolbar: iconbar item .*title=$OTHER_VIEW minimized=1\" '$LOG'; do sleep 0.05; done"
 fbwl_report_shot "04-minimize.png" "Minimize/unminimize via iconbar"
 
@@ -356,8 +356,8 @@ fi
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" click $((TB_X0 + LX + W / 2)) $((TB_Y0 + TB_H / 2))
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Minimize: $OTHER_VIEW off reason=toolbar-iconbar"
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Focus: $OTHER_VIEW"
+rg -q "Minimize: $OTHER_VIEW off reason=toolbar-iconbar" < <(tail -c +$((OFFSET + 1)) "$LOG")
+rg -q "Focus: $OTHER_VIEW" < <(tail -c +$((OFFSET + 1)) "$LOG")
 
 kill_wait "$IB_A_PID"
 unset IB_A_PID
@@ -422,7 +422,7 @@ MR_END_Y=$((MR_Y1 + 5))
 ./fbwl-input-injector --socket "$SOCKET" click "$MR_START_X" "$MR_START_Y" >/dev/null 2>&1 || true
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" drag-alt-left "$MR_START_X" "$MR_START_Y" "$MR_END_X" "$MR_END_Y"
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Move: ks-mr x=$MR_X1 y=$MR_Y1"
+rg -q "Move: ks-mr x=$MR_X1 y=$MR_Y1" < <(tail -c +$((OFFSET + 1)) "$LOG")
 
 MR_RS_START_X=$((MR_X1 + 10))
 MR_RS_START_Y=$((MR_Y1 + 10))
@@ -434,10 +434,10 @@ MR_H1=$((MR_H0 + MR_RS_DY))
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" drag-alt-right "$MR_RS_START_X" "$MR_RS_START_Y" "$MR_RS_END_X" "$MR_RS_END_Y"
 if ((REPORT_USE_WESTON_TERMINAL)); then
-  tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Resize: ks-mr "
+  rg -q "Resize: ks-mr " < <(tail -c +$((OFFSET + 1)) "$LOG")
   timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Surface size: ks-mr '; do sleep 0.05; done"
 else
-  tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Resize: ks-mr w=$MR_W1 h=$MR_H1"
+  rg -q "Resize: ks-mr w=$MR_W1 h=$MR_H1" < <(tail -c +$((OFFSET + 1)) "$LOG")
   timeout 5 bash -c "until rg -q 'Surface size: ks-mr ${MR_W1}x${MR_H1}' '$LOG'; do sleep 0.05; done"
 fi
 fbwl_report_shot "05-move-resize.png" "Move/resize"
@@ -476,7 +476,7 @@ fi
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" key alt-m
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Maximize: ks-mf on w=$MF_USABLE_W h=$MF_USABLE_H"
+rg -q "Maximize: ks-mf on w=$MF_USABLE_W h=$MF_USABLE_H" < <(tail -c +$((OFFSET + 1)) "$LOG")
 if ((REPORT_USE_WESTON_TERMINAL)); then
   timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Surface size: ks-mf '; do sleep 0.05; done"
 else
@@ -485,7 +485,7 @@ fi
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" key alt-m
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Maximize: ks-mf off"
+rg -q "Maximize: ks-mf off" < <(tail -c +$((OFFSET + 1)) "$LOG")
 if ((REPORT_USE_WESTON_TERMINAL)); then
   # For real apps like weston-terminal, the compositor may restore a non-32x32 size; just ensure resize happened.
   timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Surface size: ks-mf '; do sleep 0.05; done"
@@ -495,7 +495,7 @@ fi
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" key alt-f
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Fullscreen: ks-mf on w=$OUT_W h=$OUT_H"
+rg -q "Fullscreen: ks-mf on w=$OUT_W h=$OUT_H" < <(tail -c +$((OFFSET + 1)) "$LOG")
 if ((REPORT_USE_WESTON_TERMINAL)); then
   timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Surface size: ks-mf '; do sleep 0.05; done"
 else
@@ -505,7 +505,7 @@ fbwl_report_shot "06-fullscreen.png" "Fullscreen"
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" key alt-f
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Fullscreen: ks-mf off"
+rg -q "Fullscreen: ks-mf off" < <(tail -c +$((OFFSET + 1)) "$LOG")
 if ((REPORT_USE_WESTON_TERMINAL)); then
   timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Surface size: ks-mf '; do sleep 0.05; done"
 else
@@ -550,8 +550,8 @@ unset APPS_STICKY_PID
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" key alt-1
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Policy: workspace switch( head=[0-9]+)? to 1'
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Workspace: apply current=1 reason=switch'
+rg -q 'Policy: workspace switch( head=[0-9]+)? to 1' < <(tail -c +$((OFFSET + 1)) "$LOG")
+rg -q 'Workspace: apply current=1 reason=switch' < <(tail -c +$((OFFSET + 1)) "$LOG")
 
 ./fbwl-smoke-client --socket "$SOCKET" --title ks-winmenu --stay-ms 20000 --xdg-decoration >/dev/null 2>&1 &
 WINMENU_PID=$!
@@ -606,7 +606,7 @@ fi
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" click "$CLICK_X" "$CLICK_Y"
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Menu: window-close title=ks-winmenu'
+rg -q 'Menu: window-close title=ks-winmenu' < <(tail -c +$((OFFSET + 1)) "$LOG")
 
 timeout 5 bash -c "while kill -0 '$WINMENU_PID' 2>/dev/null; do sleep 0.05; done"
 wait "$WINMENU_PID" 2>/dev/null || true
@@ -632,16 +632,12 @@ PANEL_PID=$!
 
 timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'LayerShell: map ns=fbwl-ks-panel'; do sleep 0.05; done"
 
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q "LayerShell: surface ns=fbwl-ks-panel layer=2 pos=0,0 size=${OUT_W}x${PANEL_H} excl=${PANEL_H}"
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q "LayerShell: output=[^ ]+ usable=0,${PANEL_H} ${OUT_W}x${USABLE_H}"
+rg -q "LayerShell: surface ns=fbwl-ks-panel layer=2 pos=0,0 size=${OUT_W}x${PANEL_H} excl=${PANEL_H}" < <(tail -c +$((OFFSET + 1)) "$LOG")
+rg -q "LayerShell: output=[^ ]+ usable=0,${PANEL_H} ${OUT_W}x${USABLE_H}" < <(tail -c +$((OFFSET + 1)) "$LOG")
 fbwl_report_shot "09-layer-shell.png" "Layer-shell panel (exclusive zone)"
 
-USABLE_PAIR=$(
-  tail -c +$((OFFSET + 1)) "$LOG" \
-    | rg -m1 'LayerShell: output=' \
-    | rg -o 'usable=-?[0-9]+,-?[0-9]+' \
-    | cut -d= -f2
-)
+usable_line="$(rg -m1 'LayerShell: output=' < <(tail -c +$((OFFSET + 1)) "$LOG"))"
+USABLE_PAIR="$(rg -o 'usable=-?[0-9]+,-?[0-9]+' <<<"$usable_line" | cut -d= -f2)"
 USABLE_X=${USABLE_PAIR%,*}
 USABLE_Y=${USABLE_PAIR#*,}
 
@@ -672,7 +668,7 @@ fi
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" click $((PLACED_X + 5)) $((PLACED_Y + 5)) >/dev/null 2>&1 || true
 ./fbwl-input-injector --socket "$SOCKET" key alt-m >/dev/null 2>&1
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Maximize: ks-placed on w=${MAX_USABLE_W} h=${MAX_USABLE_H}"
+rg -q "Maximize: ks-placed on w=${MAX_USABLE_W} h=${MAX_USABLE_H}" < <(tail -c +$((OFFSET + 1)) "$LOG")
 fbwl_report_shot "10-maximize-usable.png" "Maximize respects usable area"
 
 kill_wait "$PLACED_PID"
@@ -695,24 +691,24 @@ fi
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" click "$MIN_CLICK_X" "$MIN_CLICK_Y"
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Pointer press .* hit=ks-min'
+rg -q 'Pointer press .* hit=ks-min' < <(tail -c +$((OFFSET + 1)) "$LOG")
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-foreign-toplevel-client --socket "$SOCKET" --timeout-ms 3000 minimize ks-min
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Minimize: ks-min on reason=foreign-request'
+rg -q 'Minimize: ks-min on reason=foreign-request' < <(tail -c +$((OFFSET + 1)) "$LOG")
 fbwl_report_shot "11-foreign-minimize.png" "Foreign-toplevel minimize"
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" click "$MIN_CLICK_X" "$MIN_CLICK_Y"
-tail -c +$((OFFSET + 1)) "$LOG" | rg -qF 'hit=(none)'
+rg -qF 'hit=(none)' < <(tail -c +$((OFFSET + 1)) "$LOG")
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-foreign-toplevel-client --socket "$SOCKET" --timeout-ms 3000 unminimize ks-min
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Minimize: ks-min off reason=foreign-request'
+rg -q 'Minimize: ks-min off reason=foreign-request' < <(tail -c +$((OFFSET + 1)) "$LOG")
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" click "$MIN_CLICK_X" "$MIN_CLICK_Y"
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Pointer press .* hit=ks-min'
+rg -q 'Pointer press .* hit=ks-min' < <(tail -c +$((OFFSET + 1)) "$LOG")
 
 kill_wait "$MIN_PID"
 unset MIN_PID
@@ -739,11 +735,11 @@ CLICK_BY=$((BY + 5))
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" click "$CLICK_BX" "$CLICK_BY" "$CLICK_AX" "$CLICK_AY"
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Focus: ks-fs-a'
+rg -q 'Focus: ks-fs-a' < <(tail -c +$((OFFSET + 1)) "$LOG")
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" key alt-f
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Fullscreen: ks-fs-a on'
+rg -q 'Fullscreen: ks-fs-a on' < <(tail -c +$((OFFSET + 1)) "$LOG")
 
 timeout 5 bash -c "until rg -q 'Toolbar: iconbar item .*title=ks-fs-a' '$LOG' && rg -q 'Toolbar: iconbar item .*title=ks-fs-b' '$LOG'; do sleep 0.05; done"
 
@@ -758,16 +754,16 @@ fi
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" click $((TB_X0 + LX + W / 2)) $((TB_Y0 + TB_H / 2))
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q "Toolbar: click iconbar idx=[0-9]+ title=ks-fs-b"
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Focus: ks-fs-b'
+rg -q "Toolbar: click iconbar idx=[0-9]+ title=ks-fs-b" < <(tail -c +$((OFFSET + 1)) "$LOG")
+rg -q 'Focus: ks-fs-b' < <(tail -c +$((OFFSET + 1)) "$LOG")
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" click "$CLICK_BX" "$CLICK_BY"
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Pointer press .* hit=ks-fs-a'
+rg -q 'Pointer press .* hit=ks-fs-a' < <(tail -c +$((OFFSET + 1)) "$LOG")
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" key alt-f
-tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Fullscreen: ks-fs-a off'
+rg -q 'Fullscreen: ks-fs-a off' < <(tail -c +$((OFFSET + 1)) "$LOG")
 
 WS_COUNT=3
 WS_ITERS="${WS_ITERS:-5}"
@@ -835,7 +831,7 @@ esac
 
 	OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 	./fbwl-input-injector --socket "$SOCKET" key alt-f2
-	tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'CmdDialog: open'
+	rg -q 'CmdDialog: open' < <(tail -c +$((OFFSET + 1)) "$LOG")
 	fbwl_report_shot "12-command-dialog.png" "Command dialog"
 
 CMD="touch $CMD_MARKER"

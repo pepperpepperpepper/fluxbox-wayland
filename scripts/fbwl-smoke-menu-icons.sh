@@ -124,7 +124,8 @@ FBW_PID=$!
 
 timeout 5 bash -c "until rg -q 'Running fluxbox-wayland' '$LOG'; do sleep 0.05; done"
 
-fbwl_report_init "${FBWL_REPORT_DIR:-}" "$SOCKET" "$XDG_RUNTIME_DIR"
+REPORT_DIR="${FBWL_REPORT_DIR:-${FBWL_SMOKE_REPORT_DIR:-}}"
+fbwl_report_init "$REPORT_DIR" "$SOCKET" "$XDG_RUNTIME_DIR"
 
 # Open the root menu with a background right-click.
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')

@@ -1,3 +1,10 @@
+This repo contains **fluxbox-wayland**, an experimental port of Fluxbox-like window
+management policy to a **Wayland compositor** (wlroots-based).
+
+For the GitHub-facing overview and screenshots gallery, see: README.md
+
+Upstream Fluxbox context (X11):
+
 Fluxbox is a windowmanager for X that was based on the Blackbox 0.61.1 code.
 It is very light on resources and easy to handle but yet full of features to
 make an easy, and extremely fast, desktop experience.
@@ -17,4 +24,3 @@ Thanks:
   And all the people who sent bugfixes/patches and helped us making
   Fluxbox a better application, see AUTHORS for a incomplete list
   of people who helped fluxbox.
-

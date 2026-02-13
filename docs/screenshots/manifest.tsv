@@ -1,0 +1,8 @@
+# fluxbox-wayland screenshots
+# format: <file>\t<caption>
+left-click-root-menu.png	Root menu via left-click (common apps)
+window-alpha.png	Window alpha (spiral wallpaper; default + apps override)
+pseudo-transparency-compositing.png	Pseudo transparency (compositing)
+pseudo-transparency-pseudo.png	Pseudo transparency (pseudo)
+tabs-ui.png	Tabs UI (autotab placement)
+style.png	Style applied (thick border + tall titlebar)

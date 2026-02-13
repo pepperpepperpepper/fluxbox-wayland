@@ -157,6 +157,7 @@ scripts=(
   scripts/fbwl-smoke-default-deco.sh
   scripts/fbwl-smoke-style.sh
   scripts/fbwl-smoke-menu.sh
+  scripts/fbwl-smoke-left-click-menu.sh
   scripts/fbwl-smoke-menu-search.sh
 	  scripts/fbwl-smoke-menu-icons.sh
 	  scripts/fbwl-smoke-alpha.sh
@@ -272,7 +273,12 @@ for s in "${scripts[@]}"; do
   fi
 
   echo "==> $s"
-  "$s"
+  report_root="${FBWL_REPORT_DIR:-${FBWL_SMOKE_REPORT_DIR:-}}"
+  if [[ -n "$report_root" ]]; then
+    FBWL_REPORT_PREFIX="$(basename "$s" .sh)__" "$s"
+  else
+    "$s"
+  fi
   ran=$((ran + 1))
 done
 
