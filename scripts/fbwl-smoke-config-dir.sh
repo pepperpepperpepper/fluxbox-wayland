@@ -132,13 +132,29 @@ else
   exit 1
 fi
 
-EXPECTED_TB_W=$((OUT_W * 50 / 100))
+POS_LINE="$(rg 'Toolbar: position ' "$LOG" | tail -n 1)"
+if [[ "$POS_LINE" =~ thickness=([0-9]+) ]]; then
+  TB_THICKNESS="${BASH_REMATCH[1]}"
+else
+  echo "failed to parse Toolbar: thickness from position line: $POS_LINE" >&2
+  exit 1
+fi
+if [[ "$POS_LINE" =~ h=([0-9]+) ]]; then
+  TB_OUTER_H="${BASH_REMATCH[1]}"
+else
+  echo "failed to parse Toolbar: outer height from position line: $POS_LINE" >&2
+  exit 1
+fi
+CROSS=$(((TB_OUTER_H - TB_THICKNESS) / 2))
+if (( CROSS < 0 )); then CROSS=0; fi
+
+EXPECTED_TB_W=$((((OUT_W - 2 * CROSS) * 50 / 100) + 2 * CROSS))
 if [[ "$TB_W" -ne "$EXPECTED_TB_W" ]]; then
   echo "unexpected toolbar width: got $TB_W expected $EXPECTED_TB_W (out_w=$OUT_W)" >&2
   exit 1
 fi
-if [[ "$TB_H" -ne 30 ]]; then
-  echo "unexpected toolbar height: got $TB_H expected 30" >&2
+if [[ "$TB_THICKNESS" -ne 30 ]]; then
+  echo "unexpected toolbar thickness: got $TB_THICKNESS expected 30" >&2
   exit 1
 fi
 
@@ -288,9 +304,20 @@ else
   exit 1
 fi
 
-EXPECTED_TB_H=$((OUT_H * 70 / 100))
-if [[ "$NEW_TB_W" -ne 30 ]]; then
-  echo "unexpected toolbar width after reconfigure: got $NEW_TB_W expected 30" >&2
+POS_LINE="$(tail -c +$START "$LOG" | rg 'Toolbar: position ' | tail -n 1)"
+if [[ "$POS_LINE" =~ thickness=([0-9]+) ]]; then
+  NEW_TB_THICKNESS="${BASH_REMATCH[1]}"
+else
+  echo "failed to parse Toolbar: thickness line after reconfigure: $POS_LINE" >&2
+  exit 1
+fi
+
+CROSS=$(((NEW_TB_W - NEW_TB_THICKNESS) / 2))
+if (( CROSS < 0 )); then CROSS=0; fi
+
+EXPECTED_TB_H=$((((OUT_H - 2 * CROSS) * 70 / 100) + 2 * CROSS))
+if [[ "$NEW_TB_THICKNESS" -ne 30 ]]; then
+  echo "unexpected toolbar thickness after reconfigure: got $NEW_TB_THICKNESS expected 30" >&2
   exit 1
 fi
 if [[ "$NEW_TB_H" -ne "$EXPECTED_TB_H" ]]; then
@@ -401,38 +428,73 @@ timeout 5 bash -c "until tail -c +$START '$LOG' | rg -q 'Toolbar: built '; do sl
 timeout 5 bash -c "until tail -c +$START '$LOG' | rg -q 'Toolbar: position '; do sleep 0.05; done"
 
 BUILT_LINE="$(tail -c +$START "$LOG" | rg 'Toolbar: built ' | tail -n 1)"
-if [[ "$BUILT_LINE" =~ w=([0-9]+)\ h=([0-9]+) ]]; then
-  NEW_TB_W="${BASH_REMATCH[1]}"
-  NEW_TB_H="${BASH_REMATCH[2]}"
-else
-  echo "failed to parse Toolbar: built line after right toolbar reconfigure: $BUILT_LINE" >&2
-  exit 1
-fi
-EXPECTED_TB_H=$((OUT_H * 70 / 100))
-if [[ "$NEW_TB_W" -ne 30 ]]; then
-  echo "unexpected right toolbar width: got $NEW_TB_W expected 30" >&2
-  exit 1
-fi
-if [[ "$NEW_TB_H" -ne "$EXPECTED_TB_H" ]]; then
-  echo "unexpected right toolbar height: got $NEW_TB_H expected $EXPECTED_TB_H (out_h=$OUT_H)" >&2
-  exit 1
-fi
+  if [[ "$BUILT_LINE" =~ w=([0-9]+)\ h=([0-9]+) ]]; then
+    NEW_TB_W="${BASH_REMATCH[1]}"
+    NEW_TB_H="${BASH_REMATCH[2]}"
+  else
+    echo "failed to parse Toolbar: built line after right toolbar reconfigure: $BUILT_LINE" >&2
+    exit 1
+  fi
+  POS_LINE="$(tail -c +$START "$LOG" | rg 'Toolbar: position ' | tail -n 1)"
+  if [[ "$POS_LINE" =~ thickness=([0-9]+) ]]; then
+    NEW_TB_THICKNESS="${BASH_REMATCH[1]}"
+  else
+    echo "failed to parse Toolbar: thickness from position line after right toolbar reconfigure: $POS_LINE" >&2
+    exit 1
+  fi
+  if [[ "$POS_LINE" =~ [[:space:]]w=([0-9]+) ]]; then
+    NEW_TB_OUTER_W="${BASH_REMATCH[1]}"
+  else
+    echo "failed to parse Toolbar: outer width from position line after right toolbar reconfigure: $POS_LINE" >&2
+    exit 1
+  fi
+  if [[ "$POS_LINE" =~ h=([0-9]+) ]]; then
+    NEW_TB_OUTER_H="${BASH_REMATCH[1]}"
+  else
+    echo "failed to parse Toolbar: outer height from position line after right toolbar reconfigure: $POS_LINE" >&2
+    exit 1
+  fi
+  NEW_TB_OUTER_THICKNESS="$NEW_TB_OUTER_W"
+  if (( NEW_TB_OUTER_H < NEW_TB_OUTER_W )); then
+    NEW_TB_OUTER_THICKNESS="$NEW_TB_OUTER_H"
+  fi
+  NEW_CROSS=$(((NEW_TB_OUTER_THICKNESS - NEW_TB_THICKNESS) / 2))
+  if (( NEW_CROSS < 0 )); then NEW_CROSS=0; fi
 
-POS_LINE="$(tail -c +$START "$LOG" | rg 'Toolbar: position ' | tail -n 1)"
-if [[ "$POS_LINE" =~ x=([-0-9]+)\ y=([-0-9]+)\ h=([0-9]+)\ cell_w=([0-9]+)\ workspaces=([0-9]+) ]]; then
-  TB_X="${BASH_REMATCH[1]}"
-  TB_Y="${BASH_REMATCH[2]}"
-  H="${BASH_REMATCH[3]}"
-else
-  echo "failed to parse Toolbar: position line after right toolbar reconfigure: $POS_LINE" >&2
-  exit 1
-fi
+  if [[ "$NEW_TB_THICKNESS" -ne 30 ]]; then
+    echo "unexpected right toolbar thickness: got $NEW_TB_THICKNESS expected 30" >&2
+    exit 1
+  fi
+  if [[ "$NEW_CROSS" -ne "$CROSS" ]]; then
+    echo "unexpected right toolbar cross size: got $NEW_CROSS expected $CROSS" >&2
+    exit 1
+  fi
 
-EXPECTED_TB_X=$((OUT_X + OUT_W - 30))
-EXPECTED_TB_Y=$((OUT_Y + (OUT_H - H) / 2))
-if [[ "$TB_X" -ne "$EXPECTED_TB_X" ]]; then
-  echo "unexpected right toolbar x: got $TB_X expected $EXPECTED_TB_X (out_x=$OUT_X out_w=$OUT_W)" >&2
-  exit 1
+  EXPECTED_NEW_TB_W=$((30 + 2 * CROSS))
+  EXPECTED_NEW_TB_H=$((((OUT_H - 2 * CROSS) * 70 / 100) + 2 * CROSS))
+  if [[ "$NEW_TB_W" -ne "$EXPECTED_NEW_TB_W" ]]; then
+    echo "unexpected right toolbar width: got $NEW_TB_W expected $EXPECTED_NEW_TB_W (thickness=30 cross=$CROSS)" >&2
+    exit 1
+  fi
+  if [[ "$NEW_TB_H" -ne "$EXPECTED_NEW_TB_H" ]]; then
+    echo "unexpected right toolbar height: got $NEW_TB_H expected $EXPECTED_NEW_TB_H (out_h=$OUT_H cross=$CROSS)" >&2
+    exit 1
+  fi
+
+  if [[ "$POS_LINE" =~ x=([-0-9]+)\ y=([-0-9]+)\ h=([0-9]+)\ cell_w=([0-9]+)\ workspaces=([0-9]+) ]]; then
+    TB_X="${BASH_REMATCH[1]}"
+    TB_Y="${BASH_REMATCH[2]}"
+    H="${BASH_REMATCH[3]}"
+  else
+    echo "failed to parse Toolbar: position line after right toolbar reconfigure: $POS_LINE" >&2
+    exit 1
+  fi
+
+  EXPECTED_TB_X=$((OUT_X + OUT_W - NEW_TB_W))
+  EXPECTED_TB_Y=$((OUT_Y + (OUT_H - H) / 2))
+  if [[ "$TB_X" -ne "$EXPECTED_TB_X" ]]; then
+    echo "unexpected right toolbar x: got $TB_X expected $EXPECTED_TB_X (out_x=$OUT_X out_w=$OUT_W)" >&2
+    exit 1
 fi
 if [[ "$TB_Y" -ne "$EXPECTED_TB_Y" ]]; then
   echo "unexpected right toolbar y: got $TB_Y expected $EXPECTED_TB_Y (out_y=$OUT_Y out_h=$OUT_H tb_h=$H)" >&2

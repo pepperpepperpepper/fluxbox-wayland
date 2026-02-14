@@ -48,7 +48,7 @@ timeout 5 bash -c "until rg -q 'Running fluxbox-wayland' '$LOG'; do sleep 0.05; 
 timeout 5 bash -c "until rg -q 'Toolbar: position ' '$LOG'; do sleep 0.05; done"
 
 tb_line="$(rg -m1 'Toolbar: position ' "$LOG")"
-if [[ "$tb_line" =~ h=([0-9]+) ]]; then
+if [[ "$tb_line" =~ thickness=([0-9]+) ]]; then
   TITLE_H="${BASH_REMATCH[1]}"
 else
   echo "failed to parse toolbar title height: $tb_line" >&2

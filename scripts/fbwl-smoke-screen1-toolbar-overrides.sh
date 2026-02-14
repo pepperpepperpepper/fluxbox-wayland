@@ -79,12 +79,15 @@ TB_W=$(echo "$TB_BUILT" | rg -o 'w=[0-9]+' | head -n 1 | cut -d= -f2)
 TB_H=$(echo "$TB_BUILT" | rg -o 'h=[0-9]+' | head -n 1 | cut -d= -f2)
 TB_X=$(echo "$TB_POS" | rg -o 'x=-?[0-9]+' | head -n 1 | cut -d= -f2)
 TB_Y=$(echo "$TB_POS" | rg -o 'y=-?[0-9]+' | head -n 1 | cut -d= -f2)
+TB_THICKNESS=$(echo "$TB_POS" | rg -o 'thickness=[0-9]+' | head -n 1 | cut -d= -f2)
 
-EXPECTED_W=$((S1_W * 25 / 100))
-EXPECTED_H=40
+CROSS=$(((TB_H - TB_THICKNESS) / 2))
+if (( CROSS < 0 )); then CROSS=0; fi
+EXPECTED_W=$((((S1_W - 2 * CROSS) * 25 / 100) + 2 * CROSS))
+EXPECTED_THICKNESS=40
 
-if [[ "$TB_W" -ne "$EXPECTED_W" || "$TB_H" -ne "$EXPECTED_H" ]]; then
-  echo "unexpected toolbar size: got $TB_BUILT expected w=$EXPECTED_W h=$EXPECTED_H (screen1=$SCREEN1)" >&2
+if [[ "$TB_THICKNESS" -ne "$EXPECTED_THICKNESS" || "$TB_W" -ne "$EXPECTED_W" ]]; then
+  echo "unexpected toolbar size: got $TB_BUILT $TB_POS expected w=$EXPECTED_W thickness=$EXPECTED_THICKNESS (screen1=$SCREEN1)" >&2
   exit 1
 fi
 

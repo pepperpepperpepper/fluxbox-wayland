@@ -47,7 +47,7 @@ timeout 5 bash -c "until rg -q 'Running fluxbox-wayland' '$LOG'; do sleep 0.05; 
 timeout 5 bash -c "until rg -q 'Toolbar: position ' '$LOG'; do sleep 0.05; done"
 
 toolbar_line="$(rg -m1 'Toolbar: position ' "$LOG")"
-if [[ "$toolbar_line" =~ h=([0-9]+) ]]; then
+if [[ "$toolbar_line" =~ thickness=([0-9]+) ]]; then
   TITLE_H="${BASH_REMATCH[1]}"
 else
   echo "failed to parse toolbar title height: $toolbar_line" >&2
@@ -84,4 +84,3 @@ rm -f "$MARK_SINGLE" "$MARK_DOUBLE"
 timeout 2 bash -c "until [[ -f '$MARK_DOUBLE' ]]; do sleep 0.05; done"
 
 echo "ok: double-click mouse binding smoke passed (socket=$SOCKET log=$LOG)"
-

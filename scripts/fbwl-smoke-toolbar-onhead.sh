@@ -83,6 +83,7 @@ echo "$TB_BUILT" | rg -q 'onhead=2'
 TB_W=$(echo "$TB_BUILT" | rg -o 'w=[0-9]+' | head -n 1 | cut -d= -f2)
 TB_X=$(echo "$TB_POS" | rg -o 'x=-?[0-9]+' | head -n 1 | cut -d= -f2)
 TB_Y=$(echo "$TB_POS" | rg -o 'y=-?[0-9]+' | head -n 1 | cut -d= -f2)
+TB_H_OUTER=$(echo "$TB_POS" | rg -o 'h=[0-9]+' | head -n 1 | cut -d= -f2)
 
 EXPECTED_TB_X=$((S1_X + (S1_W - TB_W) / 2))
 if [[ "$TB_X" -ne "$EXPECTED_TB_X" || "$TB_Y" -ne "$S1_Y" ]]; then
@@ -116,11 +117,10 @@ timeout 5 bash -c "until rg -q 'Place: out-b' '$LOG'; do sleep 0.05; done"
 PLACED_B=$(rg 'Place: out-b' "$LOG" | tail -n 1)
 BX=$(echo "$PLACED_B" | rg -o 'x=-?[0-9]+' | head -n 1 | cut -d= -f2)
 BY=$(echo "$PLACED_B" | rg -o 'y=-?[0-9]+' | head -n 1 | cut -d= -f2)
-EXPECTED_B_Y=$((S1_Y + 30))
+EXPECTED_B_Y=$((S1_Y + TB_H_OUTER))
 if ! (( BX >= S1_X && BX < S1_X + S1_W && BY == EXPECTED_B_Y )); then
   echo "out-b placed unexpectedly: $PLACED_B expected y=$EXPECTED_B_Y (screen1=$SCREEN1)" >&2
   exit 1
 fi
 
 echo "ok: toolbar.onhead smoke passed (socket=$SOCKET log=$LOG)"
-

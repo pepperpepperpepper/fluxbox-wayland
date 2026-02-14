@@ -81,10 +81,11 @@ dbus-run-session -- bash -c '
   timeout 5 bash -c "until [[ \"\$(rg -c \"SNI: icon updated id=.*fbwl/TestItem\" \"$LOG\" 2>/dev/null || echo 0)\" -ge 2 ]]; do sleep 0.05; done"
 
   pos_line="$(rg -m1 "Toolbar: position " "$LOG")"
-  if [[ "$pos_line" =~ x=([-0-9]+)\ y=([-0-9]+)\ h=([0-9]+)\ cell_w=([0-9]+)\ workspaces=([0-9]+) ]]; then
+  if [[ "$pos_line" =~ x=([-0-9]+)\ y=([-0-9]+)\ h=([0-9]+)\ cell_w=([0-9]+)\ workspaces=([0-9]+).*\ thickness=([0-9]+) ]]; then
     X0="${BASH_REMATCH[1]}"
     Y0="${BASH_REMATCH[2]}"
-    H="${BASH_REMATCH[3]}"
+    H_OUTER="${BASH_REMATCH[3]}"
+    THICKNESS="${BASH_REMATCH[6]}"
   else
     echo "failed to parse Toolbar: position line: $pos_line" >&2
     exit 1
@@ -99,15 +100,17 @@ dbus-run-session -- bash -c '
     exit 1
   fi
 
+  CROSS=$(((H_OUTER - THICKNESS) / 2))
+  if (( CROSS < 0 )); then CROSS=0; fi
   PAD=0
-  if (( H >= 8 )); then PAD=2; fi
-  SIZE=$((H - 2 * PAD))
+  if (( THICKNESS >= 8 )); then PAD=2; fi
+  SIZE=$((THICKNESS - 2 * PAD))
   if (( SIZE < 1 )); then SIZE=1; fi
 
   BASE_X=$((X0 + LX + PAD + SIZE / 4))
-  BASE_Y=$((Y0 + PAD + SIZE / 4))
+  BASE_Y=$((Y0 + CROSS + PAD + SIZE / 4))
   OVERLAY_X=$((X0 + LX + PAD + (SIZE * 3) / 4))
-  OVERLAY_Y=$((Y0 + PAD + (SIZE * 3) / 4))
+  OVERLAY_Y=$((Y0 + CROSS + PAD + (SIZE * 3) / 4))
 
   ./fbwl-screencopy-client --socket "$SOCKET" --sample-x "$BASE_X" --sample-y "$BASE_Y" --expect-rgb "$BASE_RGB" >/dev/null
   ./fbwl-screencopy-client --socket "$SOCKET" --sample-x "$OVERLAY_X" --sample-y "$OVERLAY_Y" --expect-rgb "$OVERLAY_RGB" >/dev/null
@@ -122,4 +125,3 @@ dbus-run-session -- bash -c '
 
   echo "ok: tray overlay-icon smoke passed (socket=$SOCKET log=$LOG)"
 '
-

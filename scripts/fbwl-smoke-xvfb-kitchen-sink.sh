@@ -211,10 +211,10 @@ OUT_W=${OUT_GEOM%x*}
 OUT_H=${OUT_GEOM#*x}
 
 TB_LINE="$(rg -m1 'Toolbar: position ' "$LOG")"
-if [[ "$TB_LINE" =~ x=([-0-9]+)\ y=([-0-9]+)\ h=([0-9]+)\ cell_w=([0-9]+)\ workspaces=([0-9]+) ]]; then
+if [[ "$TB_LINE" =~ x=([-0-9]+)\ y=([-0-9]+)\ h=([0-9]+)\ cell_w=([0-9]+)\ workspaces=([0-9]+).*\ thickness=([0-9]+) ]]; then
   TB_X0="${BASH_REMATCH[1]}"
   TB_Y0="${BASH_REMATCH[2]}"
-  TB_H="${BASH_REMATCH[3]}"
+  TB_H="${BASH_REMATCH[6]}"
   TB_CELL_W="${BASH_REMATCH[4]}"
   TB_WS="${BASH_REMATCH[5]}"
 else

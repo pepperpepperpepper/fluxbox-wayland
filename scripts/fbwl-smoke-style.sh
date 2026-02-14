@@ -5,6 +5,7 @@ need_cmd() {
   command -v "$1" >/dev/null 2>&1 || { echo "missing required command: $1" >&2; exit 1; }
 }
 
+need_cmd mktemp
 need_cmd rg
 need_cmd timeout
 
@@ -17,6 +18,7 @@ source scripts/fbwl-smoke-report-lib.sh
 SOCKET="${SOCKET:-wayland-fbwl-test-$UID-$$}"
 LOG="${LOG:-/tmp/fluxbox-wayland-style-$UID-$$.log}"
 STYLE_FILE="${STYLE_FILE:-/tmp/fbwl-style-$UID-$$.cfg}"
+CFG_DIR="$(mktemp -d "/tmp/fbwl-style-$UID-XXXXXX")"
 REPORT_DIR="${FBWL_REPORT_DIR:-${FBWL_SMOKE_REPORT_DIR:-}}"
 
 cleanup() {
@@ -24,8 +26,16 @@ cleanup() {
   if [[ -n "${CLIENT_PID:-}" ]]; then kill "$CLIENT_PID" 2>/dev/null || true; fi
   if [[ -n "${FBW_PID:-}" ]]; then kill "$FBW_PID" 2>/dev/null || true; fi
   wait 2>/dev/null || true
+  rm -rf "$CFG_DIR" 2>/dev/null || true
 }
 trap cleanup EXIT
+
+cat >"$CFG_DIR/init" <<'EOF'
+session.screen0.toolbar.visible: true
+session.screen0.toolbar.autoHide: false
+session.screen0.toolbar.tools: clock
+session.screen0.allowRemoteActions: true
+EOF
 
 cat >"$STYLE_FILE" <<'EOF'
 # Representative Fluxbox style fragment (based on data/styles/BlueNight).
@@ -39,6 +49,7 @@ toolbar.font.halo.color: #ff00ff
 toolbar.clock.color: #40545d
 toolbar.clock.textColor: #ffffff
 toolbar.height: 55
+toolbar.borderWidth: 0
 
 menu.frame: Flat Gradient CrossDiagonal
 menu.frame.color: #40545d
@@ -77,13 +88,13 @@ EOF
 WLR_BACKENDS="${WLR_BACKENDS:-headless}" WLR_RENDERER="${WLR_RENDERER:-pixman}" ./fluxbox-wayland \
   --no-xwayland \
   --socket "$SOCKET" \
+  --config-dir "$CFG_DIR" \
   --style "$STYLE_FILE" \
   >"$LOG" 2>&1 &
 FBW_PID=$!
 
 timeout 5 bash -c "until rg -q 'Running fluxbox-wayland' '$LOG'; do sleep 0.05; done"
 timeout 5 bash -c "until rg -q 'Style: loaded .*\\(border=10 title_h=40\\)' '$LOG'; do sleep 0.05; done"
-timeout 5 bash -c "until rg -q 'Style: ignored key=toolbar\\.clock\\.color' '$LOG'; do sleep 0.05; done"
 timeout 5 bash -c "until rg -q 'Toolbar: built .* h=55 ' '$LOG'; do sleep 0.05; done"
 
 fbwl_report_init "$REPORT_DIR" "$SOCKET" "$XDG_RUNTIME_DIR"
@@ -98,6 +109,10 @@ if rg -q 'Style: ignored key=borderColor' "$LOG"; then
 fi
 if rg -q 'Style: ignored key=toolbar\\.colorTo' "$LOG"; then
   echo "unexpected: toolbar.colorTo should be parsed (not ignored)" >&2
+  exit 1
+fi
+if rg -q 'Style: ignored key=toolbar\\.clock\\.color' "$LOG"; then
+  echo "unexpected: toolbar.clock.color should be parsed (not ignored)" >&2
   exit 1
 fi
 if rg -q 'Style: ignored key=menu\\.frame\\.colorTo' "$LOG"; then
