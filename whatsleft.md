@@ -19,7 +19,7 @@ The current Wayland theme implementation is intentionally simplified (mostly col
   - [x] Smoke: deterministic validation for gradients/pixmaps/ParentRelative (`scripts/fbwl-smoke-style-textures.sh`)
   - [x] Add caching for rendered textures/pixmap surfaces (avoid re-rendering on every rebuild; honors `session.cacheLife`/`session.cacheMax`)
 - [x] Support style font effects: `*.font.effect` (`shadow`/`halo`) + related `*.font.shadow.*` / `*.font.halo.*` keys (best-effort; also accepts legacy `*.effect` forms)
-- [ ] Refactor `struct fbwl_decor_theme` to carry per-element textures (not just flat colors) and apply them to:
+- [x] Refactor `struct fbwl_decor_theme` to carry per-element textures (not just flat colors) and apply them to:
   - [x] Window decorations: split `window.title.*` vs `window.label.*` textures and render both (label overlays titlebar)
   - [x] Window decorations: `window.button.*` textures + per-button pixmap icons (`window.close.pixmap`, etc) + builtin fallback glyphs
   - [x] Window decorations: `window.frame.focusColor/unfocusColor` applied (focused/unfocused border colors)
@@ -28,13 +28,13 @@ The current Wayland theme implementation is intentionally simplified (mostly col
   - [x] Window decorations: button pressed visuals (`window.button.pressed` + `*.pressed.pixmap`) on click/toggle where appropriate
   - [x] Tabs UI: honor `window.tab.justify` (left/center/right) in text rendering
   - [x] Menus (title/frame/hilite) — full texture/pixmap parity for menu subcomponents (incl. marks/submenu indicators)
-  - [ ] Toolbar + slit (and per-tool subcomponents where applicable)
+  - [x] Toolbar + slit (and per-tool subcomponents where applicable)
     - [x] Parse/apply `toolbar.borderWidth`, `toolbar.borderColor`, `toolbar.bevelWidth` (with Fluxbox fallbacks)
     - [x] Parse/apply `slit.borderWidth`, `slit.borderColor`, `slit.bevelWidth` (with Fluxbox fallbacks)
     - [x] Slit theme fallback: `slit` texture inherits `toolbar` when unset (Fluxbox behavior)
     - [x] Render toolbar/slit borders + bevel padding in the Wayland UI
     - [x] Parse/render per-tool textures (`toolbar.clock`, `toolbar.workspace`/`toolbar.label`, `toolbar.iconbar.*`, `toolbar.button` + `.pressed`, `toolbar.systray`, and legacy `toolbar.windowLabel` fallbacks)
-- [ ] Add smoke coverage for gradients/pixmaps/parentrelative and update the screenshot gallery once rendering matches X11 styles
+- [x] Add smoke coverage for gradients/pixmaps/parentrelative and update the screenshot gallery once rendering matches X11 styles
 
 ### Apps file (`fluxbox-apps(5)`)
 

@@ -65,6 +65,29 @@ There is also a standalone HTML gallery at `docs/screenshots/index.html` (works 
       <sub>Forced pseudo-transparency (alpha samples wallpaper)</sub>
     </td>
   </tr>
+  <tr>
+    <td align="center">
+      <a href="docs/screenshots/style-texture-gradient.png">
+        <img src="docs/screenshots/style-texture-gradient.png" width="320" />
+      </a>
+      <br />
+      <sub>Style texture: gradient</sub>
+    </td>
+    <td align="center">
+      <a href="docs/screenshots/style-texture-pixmap-tiled.png">
+        <img src="docs/screenshots/style-texture-pixmap-tiled.png" width="320" />
+      </a>
+      <br />
+      <sub>Style texture: tiled pixmap</sub>
+    </td>
+    <td align="center">
+      <a href="docs/screenshots/style-texture-parentrelative.png">
+        <img src="docs/screenshots/style-texture-parentrelative.png" width="320" />
+      </a>
+      <br />
+      <sub>Style texture: ParentRelative</sub>
+    </td>
+  </tr>
 </table>
 
 ## Build / Run (quick notes)
@@ -78,5 +101,6 @@ To regenerate screenshots in `docs/screenshots/`:
 - `FBWL_SMOKE_REPORT_DIR=docs/screenshots scripts/fbwl-smoke-left-click-menu.sh`
 - `FBWL_SMOKE_REPORT_DIR=docs/screenshots scripts/fbwl-smoke-tabs-ui-click.sh`
 - `FBWL_SMOKE_REPORT_DIR=docs/screenshots scripts/fbwl-smoke-style.sh`
+- `FBWL_SMOKE_REPORT_DIR=docs/screenshots scripts/fbwl-smoke-style-textures.sh`
 - `FBWL_SMOKE_REPORT_DIR=docs/screenshots scripts/fbwl-smoke-window-alpha.sh`
 - `FBWL_SMOKE_REPORT_DIR=docs/screenshots scripts/fbwl-smoke-pseudo-transparency.sh`
