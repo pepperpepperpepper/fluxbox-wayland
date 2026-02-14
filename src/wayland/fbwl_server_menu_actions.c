@@ -12,11 +12,19 @@
 #include <wlr/util/log.h>
 #include <wlr/xwayland.h>
 
+#include "wayland/fbwl_cmdlang.h"
+#include "wayland/fbwl_keybindings.h"
 #include "wayland/fbwl_server_internal.h"
 #include "wayland/fbwl_style_parse.h"
 #include "wayland/fbwl_view_foreign_toplevel.h"
 
 static struct fbwl_view *find_view_by_create_seq(struct fbwl_server *server, uint64_t create_seq);
+
+static bool menu_cmdlang_exec_action_nodup_depth(enum fbwl_keybinding_action action, int arg, const char *cmd,
+        struct fbwl_view *target_view, const struct fbwl_keybindings_hooks *hooks, int depth) {
+    (void)depth;
+    return fbwl_keybindings_execute_action(action, arg, cmd, target_view, hooks);
+}
 
 static const char *focus_model_str(enum fbwl_focus_model model) {
     switch (model) {
@@ -285,7 +293,7 @@ static struct fbwl_view *find_view_by_create_seq(struct fbwl_server *server, uin
 }
 
 void server_menu_handle_server_action(struct fbwl_server *server, enum fbwl_menu_server_action action, int arg,
-        const char *cmd) {
+        const char *cmd, const void *cmdlang_scope) {
     if (server == NULL) {
         return;
     }
@@ -295,6 +303,20 @@ void server_menu_handle_server_action(struct fbwl_server *server, enum fbwl_menu
         wlr_log(WLR_INFO, "Menu: reconfigure");
         server_reconfigure(server);
         return;
+    case FBWL_MENU_SERVER_CMDLANG: {
+        if (cmd == NULL || *cmd == '\0') {
+            wlr_log(WLR_ERROR, "Menu: cmdlang missing command line");
+            return;
+        }
+        struct fbwl_keybindings_hooks hooks = keybindings_hooks(server);
+        hooks.cmdlang_scope = cmdlang_scope;
+        struct fbwl_view *target_view = server->menu_ui.target_view;
+        const bool ok = fbwl_cmdlang_execute_line(cmd, target_view, &hooks, 0, menu_cmdlang_exec_action_nodup_depth);
+        if (!ok) {
+            wlr_log(WLR_ERROR, "Menu: cmdlang failed cmd=%s", cmd);
+        }
+        return;
+    }
     case FBWL_MENU_SERVER_SET_STYLE: {
         if (cmd == NULL || *cmd == '\0') {
             wlr_log(WLR_ERROR, "Menu: set-style missing path");

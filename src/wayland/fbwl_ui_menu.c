@@ -759,7 +759,7 @@ static void fbwl_ui_menu_activate_selected(struct fbwl_menu_ui *ui,
         wlr_log(WLR_INFO, "Menu: server-action label=%s action=%d arg=%d cmd=%s",
             label, (int)action, arg, cmd_copy != NULL ? cmd_copy : "(null)");
         if (hooks != NULL && hooks->server_action != NULL) {
-            hooks->server_action(hooks->userdata, action, arg, cmd_copy);
+            hooks->server_action(hooks->userdata, action, arg, cmd_copy, it);
         }
         if (it->close_on_click) {
             fbwl_ui_menu_close(ui, "server-action");

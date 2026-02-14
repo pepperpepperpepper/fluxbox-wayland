@@ -83,7 +83,8 @@ struct fbwl_ui_menu_hooks {
     void *userdata;
     void (*spawn)(void *userdata, const char *cmd);
     void (*terminate)(void *userdata);
-    void (*server_action)(void *userdata, enum fbwl_menu_server_action action, int arg, const char *cmd);
+    void (*server_action)(void *userdata, enum fbwl_menu_server_action action, int arg, const char *cmd,
+        const void *cmdlang_scope);
     void (*view_close)(void *userdata, struct fbwl_view *view);
     void (*view_set_minimized)(void *userdata, struct fbwl_view *view, bool minimized, const char *why);
     void (*view_set_maximized)(void *userdata, struct fbwl_view *view, bool maximized);

@@ -83,6 +83,7 @@ cat >"$MENU_FILE" <<EOF
   [wallpapers] ($WALL_DIR) {sh -c 'echo ok >"$MARKER2"'} <$ICON_XPM>
 [end]
 [workspaces] (Workspaces) <$ICON_XPM>
+[workspace] (Workspace 3) {3} <$ICON_XPM>
 [exit] (Exit) <$ICON_XPM>
 [end]
 EOF
@@ -116,10 +117,10 @@ fi
 
 ITEM_H=24
 MENU_TITLE_H=$ITEM_H
-if [[ "$MENU_ITEMS" != "7" ]]; then
-  echo "expected 7 menu items (include + nop + separator + encoding-exec + dyn + workspaces + exit), got $MENU_ITEMS" >&2
-  exit 1
-fi
+	if [[ "$MENU_ITEMS" != "8" ]]; then
+	  echo "expected 8 menu items (include + nop + separator + encoding-exec + dyn + workspaces + workspace-cmd + exit), got $MENU_ITEMS" >&2
+	  exit 1
+	fi
 
 # Click the first menu item.
 CLICK_X=$((MENU_X + 10))
@@ -148,8 +149,8 @@ else
   exit 1
 fi
 
-if [[ "$MENU_ITEMS" != "7" ]]; then
-  echo "expected 7 menu items on second open, got $MENU_ITEMS" >&2
+if [[ "$MENU_ITEMS" != "8" ]]; then
+  echo "expected 8 menu items on second open, got $MENU_ITEMS" >&2
   exit 1
 fi
 
@@ -179,8 +180,8 @@ else
   exit 1
 fi
 
-if [[ "$MENU_ITEMS" != "7" ]]; then
-  echo "expected 7 menu items on third open, got $MENU_ITEMS" >&2
+if [[ "$MENU_ITEMS" != "8" ]]; then
+  echo "expected 8 menu items on third open, got $MENU_ITEMS" >&2
   exit 1
 fi
 
@@ -367,5 +368,34 @@ WS2_CLICK_Y=$((MENU_Y + MENU_TITLE_H + 10 + 1 * ITEM_H))
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" click "$WS2_CLICK_X" "$WS2_CLICK_Y"
 tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Menu: workspace-switch .* workspace=2'
+
+# Open the root menu and run a generic cmdlang action ([workspace] {3}).
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-input-injector --socket "$SOCKET" drag-right 100 100 100 100
+open_line="$(tail -c +$((OFFSET + 1)) "$LOG" | rg -m1 'Menu: open at ' || true)"
+if [[ -z "$open_line" ]]; then
+  echo "expected menu open log line before clicking [workspace] cmdlang item" >&2
+  exit 1
+fi
+if [[ "$open_line" =~ x=([-0-9]+)\ y=([-0-9]+)\ items=([0-9]+) ]]; then
+  MENU_X="${BASH_REMATCH[1]}"
+  MENU_Y="${BASH_REMATCH[2]}"
+  MENU_ITEMS="${BASH_REMATCH[3]}"
+else
+  echo "failed to parse menu open line: $open_line" >&2
+  exit 1
+fi
+if [[ "$MENU_ITEMS" != "8" ]]; then
+  echo "expected 8 menu items before clicking [workspace] cmdlang item, got $MENU_ITEMS" >&2
+  exit 1
+fi
+
+WS_CMDLANG_IDX=6
+WS_CMDLANG_X=$((MENU_X + 10))
+WS_CMDLANG_Y=$((MENU_Y + MENU_TITLE_H + 10 + WS_CMDLANG_IDX * ITEM_H))
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-input-injector --socket "$SOCKET" click "$WS_CMDLANG_X" "$WS_CMDLANG_Y"
+tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Menu: server-action .* cmd=workspace 3'
+timeout 5 bash -c "until ./fbwl-remote --socket \"$SOCKET\" get-workspace | rg -q '^ok workspace=3$'; do sleep 0.05; done"
 
 echo "ok: menu smoke passed (socket=$SOCKET log=$LOG)"

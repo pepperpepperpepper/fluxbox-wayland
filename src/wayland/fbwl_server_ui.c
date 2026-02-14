@@ -742,9 +742,9 @@ static void menu_ui_terminate(void *userdata) {
     }
     wl_display_terminate(server->wl_display);
 }
-static void menu_ui_server_action(void *userdata, enum fbwl_menu_server_action action, int arg, const char *cmd) {
+static void menu_ui_server_action(void *userdata, enum fbwl_menu_server_action action, int arg, const char *cmd, const void *cmdlang_scope) {
     struct fbwl_server *server = userdata;
-    server_menu_handle_server_action(server, action, arg, cmd);
+    server_menu_handle_server_action(server, action, arg, cmd, cmdlang_scope);
     if (server != NULL && server->menu_ui.open && server->menu_ui.stack[0] != NULL)
         server_menu_sync_toggle_states(server, server->menu_ui.stack[0], server->menu_ui.target_view, server->menu_ui.x, server->menu_ui.y);
 }

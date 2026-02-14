@@ -653,6 +653,41 @@ static bool menu_parse_file_impl(struct fbwl_menu *stack[16], size_t *depth, siz
             continue;
         }
 
+        // Generic Fluxbox command tags: allow any cmdlang line from fluxbox-keys(5) via:
+        //   [command] (label) {args} <icon>
+        char *label = fbwl_menu_parse_paren_value(close + 1);
+        char *args = fbwl_menu_parse_brace_value(close + 1);
+        fbwl_menu_parse_convert_owned_to_utf8(&label, encoding);
+        fbwl_menu_parse_convert_owned_to_utf8(&args, encoding);
+
+        const char *icon_s = close + 1;
+        icon_s = fbwl_menu_parse_after_delim(icon_s, '(', ')');
+        icon_s = fbwl_menu_parse_after_delim(icon_s, '{', '}');
+        char *icon_raw = fbwl_menu_parse_angle_value(icon_s);
+        fbwl_menu_parse_convert_owned_to_utf8(&icon_raw, encoding);
+        char *icon = icon_raw != NULL ? fbwl_menu_parse_resolve_path(base_dir, icon_raw) : NULL;
+
+        const char *use_label = (label != NULL && *label != '\0') ? label : key;
+        char *cmd_line = NULL;
+        if (args != NULL && *args != '\0') {
+            const size_t needed = strlen(key) + 1 + strlen(args) + 1;
+            cmd_line = malloc(needed);
+            if (cmd_line != NULL) {
+                snprintf(cmd_line, needed, "%s %s", key, args);
+            }
+        } else {
+            cmd_line = strdup(key);
+        }
+
+        if (cmd_line != NULL) {
+            (void)fbwl_menu_add_server_action(cur, use_label, icon, FBWL_MENU_SERVER_CMDLANG, 0, cmd_line);
+        }
+
+        free(cmd_line);
+        free(label);
+        free(args);
+        free(icon_raw);
+        free(icon);
         free(key);
     }
 

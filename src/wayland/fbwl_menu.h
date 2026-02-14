@@ -56,6 +56,7 @@ enum fbwl_menu_server_action {
     FBWL_MENU_SERVER_SLIT_CLIENT_UP,
     FBWL_MENU_SERVER_SLIT_CLIENT_DOWN,
     FBWL_MENU_SERVER_SLIT_ALPHA_PROMPT,
+    FBWL_MENU_SERVER_CMDLANG,
 };
 
 struct fbwl_menu;
