@@ -106,8 +106,11 @@ if [[ "$MENU_ITEMS" != "1" ]]; then
   exit 1
 fi
 
+ITEM_H=24
+MENU_TITLE_H=$ITEM_H
+
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
-./fbwl-input-injector --socket "$SOCKET" click "$((MENU_X + 10))" "$((MENU_Y + 10))" >/dev/null 2>&1
+./fbwl-input-injector --socket "$SOCKET" click "$((MENU_X + 10))" "$((MENU_Y + MENU_TITLE_H + 10))" >/dev/null 2>&1
 timeout 5 bash -c "until [[ -f '$MARKER' ]]; do sleep 0.05; done"
 
 if ! rg -q '^ok$' "$MARKER"; then
@@ -146,7 +149,7 @@ MENU_X=$(echo "$open_line" | rg -o 'x=-?[0-9]+' | head -n 1 | cut -d= -f2)
 MENU_Y=$(echo "$open_line" | rg -o 'y=-?[0-9]+' | head -n 1 | cut -d= -f2)
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
-./fbwl-input-injector --socket "$SOCKET" click "$((MENU_X + 10))" "$((MENU_Y + 10))" >/dev/null 2>&1
+./fbwl-input-injector --socket "$SOCKET" click "$((MENU_X + 10))" "$((MENU_Y + MENU_TITLE_H + 10))" >/dev/null 2>&1
 AFTER_CLICK=$((OFFSET + 1))
 timeout 5 bash -c "until tail -c +$AFTER_CLICK '$LOG' | rg -q 'Focus: cm-a'; do sleep 0.05; done"
 

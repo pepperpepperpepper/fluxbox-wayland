@@ -297,26 +297,23 @@ static void apply_toolbar_strut_box(const struct fbwl_server *server, struct wlr
     if (toolbar_out == NULL || toolbar_out != output) {
         return;
     }
-    int t = server->toolbar_ui.thickness;
-    if (t < 1) {
-        t = server->toolbar_ui.height_override;
-        if (t <= 0) {
-            t = server->decor_theme.toolbar_height > 0 ? server->decor_theme.toolbar_height :
+    int thickness = server->toolbar_ui.thickness;
+    if (thickness < 1) {
+        thickness = server->toolbar_ui.height_override;
+        if (thickness <= 0) {
+            thickness = server->decor_theme.toolbar_height > 0 ? server->decor_theme.toolbar_height :
                 (server->decor_theme.title_height > 0 ? server->decor_theme.title_height : 24);
         }
     }
-    if (t < 1) {
-        t = 1;
-    }
-    if (server->toolbar_ui.auto_hide && server->toolbar_ui.hidden) {
-        const int peek = 2;
-        if (t > peek) {
-            t = peek;
-        }
-    }
-    if (t < 1) {
-        return;
-    }
+    if (thickness < 1) thickness = 1;
+    int border_w = server->decor_theme.toolbar_border_width;
+    if (border_w < 0) border_w = 0;
+    if (border_w > 20) border_w = 20;
+    int bevel_w = server->decor_theme.toolbar_bevel_width;
+    if (bevel_w < 0) bevel_w = 0;
+    if (bevel_w > 20) bevel_w = 20;
+    int t = thickness + 2 * bevel_w + 2 * border_w;
+    if (t < 1) return;
     switch (server->toolbar_ui.placement) {
     case FBWL_TOOLBAR_PLACEMENT_TOP_LEFT:
     case FBWL_TOOLBAR_PLACEMENT_TOP_CENTER:
@@ -370,9 +367,6 @@ static void apply_slit_strut_box(const struct fbwl_server *server, struct wlr_ou
     if (!server->slit_ui.enabled || server->slit_ui.max_over || server->slit_ui.auto_hide) {
         return;
     }
-    if (server->slit_ui.thickness < 1) {
-        return;
-    }
 
     const size_t on_head = server->slit_ui.on_head >= 0 ? (size_t)server->slit_ui.on_head : 0;
     struct wlr_output *slit_out = fbwl_screen_map_output_for_screen(output_layout, outputs, on_head);
@@ -380,7 +374,11 @@ static void apply_slit_strut_box(const struct fbwl_server *server, struct wlr_ou
         return;
     }
 
-    const int t = server->slit_ui.thickness;
+    const enum fbwl_toolbar_placement placement = server->slit_ui.placement;
+    const int t = placement == FBWL_TOOLBAR_PLACEMENT_LEFT_BOTTOM || placement == FBWL_TOOLBAR_PLACEMENT_LEFT_CENTER ||
+            placement == FBWL_TOOLBAR_PLACEMENT_LEFT_TOP || placement == FBWL_TOOLBAR_PLACEMENT_RIGHT_BOTTOM ||
+            placement == FBWL_TOOLBAR_PLACEMENT_RIGHT_CENTER || placement == FBWL_TOOLBAR_PLACEMENT_RIGHT_TOP ?
+        server->slit_ui.width : server->slit_ui.height;
     if (t < 1) {
         return;
     }

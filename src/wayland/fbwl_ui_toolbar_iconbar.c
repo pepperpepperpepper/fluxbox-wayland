@@ -154,8 +154,9 @@ static void iconbar_alloc_fail_cleanup(struct fbwl_toolbar_ui *ui) {
     ui->iconbar_item_lx = NULL;
     free(ui->iconbar_item_w);
     ui->iconbar_item_w = NULL;
-    free(ui->iconbar_items);
-    ui->iconbar_items = NULL;
+    ui->iconbar_bg = NULL;
+    free(ui->iconbar_bgs);
+    ui->iconbar_bgs = NULL;
     free(ui->iconbar_labels);
     ui->iconbar_labels = NULL;
     free(ui->iconbar_needs_tooltip);
@@ -255,11 +256,11 @@ void fbwl_ui_toolbar_build_iconbar(struct fbwl_toolbar_ui *ui, const struct fbwl
     ui->iconbar_texts = calloc(icon_count, sizeof(*ui->iconbar_texts));
     ui->iconbar_item_lx = calloc(icon_count, sizeof(*ui->iconbar_item_lx));
     ui->iconbar_item_w = calloc(icon_count, sizeof(*ui->iconbar_item_w));
-    ui->iconbar_items = calloc(icon_count, sizeof(*ui->iconbar_items));
+    ui->iconbar_bgs = calloc(icon_count, sizeof(*ui->iconbar_bgs));
     ui->iconbar_labels = calloc(icon_count, sizeof(*ui->iconbar_labels));
     ui->iconbar_needs_tooltip = calloc(icon_count, sizeof(*ui->iconbar_needs_tooltip));
     if (ui->iconbar_views == NULL || ui->iconbar_texts == NULL || ui->iconbar_item_lx == NULL || ui->iconbar_item_w == NULL ||
-            ui->iconbar_items == NULL || ui->iconbar_labels == NULL || ui->iconbar_needs_tooltip == NULL) {
+            ui->iconbar_bgs == NULL || ui->iconbar_labels == NULL || ui->iconbar_needs_tooltip == NULL) {
         iconbar_alloc_fail_cleanup(ui);
         fbwl_iconbar_pattern_free(&pat);
         free(selected);
@@ -267,6 +268,7 @@ void fbwl_ui_toolbar_build_iconbar(struct fbwl_toolbar_ui *ui, const struct fbwl
     }
 
     ui->iconbar_count = icon_count;
+    const float alpha = (float)ui->alpha / 255.0f;
 
     int pad = ui->iconbar_icon_text_padding_px;
     if (pad < 0) {
@@ -286,6 +288,26 @@ void fbwl_ui_toolbar_build_iconbar(struct fbwl_toolbar_ui *ui, const struct fbwl
 
     enum fbwl_iconbar_alignment align = ui->iconbar_alignment;
 
+    const int cross = ui->border_w + ui->bevel_w;
+    const int bg_w = vertical ? ui->thickness : ui->iconbar_w;
+    const int bg_h = vertical ? ui->iconbar_w : ui->thickness;
+    ui->iconbar_bg = wlr_scene_buffer_create(ui->tree, NULL);
+    if (ui->iconbar_bg != NULL) {
+        wlr_scene_node_set_position(&ui->iconbar_bg->node, vertical ? cross : ui->iconbar_x, vertical ? ui->iconbar_x : cross);
+        const struct fbwl_texture *tex = env->decor_theme != NULL ? &env->decor_theme->toolbar_iconbar_empty_tex : NULL;
+        const bool parentrel = fbwl_texture_is_parentrelative(tex);
+        if (tex != NULL && !parentrel) {
+            struct wlr_buffer *buf = fbwl_texture_render_buffer(tex, bg_w > 0 ? bg_w : 1, bg_h > 0 ? bg_h : 1);
+            wlr_scene_buffer_set_buffer(ui->iconbar_bg, buf);
+            if (buf != NULL) {
+                wlr_buffer_drop(buf);
+            }
+            wlr_scene_buffer_set_dest_size(ui->iconbar_bg, bg_w > 0 ? bg_w : 1, bg_h > 0 ? bg_h : 1);
+            wlr_scene_buffer_set_opacity(ui->iconbar_bg, alpha);
+        } else {
+            wlr_scene_node_set_enabled(&ui->iconbar_bg->node, false);
+        }
+    }
     int xoff = ui->iconbar_x;
     int base_w = 0;
     int rem = 0;
@@ -417,13 +439,29 @@ void fbwl_ui_toolbar_build_iconbar(struct fbwl_toolbar_ui *ui, const struct fbwl
 
         const int w = vertical ? ui->thickness : iw;
         const int h = vertical ? iw : ui->thickness;
-        const int base_x = vertical ? 0 : xoff;
-        const int base_y = vertical ? xoff : 0;
+        const int base_x = vertical ? cross : xoff;
+        const int base_y = vertical ? xoff : cross;
 
-        float item[4] = {0.00f, 0.00f, 0.00f, 0.01f};
-        ui->iconbar_items[i] = wlr_scene_rect_create(ui->tree, w, h, item);
-        if (ui->iconbar_items[i] != NULL) {
-            wlr_scene_node_set_position(&ui->iconbar_items[i]->node, base_x, base_y);
+        ui->iconbar_bgs[i] = wlr_scene_buffer_create(ui->tree, NULL);
+        if (ui->iconbar_bgs[i] != NULL) {
+            wlr_scene_node_set_position(&ui->iconbar_bgs[i]->node, base_x, base_y);
+            const bool urgent = fbwl_view_is_urgent(view);
+            const bool focused_or_urgent = view == env->focused_view || urgent;
+            const struct fbwl_texture *tex = env->decor_theme != NULL
+                ? (focused_or_urgent ? &env->decor_theme->toolbar_iconbar_focused_tex : &env->decor_theme->toolbar_iconbar_unfocused_tex)
+                : NULL;
+            const bool parentrel = fbwl_texture_is_parentrelative(tex);
+            if (tex != NULL && !parentrel) {
+                struct wlr_buffer *buf = fbwl_texture_render_buffer(tex, w > 0 ? w : 1, h > 0 ? h : 1);
+                wlr_scene_buffer_set_buffer(ui->iconbar_bgs[i], buf);
+                if (buf != NULL) {
+                    wlr_buffer_drop(buf);
+                }
+                wlr_scene_buffer_set_dest_size(ui->iconbar_bgs[i], w > 0 ? w : 1, h > 0 ? h : 1);
+                wlr_scene_buffer_set_opacity(ui->iconbar_bgs[i], alpha);
+            } else {
+                wlr_scene_node_set_enabled(&ui->iconbar_bgs[i]->node, false);
+            }
         }
 
         char *label_text = iconbar_label_text(ui, view);
@@ -478,7 +516,7 @@ void fbwl_ui_toolbar_build_iconbar(struct fbwl_toolbar_ui *ui, const struct fbwl
             const bool focused_or_urgent = view != NULL && (view == env->focused_view || urgent);
             effect = focused_or_urgent ? &env->decor_theme->toolbar_iconbar_focused_effect : &env->decor_theme->toolbar_iconbar_unfocused_effect;
         }
-        struct wlr_buffer *buf = fbwl_text_buffer_create(label_text != NULL ? label_text : "", text_w, h, pad, fg, ui->font, effect);
+        struct wlr_buffer *buf = fbwl_text_buffer_create(label_text != NULL ? label_text : "", text_w, h, pad, fg, ui->font, effect, 0);
         if (buf != NULL) {
             struct wlr_scene_buffer *sb = wlr_scene_buffer_create(ui->tree, buf);
             if (sb != NULL) {

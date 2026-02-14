@@ -160,7 +160,7 @@ static void normalize_font_spec(const char *in, char *out, size_t out_size) {
 }
 
 struct wlr_buffer *fbwl_text_buffer_create(const char *text, int width, int height,
-        int pad_x, const float rgba[static 4], const char *font, const struct fbwl_text_effect *effect) {
+        int pad_x, const float rgba[static 4], const char *font, const struct fbwl_text_effect *effect, int justify) {
     if (width < 1 || height < 1 || rgba == NULL) {
         return NULL;
     }
@@ -210,6 +210,13 @@ struct wlr_buffer *fbwl_text_buffer_create(const char *text, int width, int heig
     if (layout_width > 0) {
         pango_layout_set_width(layout, layout_width * PANGO_SCALE);
     }
+    PangoAlignment align = PANGO_ALIGN_LEFT;
+    if (justify == 1) {
+        align = PANGO_ALIGN_CENTER;
+    } else if (justify == 2) {
+        align = PANGO_ALIGN_RIGHT;
+    }
+    pango_layout_set_alignment(layout, align);
     pango_layout_set_single_paragraph_mode(layout, TRUE);
     pango_layout_set_ellipsize(layout, PANGO_ELLIPSIZE_END);
 

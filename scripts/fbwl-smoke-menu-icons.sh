@@ -147,10 +147,11 @@ else
 fi
 
 ITEM_H=24
+MENU_TITLE_H=$ITEM_H
 
 # Click the first item (WithIcon) to validate exec works.
 CLICK_X=$((MENU_X + 10))
-CLICK_Y=$((MENU_Y + 10))
+CLICK_Y=$((MENU_Y + MENU_TITLE_H + 10))
 ./fbwl-input-injector --socket "$SOCKET" click "$CLICK_X" "$CLICK_Y"
 timeout 5 bash -c "until [[ -f '$MARKER1' ]]; do sleep 0.05; done"
 
@@ -172,7 +173,7 @@ fi
 
 IDX=2
 CLICK_X=$((MENU_X + 10))
-CLICK_Y=$((MENU_Y + 10 + IDX * ITEM_H))
+CLICK_Y=$((MENU_Y + MENU_TITLE_H + 10 + IDX * ITEM_H))
 ./fbwl-input-injector --socket "$SOCKET" click "$CLICK_X" "$CLICK_Y"
 timeout 5 bash -c "until [[ -f '$MARKER2' ]]; do sleep 0.05; done"
 

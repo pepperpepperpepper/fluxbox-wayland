@@ -1,6 +1,7 @@
 #include <stdio.h>
 
 #include "wayland/fbwl_server_internal.h"
+#include "wayland/fbwl_server_menu_state.h"
 
 static struct fbwl_ui_menu_env menu_ui_env(struct fbwl_server *server) {
     return (struct fbwl_ui_menu_env){
@@ -52,6 +53,7 @@ void server_menu_ui_open_workspace(struct fbwl_server *server, int x, int y) {
     }
 
     menu_ui_apply_screen_config(server, x, y);
+    server_menu_sync_toggle_states(server, server->workspace_menu, NULL, x, y);
     const struct fbwl_ui_menu_env env = menu_ui_env(server);
     fbwl_ui_menu_open_root(&server->menu_ui, &env, server->workspace_menu, x, y);
 

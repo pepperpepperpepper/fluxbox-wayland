@@ -6,6 +6,7 @@
 #include <wlr/xwayland.h>
 
 #include "wayland/fbwl_server_internal.h"
+#include "wayland/fbwl_server_menu_state.h"
 
 static void menu_last_item_set_close_on_click(struct fbwl_menu *menu, bool close_on_click) {
     if (menu == NULL || menu->item_count == 0) {
@@ -95,10 +96,7 @@ static struct fbwl_menu *slit_menu_build(struct fbwl_server *server) {
             {"Bottom Right", FBWL_TOOLBAR_PLACEMENT_BOTTOM_RIGHT},
         };
         for (size_t i = 0; i < sizeof(items) / sizeof(items[0]); i++) {
-            char label[64];
-            const bool selected = server->slit_ui.placement == items[i].placement;
-            (void)snprintf(label, sizeof(label), "%s%s", selected ? "* " : "", items[i].label);
-            (void)fbwl_menu_add_server_action(placement, label, NULL, FBWL_MENU_SERVER_SLIT_SET_PLACEMENT,
+            (void)fbwl_menu_add_server_action(placement, items[i].label, NULL, FBWL_MENU_SERVER_SLIT_SET_PLACEMENT,
                 (int)items[i].placement, NULL);
             menu_last_item_set_close_on_click(placement, false);
         }
@@ -122,10 +120,7 @@ static struct fbwl_menu *slit_menu_build(struct fbwl_server *server) {
             {"Desktop", 12},
         };
         for (size_t i = 0; i < sizeof(items) / sizeof(items[0]); i++) {
-            char label[64];
-            const bool selected = server->slit_ui.layer_num == items[i].layer_num;
-            (void)snprintf(label, sizeof(label), "%s%s", selected ? "* " : "", items[i].label);
-            (void)fbwl_menu_add_server_action(layer, label, NULL, FBWL_MENU_SERVER_SLIT_SET_LAYER, items[i].layer_num, NULL);
+            (void)fbwl_menu_add_server_action(layer, items[i].label, NULL, FBWL_MENU_SERVER_SLIT_SET_LAYER, items[i].layer_num, NULL);
             menu_last_item_set_close_on_click(layer, false);
         }
         if (!fbwl_menu_add_submenu(menu, "Layer...", layer, NULL)) {
@@ -139,8 +134,7 @@ static struct fbwl_menu *slit_menu_build(struct fbwl_server *server) {
         if (heads != NULL) {
             for (size_t i = 0; i < server->screen_configs_len; i++) {
                 char label[64];
-                const bool selected = server->slit_ui.on_head >= 0 && (size_t)server->slit_ui.on_head == i;
-                (void)snprintf(label, sizeof(label), "%sHead %zu", selected ? "* " : "", i + 1);
+                (void)snprintf(label, sizeof(label), "Head %zu", i + 1);
                 (void)fbwl_menu_add_server_action(heads, label, NULL, FBWL_MENU_SERVER_SLIT_SET_ON_HEAD, (int)i, NULL);
                 menu_last_item_set_close_on_click(heads, false);
             }
@@ -151,17 +145,13 @@ static struct fbwl_menu *slit_menu_build(struct fbwl_server *server) {
         }
     }
 
-    char label[64];
-    (void)snprintf(label, sizeof(label), "%sAuto hide", server->slit_ui.auto_hide ? "[x] " : "[ ] ");
-    (void)fbwl_menu_add_server_action(menu, label, NULL, FBWL_MENU_SERVER_SLIT_TOGGLE_AUTO_HIDE, 0, NULL);
+    (void)fbwl_menu_add_server_action(menu, "Auto hide", NULL, FBWL_MENU_SERVER_SLIT_TOGGLE_AUTO_HIDE, 0, NULL);
     menu_last_item_set_close_on_click(menu, false);
 
-    (void)snprintf(label, sizeof(label), "%sAuto raise", server->slit_ui.auto_raise ? "[x] " : "[ ] ");
-    (void)fbwl_menu_add_server_action(menu, label, NULL, FBWL_MENU_SERVER_SLIT_TOGGLE_AUTO_RAISE, 0, NULL);
+    (void)fbwl_menu_add_server_action(menu, "Auto raise", NULL, FBWL_MENU_SERVER_SLIT_TOGGLE_AUTO_RAISE, 0, NULL);
     menu_last_item_set_close_on_click(menu, false);
 
-    (void)snprintf(label, sizeof(label), "%sMaximize Over", server->slit_ui.max_over ? "[x] " : "[ ] ");
-    (void)fbwl_menu_add_server_action(menu, label, NULL, FBWL_MENU_SERVER_SLIT_TOGGLE_MAX_OVER, 0, NULL);
+    (void)fbwl_menu_add_server_action(menu, "Maximize Over", NULL, FBWL_MENU_SERVER_SLIT_TOGGLE_MAX_OVER, 0, NULL);
     menu_last_item_set_close_on_click(menu, false);
 
     struct fbwl_menu *alpha = fbwl_menu_create("Alpha");
@@ -173,8 +163,7 @@ static struct fbwl_menu *slit_menu_build(struct fbwl_server *server) {
             const int pct = pcts[i];
             const int a = (pct * 255 + 50) / 100;
             char a_label[64];
-            const bool selected = server->slit_ui.alpha == (uint8_t)a;
-            (void)snprintf(a_label, sizeof(a_label), "%s%d%%", selected ? "* " : "", pct);
+            (void)snprintf(a_label, sizeof(a_label), "%d%%", pct);
             (void)fbwl_menu_add_server_action(alpha, a_label, NULL, FBWL_MENU_SERVER_SLIT_SET_ALPHA, a, NULL);
             menu_last_item_set_close_on_click(alpha, false);
         }
@@ -208,9 +197,7 @@ static struct fbwl_menu *slit_menu_build(struct fbwl_server *server) {
             char seq[32];
             (void)snprintf(seq, sizeof(seq), "%llu", (unsigned long long)view->create_seq);
 
-            char item_label[256];
-            (void)snprintf(item_label, sizeof(item_label), "%s%s", it->visible ? "[x] " : "[ ] ", name);
-            (void)fbwl_menu_add_server_action(clients, item_label, NULL, FBWL_MENU_SERVER_SLIT_TOGGLE_CLIENT_VISIBLE, 0, seq);
+            (void)fbwl_menu_add_server_action(clients, name, NULL, FBWL_MENU_SERVER_SLIT_TOGGLE_CLIENT_VISIBLE, 0, seq);
             menu_last_item_set_close_on_click(clients, false);
             client_count++;
         }
@@ -243,6 +230,7 @@ void server_menu_ui_open_slit(struct fbwl_server *server, int x, int y) {
     }
 
     menu_ui_apply_screen_config(server, x, y);
+    server_menu_sync_toggle_states(server, server->slit_menu, NULL, x, y);
     const struct fbwl_ui_menu_env env = menu_ui_env(server);
     fbwl_ui_menu_open_root(&server->menu_ui, &env, server->slit_menu, x, y);
     wlr_log(WLR_INFO, "SlitMenu: open");

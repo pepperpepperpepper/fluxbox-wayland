@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <wlr/interfaces/wlr_buffer.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/util/log.h>
 
@@ -72,19 +73,33 @@ void fbwl_ui_toolbar_build_tray(struct fbwl_toolbar_ui *ui, const struct fbwl_ui
         return;
     }
 
+    const int cross = ui->border_w + ui->bevel_w;
+    const int bg_w = vertical ? ui->thickness : ui->tray_w;
+    const int bg_h = vertical ? ui->tray_w : ui->thickness;
+    ui->tray_bg = wlr_scene_buffer_create(ui->tree, NULL);
+    if (ui->tray_bg != NULL) {
+        wlr_scene_node_set_position(&ui->tray_bg->node, vertical ? cross : ui->tray_x, vertical ? ui->tray_x : cross);
+        const struct fbwl_texture *tex = &env->decor_theme->toolbar_systray_tex;
+        const bool parentrel = fbwl_texture_is_parentrelative(tex);
+        if (!parentrel) {
+            struct wlr_buffer *buf = fbwl_texture_render_buffer(tex, bg_w > 0 ? bg_w : 1, bg_h > 0 ? bg_h : 1);
+            wlr_scene_buffer_set_buffer(ui->tray_bg, buf);
+            if (buf != NULL) {
+                wlr_buffer_drop(buf);
+            }
+            wlr_scene_buffer_set_dest_size(ui->tray_bg, bg_w > 0 ? bg_w : 1, bg_h > 0 ? bg_h : 1);
+            wlr_scene_buffer_set_opacity(ui->tray_bg, alpha);
+        } else {
+            wlr_scene_node_set_enabled(&ui->tray_bg->node, false);
+        }
+    }
+
     int xoff = ui->tray_x;
     const int pad = ui->thickness >= 8 ? 2 : 0;
     int size = ui->thickness - 2 * pad;
     if (size < 1) {
         size = 1;
     }
-
-    float item[4] = {
-        env->decor_theme->toolbar_iconbar_focused[0],
-        env->decor_theme->toolbar_iconbar_focused[1],
-        env->decor_theme->toolbar_iconbar_focused[2],
-        env->decor_theme->toolbar_iconbar_focused[3] * alpha * 0.65f,
-    };
 
     size_t idx = 0;
     if (env->sni != NULL && env->sni->items.prev != NULL && env->sni->items.next != NULL) {
@@ -106,17 +121,11 @@ void fbwl_ui_toolbar_build_tray(struct fbwl_toolbar_ui *ui, const struct fbwl_ui
             ui->tray_ids[idx] = strdup(sni->id != NULL ? sni->id : "");
             ui->tray_services[idx] = strdup(sni->service != NULL ? sni->service : "");
             ui->tray_paths[idx] = strdup(sni->path != NULL ? sni->path : "");
-            ui->tray_rects[idx] = wlr_scene_rect_create(ui->tree, size, size, item);
-            if (ui->tray_rects[idx] != NULL) {
-                wlr_scene_node_set_position(&ui->tray_rects[idx]->node,
-                    vertical ? pad : xoff + pad,
-                    vertical ? xoff + pad : pad);
-            }
             ui->tray_icons[idx] = wlr_scene_buffer_create(ui->tree, sni->icon_buf);
             if (ui->tray_icons[idx] != NULL) {
                 wlr_scene_node_set_position(&ui->tray_icons[idx]->node,
-                    vertical ? pad : xoff + pad,
-                    vertical ? xoff + pad : pad);
+                    vertical ? cross + pad : xoff + pad,
+                    vertical ? xoff + pad : cross + pad);
                 wlr_scene_buffer_set_dest_size(ui->tray_icons[idx], size, size);
             }
             wlr_log(WLR_INFO, "Toolbar: tray item idx=%zu lx=%d w=%d id=%s item_id=%s",
@@ -130,4 +139,3 @@ void fbwl_ui_toolbar_build_tray(struct fbwl_toolbar_ui *ui, const struct fbwl_ui
     ui->tray_count = idx;
 #endif
 }
-

@@ -361,6 +361,8 @@ fluxbox_wayland_SOURCES = \
 		src/wayland/fbwl_ui_cmd_dialog.h \
 			src/wayland/fbwl_ui_menu.c \
 			src/wayland/fbwl_ui_menu.h \
+			src/wayland/fbwl_ui_menu_marks.c \
+			src/wayland/fbwl_ui_menu_marks.h \
 			src/wayland/fbwl_ui_menu_icon.c \
 			src/wayland/fbwl_ui_menu_icon.h \
 			src/wayland/fbwl_ui_menu_search.c \
@@ -392,6 +394,8 @@ fluxbox_wayland_SOURCES = \
 		src/wayland/fbwl_menu.c \
 		src/wayland/fbwl_menu.h \
 		src/wayland/fbwl_menu_parse.c \
+		src/wayland/fbwl_menu_parse_util.c \
+		src/wayland/fbwl_menu_parse_util.h \
 		src/wayland/fbwl_menu_parse_encoding.c \
 		src/wayland/fbwl_menu_parse_encoding.h \
 		src/wayland/fbwl_menu_parse.h \
@@ -446,6 +450,8 @@ fluxbox_wayland_SOURCES = \
 					src/wayland/fbwl_server_menu.c \
 					src/wayland/fbwl_server_menu_actions.c \
 				src/wayland/fbwl_server_menu_actions.h \
+				src/wayland/fbwl_server_menu_state.c \
+				src/wayland/fbwl_server_menu_state.h \
 			src/wayland/fbwl_server_ipc_command.c \
 			src/wayland/fbwl_server_bootstrap.c \
 			src/wayland/fbwl_server_cleanup.c \
@@ -462,20 +468,30 @@ fluxbox_wayland_SOURCES = \
 	src/wayland/fbwl_xdg_activation.h \
 	src/wayland/fbwl_xdg_decoration.c \
 	src/wayland/fbwl_xdg_decoration.h \
-				src/wayland/fbwl_scene_layers.c \
-				src/wayland/fbwl_scene_layers.h \
-				src/wayland/fbwl_style_parse.c \
-				src/wayland/fbwl_style_parse_font_effects.c \
-				src/wayland/fbwl_style_parse.h \
-				src/wayland/fbwl_style_parse_font_effects.h \
-				src/wayland/fbwl_ui_decor_theme.h \
-				src/wayland/fbwl_text_effect.h \
-				src/wayland/fbwl_view.c \
-				src/wayland/fbwl_view_maximize.c \
-				src/wayland/fbwl_view_decor.c \
-				src/wayland/fbwl_view_decor_tabs.c \
-				src/wayland/fbwl_view_decor_tabs.h \
-				src/wayland/fbwl_view.h \
+					src/wayland/fbwl_scene_layers.c \
+					src/wayland/fbwl_scene_layers.h \
+					src/wayland/fbwl_style_parse.c \
+					src/wayland/fbwl_style_parse_menu.c \
+					src/wayland/fbwl_style_parse_font_effects.c \
+					src/wayland/fbwl_style_parse_toolbar_slit.c \
+					src/wayland/fbwl_style_parse.h \
+					src/wayland/fbwl_style_parse_menu.h \
+					src/wayland/fbwl_style_parse_font_effects.h \
+					src/wayland/fbwl_style_parse_toolbar_slit.h \
+						src/wayland/fbwl_style_parse_textures.c \
+						src/wayland/fbwl_style_parse_textures.h \
+						src/wayland/fbwl_ui_decor_theme.h \
+						src/wayland/fbwl_ui_decor_icons.c \
+						src/wayland/fbwl_ui_decor_icons.h \
+						src/wayland/fbwl_text_effect.h \
+						src/wayland/fbwl_view.c \
+						src/wayland/fbwl_view_maximize.c \
+						src/wayland/fbwl_view_decor.c \
+						src/wayland/fbwl_view_decor_handle.c \
+						src/wayland/fbwl_view_state.c \
+						src/wayland/fbwl_view_decor_tabs.c \
+						src/wayland/fbwl_view_decor_tabs.h \
+						src/wayland/fbwl_view.h \
 				src/wayland/fbwl_view_attention.c \
 			src/wayland/fbwl_view_attention.h \
 			src/wayland/fbwl_view_foreign_toplevel.c \

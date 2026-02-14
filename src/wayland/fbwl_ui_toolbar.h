@@ -103,6 +103,8 @@ struct fbwl_toolbar_ui {
     int y;
     int base_x;
     int base_y;
+    int border_w;
+    int bevel_w;
     int thickness;
     int height;
     int cell_w;
@@ -116,7 +118,7 @@ struct fbwl_toolbar_ui {
     int *button_item_lx;
     int *button_item_w;
     const char **button_item_tokens;
-    struct wlr_scene_rect **button_rects;
+    struct wlr_scene_buffer **button_bgs;
     struct wlr_scene_buffer **button_labels;
     size_t button_count;
 
@@ -126,7 +128,8 @@ struct fbwl_toolbar_ui {
     char **iconbar_texts;
     int *iconbar_item_lx;
     int *iconbar_item_w;
-    struct wlr_scene_rect **iconbar_items;
+    struct wlr_scene_buffer *iconbar_bg;
+    struct wlr_scene_buffer **iconbar_bgs;
     struct wlr_scene_buffer **iconbar_labels;
     bool *iconbar_needs_tooltip;
     size_t iconbar_count;
@@ -151,6 +154,8 @@ struct fbwl_toolbar_ui {
     bool hovered;
     uint32_t auto_pending;
     struct wlr_scene_buffer *clock_label;
+    struct wlr_scene_buffer *clock_bg;
+    struct wlr_scene_buffer *tray_bg;
 
     struct wlr_scene_tree *tree;
     struct fbwl_pseudo_bg pseudo_bg;

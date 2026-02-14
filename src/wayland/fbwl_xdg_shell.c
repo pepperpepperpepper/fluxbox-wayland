@@ -432,6 +432,12 @@ void fbwl_xdg_shell_handle_toplevel_destroy(struct fbwl_view *view,
 
     fbwl_tabs_detach(view, "destroy");
 
+    if (view->server != NULL && view->server->decor_button_pressed_view == view) {
+        view->server->decor_button_pressed_view = NULL;
+        view->server->decor_button_pressed_kind = FBWL_DECOR_HIT_NONE;
+        view->server->decor_button_pressed_button = 0;
+    }
+
     fbwl_cleanup_listener(&view->map);
     fbwl_cleanup_listener(&view->unmap);
     fbwl_cleanup_listener(&view->commit);

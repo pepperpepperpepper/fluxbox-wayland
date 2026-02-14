@@ -48,6 +48,8 @@ struct fbwl_slit_ui {
     int y;
     int base_x;
     int base_y;
+    int border_w;
+    int bevel_w;
     int thickness;
     int width;
     int height;

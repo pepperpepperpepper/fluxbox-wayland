@@ -372,16 +372,37 @@ void decor_theme_set_defaults(struct fbwl_decor_theme *theme) {
     }
 
     theme->border_width = 4;
+    theme->bevel_width = 0;
+    theme->handle_width = 0;
     theme->title_height = 24;
     theme->button_margin = 4;
     theme->button_spacing = 2;
-    theme->menu_item_height = 0;
+    theme->menu_item_height = theme->title_height;
+    theme->menu_title_height = 0;
+    theme->menu_border_width = 0;
+    theme->menu_bevel_width = 0;
+    theme->menu_frame_justify = 0;
+    theme->menu_hilite_justify = 0;
+    theme->menu_title_justify = 0;
+    theme->menu_bullet = 0;
+    theme->menu_bullet_pos = 0;
     theme->toolbar_height = 0;
+    theme->toolbar_border_width = theme->border_width;
+    theme->toolbar_bevel_width = theme->bevel_width;
+    theme->toolbar_clock_border_width = 0;
+    theme->toolbar_workspace_border_width = 0;
+    theme->toolbar_iconbar_border_width = 0;
+    theme->toolbar_iconbar_focused_border_width = 0;
+    theme->toolbar_iconbar_unfocused_border_width = 0;
+    theme->slit_border_width = theme->border_width;
+    theme->slit_bevel_width = 0;
 
     strncpy(theme->window_font, "Sans", sizeof(theme->window_font));
     theme->window_font[sizeof(theme->window_font) - 1] = '\0';
     strncpy(theme->menu_font, "Sans", sizeof(theme->menu_font));
     theme->menu_font[sizeof(theme->menu_font) - 1] = '\0';
+    theme->menu_title_font[0] = '\0';
+    theme->menu_hilite_font[0] = '\0';
     strncpy(theme->toolbar_font, "Sans", sizeof(theme->toolbar_font));
     theme->toolbar_font[sizeof(theme->toolbar_font) - 1] = '\0';
 
@@ -389,6 +410,7 @@ void decor_theme_set_defaults(struct fbwl_decor_theme *theme) {
     text_effect_set_defaults(&theme->window_label_unfocus_effect);
     text_effect_set_defaults(&theme->menu_frame_effect);
     text_effect_set_defaults(&theme->menu_title_effect);
+    text_effect_set_defaults(&theme->menu_hilite_effect);
     text_effect_set_defaults(&theme->toolbar_workspace_effect);
     text_effect_set_defaults(&theme->toolbar_iconbar_focused_effect);
     text_effect_set_defaults(&theme->toolbar_iconbar_unfocused_effect);
@@ -406,10 +428,28 @@ void decor_theme_set_defaults(struct fbwl_decor_theme *theme) {
     theme->titlebar_inactive[2] = 0.10f;
     theme->titlebar_inactive[3] = 1.0f;
 
-    theme->border_color[0] = 0.05f;
-    theme->border_color[1] = 0.05f;
-    theme->border_color[2] = 0.05f;
-    theme->border_color[3] = 1.0f;
+    theme->border_color_focus[0] = 0.05f;
+    theme->border_color_focus[1] = 0.05f;
+    theme->border_color_focus[2] = 0.05f;
+    theme->border_color_focus[3] = 1.0f;
+
+    theme->border_color_unfocus[0] = theme->border_color_focus[0];
+    theme->border_color_unfocus[1] = theme->border_color_focus[1];
+    theme->border_color_unfocus[2] = theme->border_color_focus[2];
+    theme->border_color_unfocus[3] = theme->border_color_focus[3];
+
+    theme->menu_border_color[0] = theme->border_color_unfocus[0];
+    theme->menu_border_color[1] = theme->border_color_unfocus[1];
+    theme->menu_border_color[2] = theme->border_color_unfocus[2];
+    theme->menu_border_color[3] = theme->border_color_unfocus[3];
+
+    memcpy(theme->toolbar_border_color, theme->border_color_unfocus, sizeof(theme->toolbar_border_color));
+    memcpy(theme->toolbar_clock_border_color, theme->border_color_unfocus, sizeof(theme->toolbar_clock_border_color));
+    memcpy(theme->toolbar_workspace_border_color, theme->border_color_unfocus, sizeof(theme->toolbar_workspace_border_color));
+    memcpy(theme->toolbar_iconbar_border_color, theme->border_color_unfocus, sizeof(theme->toolbar_iconbar_border_color));
+    memcpy(theme->toolbar_iconbar_focused_border_color, theme->border_color_unfocus, sizeof(theme->toolbar_iconbar_focused_border_color));
+    memcpy(theme->toolbar_iconbar_unfocused_border_color, theme->border_color_unfocus, sizeof(theme->toolbar_iconbar_unfocused_border_color));
+    memcpy(theme->slit_border_color, theme->border_color_unfocus, sizeof(theme->slit_border_color));
 
     theme->title_text_active[0] = 1.0f;
     theme->title_text_active[1] = 1.0f;
@@ -436,15 +476,61 @@ void decor_theme_set_defaults(struct fbwl_decor_theme *theme) {
     theme->menu_text[2] = 1.0f;
     theme->menu_text[3] = 1.0f;
 
+    theme->menu_title_text[0] = theme->menu_text[0];
+    theme->menu_title_text[1] = theme->menu_text[1];
+    theme->menu_title_text[2] = theme->menu_text[2];
+    theme->menu_title_text[3] = theme->menu_text[3];
+
     theme->menu_hilite_text[0] = theme->menu_text[0];
     theme->menu_hilite_text[1] = theme->menu_text[1];
     theme->menu_hilite_text[2] = theme->menu_text[2];
     theme->menu_hilite_text[3] = theme->menu_text[3];
 
+    theme->menu_underline_color[0] = theme->menu_hilite_text[0];
+    theme->menu_underline_color[1] = theme->menu_hilite_text[1];
+    theme->menu_underline_color[2] = theme->menu_hilite_text[2];
+    theme->menu_underline_color[3] = theme->menu_hilite_text[3];
+
     theme->menu_disable_text[0] = theme->menu_text[0];
     theme->menu_disable_text[1] = theme->menu_text[1];
     theme->menu_disable_text[2] = theme->menu_text[2];
     theme->menu_disable_text[3] = 0.55f;
+
+    theme->menu_submenu_pixmap[0] = '\0';
+    theme->menu_selected_pixmap[0] = '\0';
+    theme->menu_unselected_pixmap[0] = '\0';
+    theme->menu_hilite_submenu_pixmap[0] = '\0';
+    theme->menu_hilite_selected_pixmap[0] = '\0';
+    theme->menu_hilite_unselected_pixmap[0] = '\0';
+
+    theme->toolbar_border_width_explicit = false;
+    theme->toolbar_border_color_explicit = false;
+    theme->toolbar_bevel_width_explicit = false;
+    theme->toolbar_clock_border_width_explicit = false;
+    theme->toolbar_clock_border_color_explicit = false;
+    theme->toolbar_workspace_border_width_explicit = false;
+    theme->toolbar_workspace_border_color_explicit = false;
+    theme->toolbar_iconbar_border_width_explicit = false;
+    theme->toolbar_iconbar_border_color_explicit = false;
+    theme->toolbar_iconbar_focused_border_width_explicit = false;
+    theme->toolbar_iconbar_focused_border_color_explicit = false;
+    theme->toolbar_iconbar_unfocused_border_width_explicit = false;
+    theme->toolbar_iconbar_unfocused_border_color_explicit = false;
+    theme->slit_border_width_explicit = false;
+    theme->slit_border_color_explicit = false;
+    theme->slit_bevel_width_explicit = false;
+    theme->slit_texture_explicit = false;
+    theme->toolbar_clock_texture_explicit = false;
+    theme->toolbar_workspace_texture_explicit = false;
+    theme->toolbar_label_texture_explicit = false;
+    theme->toolbar_windowlabel_texture_explicit = false;
+    theme->toolbar_button_texture_explicit = false;
+    theme->toolbar_button_pressed_texture_explicit = false;
+    theme->toolbar_systray_texture_explicit = false;
+    theme->toolbar_iconbar_texture_explicit = false;
+    theme->toolbar_iconbar_empty_texture_explicit = false;
+    theme->toolbar_iconbar_focused_texture_explicit = false;
+    theme->toolbar_iconbar_unfocused_texture_explicit = false;
 
     theme->toolbar_bg[0] = theme->titlebar_inactive[0];
     theme->toolbar_bg[1] = theme->titlebar_inactive[1];
@@ -506,6 +592,23 @@ void decor_theme_set_defaults(struct fbwl_decor_theme *theme) {
     theme->btn_rhalf_color[2] = 0.80f;
     theme->btn_rhalf_color[3] = 1.0f;
 
+    theme->window_tab_border_width = 0;
+    theme->window_tab_border_color[0] = theme->border_color_unfocus[0];
+    theme->window_tab_border_color[1] = theme->border_color_unfocus[1];
+    theme->window_tab_border_color[2] = theme->border_color_unfocus[2];
+    theme->window_tab_border_color[3] = theme->border_color_unfocus[3];
+    theme->window_tab_justify = 0;
+    strncpy(theme->window_tab_font, theme->window_font, sizeof(theme->window_tab_font));
+    theme->window_tab_font[sizeof(theme->window_tab_font) - 1] = '\0';
+    theme->window_tab_label_focus_text[0] = theme->title_text_active[0];
+    theme->window_tab_label_focus_text[1] = theme->title_text_active[1];
+    theme->window_tab_label_focus_text[2] = theme->title_text_active[2];
+    theme->window_tab_label_focus_text[3] = theme->title_text_active[3];
+    theme->window_tab_label_unfocus_text[0] = theme->title_text_inactive[0];
+    theme->window_tab_label_unfocus_text[1] = theme->title_text_inactive[1];
+    theme->window_tab_label_unfocus_text[2] = theme->title_text_inactive[2];
+    theme->window_tab_label_unfocus_text[3] = theme->title_text_inactive[3];
+
     // Texture defaults: match the current simplified "flat color" renderer.
     fbwl_texture_init(&theme->window_title_focus_tex);
     memcpy(theme->window_title_focus_tex.color, theme->titlebar_active, sizeof(theme->window_title_focus_tex.color));
@@ -515,9 +618,63 @@ void decor_theme_set_defaults(struct fbwl_decor_theme *theme) {
     memcpy(theme->window_title_unfocus_tex.color, theme->titlebar_inactive, sizeof(theme->window_title_unfocus_tex.color));
     memcpy(theme->window_title_unfocus_tex.color_to, theme->titlebar_inactive, sizeof(theme->window_title_unfocus_tex.color_to));
 
+    fbwl_texture_init(&theme->window_label_focus_tex);
+    memcpy(theme->window_label_focus_tex.color, theme->titlebar_active, sizeof(theme->window_label_focus_tex.color));
+    memcpy(theme->window_label_focus_tex.color_to, theme->titlebar_active, sizeof(theme->window_label_focus_tex.color_to));
+    theme->window_label_focus_tex.type = theme->window_title_focus_tex.type;
+    memcpy(theme->window_label_focus_tex.pic_color, theme->window_title_focus_tex.pic_color,
+        sizeof(theme->window_label_focus_tex.pic_color));
+
+    fbwl_texture_init(&theme->window_label_unfocus_tex);
+    memcpy(theme->window_label_unfocus_tex.color, theme->titlebar_inactive, sizeof(theme->window_label_unfocus_tex.color));
+    memcpy(theme->window_label_unfocus_tex.color_to, theme->titlebar_inactive, sizeof(theme->window_label_unfocus_tex.color_to));
+    theme->window_label_unfocus_tex.type = theme->window_title_unfocus_tex.type;
+    memcpy(theme->window_label_unfocus_tex.pic_color, theme->window_title_unfocus_tex.pic_color,
+        sizeof(theme->window_label_unfocus_tex.pic_color));
+
+    // Fluxbox themes commonly set window.button.* to ParentRelative to inherit the title texture.
+    fbwl_texture_init(&theme->window_button_focus_tex);
+    theme->window_button_focus_tex.type = FBWL_TEXTURE_PARENTRELATIVE;
+
+    fbwl_texture_init(&theme->window_button_unfocus_tex);
+    theme->window_button_unfocus_tex.type = FBWL_TEXTURE_PARENTRELATIVE;
+
+    fbwl_texture_init(&theme->window_button_pressed_tex);
+    theme->window_button_pressed_tex.type = theme->window_button_focus_tex.type;
+
+    fbwl_texture_init(&theme->window_handle_focus_tex);
+    memcpy(theme->window_handle_focus_tex.color, theme->border_color_focus, sizeof(theme->window_handle_focus_tex.color));
+    memcpy(theme->window_handle_focus_tex.color_to, theme->border_color_focus, sizeof(theme->window_handle_focus_tex.color_to));
+
+    fbwl_texture_init(&theme->window_handle_unfocus_tex);
+    memcpy(theme->window_handle_unfocus_tex.color, theme->border_color_unfocus, sizeof(theme->window_handle_unfocus_tex.color));
+    memcpy(theme->window_handle_unfocus_tex.color_to, theme->border_color_unfocus, sizeof(theme->window_handle_unfocus_tex.color_to));
+
+    fbwl_texture_init(&theme->window_grip_focus_tex);
+    memcpy(theme->window_grip_focus_tex.color, theme->border_color_focus, sizeof(theme->window_grip_focus_tex.color));
+    memcpy(theme->window_grip_focus_tex.color_to, theme->border_color_focus, sizeof(theme->window_grip_focus_tex.color_to));
+
+    fbwl_texture_init(&theme->window_grip_unfocus_tex);
+    memcpy(theme->window_grip_unfocus_tex.color, theme->border_color_unfocus, sizeof(theme->window_grip_unfocus_tex.color));
+    memcpy(theme->window_grip_unfocus_tex.color_to, theme->border_color_unfocus, sizeof(theme->window_grip_unfocus_tex.color_to));
+
+    fbwl_texture_init(&theme->window_tab_label_focus_tex);
+    memcpy(theme->window_tab_label_focus_tex.color, theme->titlebar_active, sizeof(theme->window_tab_label_focus_tex.color));
+    memcpy(theme->window_tab_label_focus_tex.color_to, theme->titlebar_active, sizeof(theme->window_tab_label_focus_tex.color_to));
+    theme->window_tab_label_focus_tex.type = theme->window_title_focus_tex.type;
+
+    fbwl_texture_init(&theme->window_tab_label_unfocus_tex);
+    memcpy(theme->window_tab_label_unfocus_tex.color, theme->titlebar_inactive, sizeof(theme->window_tab_label_unfocus_tex.color));
+    memcpy(theme->window_tab_label_unfocus_tex.color_to, theme->titlebar_inactive, sizeof(theme->window_tab_label_unfocus_tex.color_to));
+    theme->window_tab_label_unfocus_tex.type = theme->window_title_unfocus_tex.type;
+
     fbwl_texture_init(&theme->menu_frame_tex);
     memcpy(theme->menu_frame_tex.color, theme->menu_bg, sizeof(theme->menu_frame_tex.color));
     memcpy(theme->menu_frame_tex.color_to, theme->menu_bg, sizeof(theme->menu_frame_tex.color_to));
+
+    fbwl_texture_init(&theme->menu_title_tex);
+    memcpy(theme->menu_title_tex.color, theme->menu_bg, sizeof(theme->menu_title_tex.color));
+    memcpy(theme->menu_title_tex.color_to, theme->menu_bg, sizeof(theme->menu_title_tex.color_to));
 
     fbwl_texture_init(&theme->menu_hilite_tex);
     memcpy(theme->menu_hilite_tex.color, theme->menu_hilite, sizeof(theme->menu_hilite_tex.color));
@@ -528,9 +685,20 @@ void decor_theme_set_defaults(struct fbwl_decor_theme *theme) {
     memcpy(theme->toolbar_tex.color_to, theme->toolbar_bg, sizeof(theme->toolbar_tex.color_to));
 
     // Fluxbox/X11: slit inherits toolbar look unless overridden.
-    fbwl_texture_init(&theme->slit_tex);
-    memcpy(theme->slit_tex.color, theme->toolbar_bg, sizeof(theme->slit_tex.color));
-    memcpy(theme->slit_tex.color_to, theme->toolbar_bg, sizeof(theme->slit_tex.color_to));
+    theme->slit_tex = theme->toolbar_tex;
+
+    // Toolbar tool defaults: start as toolbar look; style fallbacks are applied after parsing.
+    theme->toolbar_clock_tex = theme->toolbar_tex;
+    theme->toolbar_workspace_tex = theme->toolbar_tex;
+    theme->toolbar_label_tex = theme->toolbar_tex;
+    theme->toolbar_windowlabel_tex = theme->toolbar_tex;
+    theme->toolbar_button_tex = theme->toolbar_tex;
+    theme->toolbar_button_pressed_tex = theme->toolbar_tex;
+    theme->toolbar_systray_tex = theme->toolbar_tex;
+    theme->toolbar_iconbar_tex = theme->toolbar_tex;
+    theme->toolbar_iconbar_empty_tex = theme->toolbar_tex;
+    theme->toolbar_iconbar_focused_tex = theme->toolbar_tex;
+    theme->toolbar_iconbar_unfocused_tex = theme->toolbar_tex;
 }
 
 void server_menu_create_default(struct fbwl_server *server) {

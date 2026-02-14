@@ -128,7 +128,7 @@ static void fbwl_ui_tooltip_show_now(struct fbwl_tooltip_ui *ui) {
     float fg[4] = {ui->env.decor_theme->toolbar_text[0], ui->env.decor_theme->toolbar_text[1],
         ui->env.decor_theme->toolbar_text[2], ui->env.decor_theme->toolbar_text[3]};
     struct wlr_buffer *buf = fbwl_text_buffer_create(ui->text, w, h, pad, fg, ui->env.decor_theme->toolbar_font,
-        &ui->env.decor_theme->toolbar_label_effect);
+        &ui->env.decor_theme->toolbar_label_effect, 0);
     if (buf != NULL) {
         if (ui->label != NULL) {
             wlr_scene_buffer_set_buffer(ui->label, buf);

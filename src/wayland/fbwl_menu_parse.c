@@ -1,331 +1,22 @@
 #include "wayland/fbwl_menu_parse.h"
 
-#include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
-#include <sys/stat.h>
 
 #include <wlr/util/log.h>
 
 #include "wayland/fbwl_menu.h"
 #include "wayland/fbwl_menu_parse_encoding.h"
+#include "wayland/fbwl_menu_parse_util.h"
 #include "wmcore/fbwm_core.h"
 
 enum {
     MENU_MAX_INCLUDE_DEPTH = 8,
 };
-
-static bool menu_skip_name(const char *name) {
-    if (name == NULL || *name == '\0') {
-        return true;
-    }
-    if (name[0] == '.') {
-        return true;
-    }
-    const size_t len = strlen(name);
-    if (len > 0 && name[len - 1] == '~') {
-        return true;
-    }
-    return false;
-}
-
-static char *trim_inplace(char *s) {
-    if (s == NULL) {
-        return NULL;
-    }
-    while (*s != '\0' && isspace((unsigned char)*s)) {
-        s++;
-    }
-    if (*s == '\0') {
-        return s;
-    }
-    char *end = s + strlen(s) - 1;
-    while (end > s && isspace((unsigned char)*end)) {
-        *end = '\0';
-        end--;
-    }
-    return s;
-}
-static char *dup_trim_range(const char *start, const char *end) {
-    if (start == NULL || end == NULL || end < start) {
-        return NULL;
-    }
-    size_t len = (size_t)(end - start);
-    char *tmp = malloc(len + 1);
-    if (tmp == NULL) {
-        return NULL;
-    }
-    memcpy(tmp, start, len);
-    tmp[len] = '\0';
-    char *t = trim_inplace(tmp);
-    if (t == NULL || *t == '\0') {
-        free(tmp);
-        return NULL;
-    }
-    if (t == tmp) {
-        return tmp;
-    }
-    char *out = strdup(t);
-    free(tmp);
-    return out;
-}
-static char *menu_parse_paren_value(const char *s) {
-    if (s == NULL) {
-        return NULL;
-    }
-    const char *open = strchr(s, '(');
-    if (open == NULL) {
-        return NULL;
-    }
-    const char *close = strchr(open + 1, ')');
-    if (close == NULL) {
-        return NULL;
-    }
-    return dup_trim_range(open + 1, close);
-}
-static const char *menu_find_matching_brace(const char *open) {
-    if (open == NULL || *open != '{') {
-        return NULL;
-    }
-    int nesting = 0;
-    for (const char *q = open + 1; *q != '\0'; q++) {
-        if (*q == '{' && q[-1] != '\\') {
-            nesting++;
-            continue;
-        }
-        if (*q == '}' && q[-1] != '\\') {
-            if (nesting > 0) {
-                nesting--;
-                continue;
-            }
-            return q;
-        }
-    }
-    return NULL;
-}
-static char *menu_parse_brace_value(const char *s) {
-    if (s == NULL) {
-        return NULL;
-    }
-    const char *open = strchr(s, '{');
-    if (open == NULL) {
-        return NULL;
-    }
-    const char *close = menu_find_matching_brace(open);
-    if (close == NULL) {
-        return NULL;
-    }
-    return dup_trim_range(open + 1, close);
-}
-
-static char *menu_parse_angle_value(const char *s) {
-    if (s == NULL) {
-        return NULL;
-    }
-    const char *open = strchr(s, '<');
-    if (open == NULL) {
-        return NULL;
-    }
-    const char *close = strchr(open + 1, '>');
-    if (close == NULL) {
-        return NULL;
-    }
-    return dup_trim_range(open + 1, close);
-}
-
-static const char *menu_after_delim(const char *s, char open_ch, char close_ch) {
-    if (s == NULL) {
-        return NULL;
-    }
-    const char *open = strchr(s, open_ch);
-    if (open == NULL) {
-        return s;
-    }
-    const char *close = NULL;
-    if (open_ch == '{' && close_ch == '}') {
-        close = menu_find_matching_brace(open);
-    } else {
-        close = strchr(open + 1, close_ch);
-    }
-    if (close == NULL) {
-        return s;
-    }
-    return close + 1;
-}
-
-static char *menu_strdup_range(const char *start, const char *end) {
-    if (start == NULL || end == NULL || end < start) {
-        return NULL;
-    }
-    size_t len = (size_t)(end - start);
-    char *out = malloc(len + 1);
-    if (out == NULL) {
-        return NULL;
-    }
-    memcpy(out, start, len);
-    out[len] = '\0';
-    return out;
-}
-
-static char *menu_dirname_owned(const char *path) {
-    if (path == NULL || *path == '\0') {
-        return NULL;
-    }
-
-    const char *slash = strrchr(path, '/');
-    if (slash == NULL) {
-        return strdup(".");
-    }
-    if (slash == path) {
-        return strdup("/");
-    }
-    return menu_strdup_range(path, slash);
-}
-
-static char *menu_path_join(const char *dir, const char *rel) {
-    if (dir == NULL || *dir == '\0' || rel == NULL || *rel == '\0') {
-        return NULL;
-    }
-
-    size_t dir_len = strlen(dir);
-    size_t rel_len = strlen(rel);
-    const bool need_slash = dir_len > 0 && dir[dir_len - 1] != '/';
-    size_t needed = dir_len + (need_slash ? 1 : 0) + rel_len + 1;
-    char *out = malloc(needed);
-    if (out == NULL) {
-        return NULL;
-    }
-
-    int n = snprintf(out, needed, need_slash ? "%s/%s" : "%s%s", dir, rel);
-    if (n < 0 || (size_t)n >= needed) {
-        free(out);
-        return NULL;
-    }
-    return out;
-}
-
-static char *menu_expand_tilde(const char *path) {
-    if (path == NULL || *path == '\0') {
-        return NULL;
-    }
-    if (path[0] != '~') {
-        return strdup(path);
-    }
-
-    const char *home = getenv("HOME");
-    if (home == NULL || *home == '\0') {
-        return strdup(path);
-    }
-
-    const char *tail = path + 1;
-    if (*tail == '\0') {
-        return strdup(home);
-    }
-    if (*tail != '/') {
-        return strdup(path);
-    }
-
-    size_t home_len = strlen(home);
-    size_t tail_len = strlen(tail);
-    size_t needed = home_len + tail_len + 1;
-    char *out = malloc(needed);
-    if (out == NULL) {
-        return NULL;
-    }
-    int n = snprintf(out, needed, "%s%s", home, tail);
-    if (n < 0 || (size_t)n >= needed) {
-        free(out);
-        return NULL;
-    }
-    return out;
-}
-
-static char *menu_resolve_path(const char *base_dir, const char *path) {
-    if (path == NULL || *path == '\0') {
-        return NULL;
-    }
-
-    char *expanded = menu_expand_tilde(path);
-    if (expanded == NULL) {
-        return NULL;
-    }
-
-    if (expanded[0] == '/' || base_dir == NULL || *base_dir == '\0') {
-        return expanded;
-    }
-
-    char *joined = menu_path_join(base_dir, expanded);
-    free(expanded);
-    return joined;
-}
-
-static bool menu_stat_is_dir(const char *path) {
-    if (path == NULL || *path == '\0') {
-        return false;
-    }
-    struct stat st;
-    if (stat(path, &st) != 0) {
-        return false;
-    }
-    return S_ISDIR(st.st_mode);
-}
-
-static bool menu_stat_is_regular_file(const char *path) {
-    if (path == NULL || *path == '\0') {
-        return false;
-    }
-    struct stat st;
-    if (stat(path, &st) != 0) {
-        return false;
-    }
-    return S_ISREG(st.st_mode);
-}
-
-static char *menu_shell_escape_single_quoted(const char *s) {
-    if (s == NULL) {
-        return NULL;
-    }
-
-    size_t quotes = 0;
-    const size_t len = strlen(s);
-    for (size_t i = 0; i < len; i++) {
-        if (s[i] == '\'') {
-            quotes++;
-        }
-    }
-
-    size_t needed = len + quotes * 3 + 2 + 1;
-    char *out = malloc(needed);
-    if (out == NULL) {
-        return NULL;
-    }
-
-    char *p = out;
-    *p++ = '\'';
-    for (size_t i = 0; i < len; i++) {
-        if (s[i] == '\'') {
-            memcpy(p, "'\\''", 4);
-            p += 4;
-        } else {
-            *p++ = s[i];
-        }
-    }
-    *p++ = '\'';
-    *p = '\0';
-    return out;
-}
-
-static const char *menu_basename(const char *path) {
-    if (path == NULL) {
-        return NULL;
-    }
-    const char *slash = strrchr(path, '/');
-    return slash != NULL ? slash + 1 : path;
-}
 
 static bool menu_add_styles_from_dir(struct fbwl_menu *menu, const char *dir_path, const char *icon) {
     if (menu == NULL || dir_path == NULL || *dir_path == '\0') {
@@ -344,10 +35,10 @@ static bool menu_add_styles_from_dir(struct fbwl_menu *menu, const char *dir_pat
         struct dirent *ent = namelist[i];
         if (ent != NULL && ent->d_name != NULL) {
             const char *name = ent->d_name;
-            if (!menu_skip_name(name) && strcmp(name, ".") != 0 && strcmp(name, "..") != 0) {
-                char *child = menu_path_join(dir_path, name);
+            if (!fbwl_menu_parse_skip_name(name) && strcmp(name, ".") != 0 && strcmp(name, "..") != 0) {
+                char *child = fbwl_menu_parse_path_join(dir_path, name);
                     if (child != NULL) {
-                        if (menu_stat_is_regular_file(child)) {
+                        if (fbwl_menu_parse_stat_is_regular_file(child)) {
                             if (fbwl_menu_add_server_action(menu, name, icon, FBWL_MENU_SERVER_SET_STYLE, 0, child)) {
                                 any = true;
                             }
@@ -387,16 +78,16 @@ static bool menu_add_wallpapers_from_dir(struct fbwl_menu *menu, const char *dir
         struct dirent *ent = namelist[i];
         if (ent != NULL && ent->d_name != NULL) {
             const char *name = ent->d_name;
-            if (!menu_skip_name(name) && strcmp(name, ".") != 0 && strcmp(name, "..") != 0) {
-                char *child = menu_path_join(dir_path, name);
+            if (!fbwl_menu_parse_skip_name(name) && strcmp(name, ".") != 0 && strcmp(name, "..") != 0) {
+                char *child = fbwl_menu_parse_path_join(dir_path, name);
                 if (child != NULL) {
-                    if (menu_stat_is_regular_file(child)) {
+                    if (fbwl_menu_parse_stat_is_regular_file(child)) {
                         if (use_server_action) {
                             if (fbwl_menu_add_server_action(menu, name, icon, FBWL_MENU_SERVER_SET_WALLPAPER, 0, child)) {
                                 any = true;
                             }
                         } else {
-                            char *quoted = menu_shell_escape_single_quoted(child);
+                            char *quoted = fbwl_menu_parse_shell_escape_single_quoted(child);
                             if (quoted != NULL) {
                                 size_t needed = strlen(prog) + 1 + strlen(quoted) + 1;
                                 char *cmd = malloc(needed);
@@ -452,9 +143,9 @@ static bool menu_parse_dir(struct fbwl_menu *stack[16], size_t *depth, size_t mi
         if (ent != NULL && ent->d_name != NULL) {
             const char *name = ent->d_name;
             if (strcmp(name, ".") != 0 && strcmp(name, "..") != 0) {
-                char *child = menu_path_join(dir_path, name);
+                char *child = fbwl_menu_parse_path_join(dir_path, name);
                 if (child != NULL) {
-                    if (menu_stat_is_regular_file(child)) {
+                    if (fbwl_menu_parse_stat_is_regular_file(child)) {
                         (void)menu_parse_path(stack, depth, min_depth, st, wm, child, include_depth + 1, false);
                     }
                     free(child);
@@ -479,7 +170,7 @@ static bool menu_parse_file_impl(struct fbwl_menu *stack[16], size_t *depth, siz
         return !required;
     }
 
-    char *base_dir_owned = menu_dirname_owned(path);
+    char *base_dir_owned = fbwl_menu_parse_dirname_owned(path);
     const char *base_dir = base_dir_owned != NULL ? base_dir_owned : ".";
 
     char *line = NULL;
@@ -494,7 +185,7 @@ static bool menu_parse_file_impl(struct fbwl_menu *stack[16], size_t *depth, siz
             n--;
         }
 
-        char *s = trim_inplace(line);
+        char *s = fbwl_menu_parse_trim_inplace(line);
         if (s == NULL || *s == '\0') {
             continue;
         }
@@ -508,7 +199,7 @@ static bool menu_parse_file_impl(struct fbwl_menu *stack[16], size_t *depth, siz
             continue;
         }
 
-        char *key = dup_trim_range(open + 1, close);
+        char *key = fbwl_menu_parse_dup_trim_range(open + 1, close);
         if (key == NULL) {
             continue;
         }
@@ -517,6 +208,14 @@ static bool menu_parse_file_impl(struct fbwl_menu *stack[16], size_t *depth, siz
         const char *encoding = fbwl_menu_parse_state_encoding(st);
 
         if (strcasecmp(key, "begin") == 0) {
+            char *label = fbwl_menu_parse_paren_value(close + 1);
+            fbwl_menu_parse_convert_owned_to_utf8(&label, encoding);
+            if (label != NULL && *label != '\0') {
+                free(cur->label);
+                cur->label = label;
+            } else {
+                free(label);
+            }
             free(key);
             continue;
         }
@@ -530,7 +229,7 @@ static bool menu_parse_file_impl(struct fbwl_menu *stack[16], size_t *depth, siz
         }
 
         if (strcasecmp(key, "encoding") == 0) {
-            char *enc = menu_parse_brace_value(close + 1);
+            char *enc = fbwl_menu_parse_brace_value(close + 1);
             if (enc != NULL) {
                 fbwl_menu_parse_convert_owned_to_utf8(&enc, encoding);
                 (void)fbwl_menu_parse_state_push_encoding(st, enc);
@@ -547,15 +246,15 @@ static bool menu_parse_file_impl(struct fbwl_menu *stack[16], size_t *depth, siz
         }
 
         if (strcasecmp(key, "submenu") == 0) {
-            char *label = menu_parse_paren_value(close + 1);
+            char *label = fbwl_menu_parse_paren_value(close + 1);
             fbwl_menu_parse_convert_owned_to_utf8(&label, encoding);
 
             const char *icon_s = close + 1;
-            icon_s = menu_after_delim(icon_s, '(', ')');
-            icon_s = menu_after_delim(icon_s, '{', '}');
-            char *icon_raw = menu_parse_angle_value(icon_s);
+            icon_s = fbwl_menu_parse_after_delim(icon_s, '(', ')');
+            icon_s = fbwl_menu_parse_after_delim(icon_s, '{', '}');
+            char *icon_raw = fbwl_menu_parse_angle_value(icon_s);
             fbwl_menu_parse_convert_owned_to_utf8(&icon_raw, encoding);
-            char *icon = icon_raw != NULL ? menu_resolve_path(base_dir, icon_raw) : NULL;
+            char *icon = icon_raw != NULL ? fbwl_menu_parse_resolve_path(base_dir, icon_raw) : NULL;
 
             struct fbwl_menu *submenu = fbwl_menu_create(label);
             if (submenu != NULL) {
@@ -576,17 +275,17 @@ static bool menu_parse_file_impl(struct fbwl_menu *stack[16], size_t *depth, siz
         }
 
         if (strcasecmp(key, "exec") == 0) {
-            char *label = menu_parse_paren_value(close + 1);
-            char *cmd = menu_parse_brace_value(close + 1);
+            char *label = fbwl_menu_parse_paren_value(close + 1);
+            char *cmd = fbwl_menu_parse_brace_value(close + 1);
             fbwl_menu_parse_convert_owned_to_utf8(&label, encoding);
             fbwl_menu_parse_convert_owned_to_utf8(&cmd, encoding);
 
             const char *icon_s = close + 1;
-            icon_s = menu_after_delim(icon_s, '(', ')');
-            icon_s = menu_after_delim(icon_s, '{', '}');
-            char *icon_raw = menu_parse_angle_value(icon_s);
+            icon_s = fbwl_menu_parse_after_delim(icon_s, '(', ')');
+            icon_s = fbwl_menu_parse_after_delim(icon_s, '{', '}');
+            char *icon_raw = fbwl_menu_parse_angle_value(icon_s);
             fbwl_menu_parse_convert_owned_to_utf8(&icon_raw, encoding);
-            char *icon = icon_raw != NULL ? menu_resolve_path(base_dir, icon_raw) : NULL;
+            char *icon = icon_raw != NULL ? fbwl_menu_parse_resolve_path(base_dir, icon_raw) : NULL;
             if (cmd != NULL) {
                 (void)fbwl_menu_add_exec(cur, label, cmd, icon);
             }
@@ -599,14 +298,14 @@ static bool menu_parse_file_impl(struct fbwl_menu *stack[16], size_t *depth, siz
         }
 
         if (strcasecmp(key, "exit") == 0) {
-            char *label = menu_parse_paren_value(close + 1);
+            char *label = fbwl_menu_parse_paren_value(close + 1);
             fbwl_menu_parse_convert_owned_to_utf8(&label, encoding);
 
             const char *icon_s = close + 1;
-            icon_s = menu_after_delim(icon_s, '(', ')');
-            char *icon_raw = menu_parse_angle_value(icon_s);
+            icon_s = fbwl_menu_parse_after_delim(icon_s, '(', ')');
+            char *icon_raw = fbwl_menu_parse_angle_value(icon_s);
             fbwl_menu_parse_convert_owned_to_utf8(&icon_raw, encoding);
-            char *icon = icon_raw != NULL ? menu_resolve_path(base_dir, icon_raw) : NULL;
+            char *icon = icon_raw != NULL ? fbwl_menu_parse_resolve_path(base_dir, icon_raw) : NULL;
 
             (void)fbwl_menu_add_exit(cur, label, icon);
             free(label);
@@ -623,14 +322,14 @@ static bool menu_parse_file_impl(struct fbwl_menu *stack[16], size_t *depth, siz
         }
 
         if (strcasecmp(key, "nop") == 0) {
-            char *label = menu_parse_paren_value(close + 1);
+            char *label = fbwl_menu_parse_paren_value(close + 1);
             fbwl_menu_parse_convert_owned_to_utf8(&label, encoding);
 
             const char *icon_s = close + 1;
-            icon_s = menu_after_delim(icon_s, '(', ')');
-            char *icon_raw = menu_parse_angle_value(icon_s);
+            icon_s = fbwl_menu_parse_after_delim(icon_s, '(', ')');
+            char *icon_raw = fbwl_menu_parse_angle_value(icon_s);
             fbwl_menu_parse_convert_owned_to_utf8(&icon_raw, encoding);
-            char *icon = icon_raw != NULL ? menu_resolve_path(base_dir, icon_raw) : NULL;
+            char *icon = icon_raw != NULL ? fbwl_menu_parse_resolve_path(base_dir, icon_raw) : NULL;
 
             (void)fbwl_menu_add_nop(cur, label, icon);
             free(label);
@@ -641,14 +340,14 @@ static bool menu_parse_file_impl(struct fbwl_menu *stack[16], size_t *depth, siz
         }
 
         if (strcasecmp(key, "include") == 0) {
-            char *raw = menu_parse_paren_value(close + 1);
+            char *raw = fbwl_menu_parse_paren_value(close + 1);
             if (raw != NULL && *raw != '\0') {
                 fbwl_menu_parse_convert_owned_to_utf8(&raw, encoding);
-                char *resolved = menu_resolve_path(base_dir, raw);
+                char *resolved = fbwl_menu_parse_resolve_path(base_dir, raw);
                 if (resolved != NULL) {
                     if (include_depth >= MENU_MAX_INCLUDE_DEPTH) {
                         wlr_log(WLR_ERROR, "Menu: include depth exceeded while including %s", resolved);
-                    } else if (menu_stat_is_dir(resolved)) {
+                    } else if (fbwl_menu_parse_stat_is_dir(resolved)) {
                         (void)menu_parse_dir(stack, depth, *depth, st, wm, resolved, include_depth + 1);
                     } else {
                         (void)menu_parse_path(stack, depth, *depth, st, wm, resolved, include_depth + 1, false);
@@ -662,14 +361,14 @@ static bool menu_parse_file_impl(struct fbwl_menu *stack[16], size_t *depth, siz
         }
 
         if (strcasecmp(key, "reconfig") == 0 || strcasecmp(key, "reconfigure") == 0) {
-            char *label = menu_parse_paren_value(close + 1);
+            char *label = fbwl_menu_parse_paren_value(close + 1);
             fbwl_menu_parse_convert_owned_to_utf8(&label, encoding);
 
             const char *icon_s = close + 1;
-            icon_s = menu_after_delim(icon_s, '(', ')');
-            char *icon_raw = menu_parse_angle_value(icon_s);
+            icon_s = fbwl_menu_parse_after_delim(icon_s, '(', ')');
+            char *icon_raw = fbwl_menu_parse_angle_value(icon_s);
             fbwl_menu_parse_convert_owned_to_utf8(&icon_raw, encoding);
-            char *icon = icon_raw != NULL ? menu_resolve_path(base_dir, icon_raw) : NULL;
+            char *icon = icon_raw != NULL ? fbwl_menu_parse_resolve_path(base_dir, icon_raw) : NULL;
 
             const char *menu_label = label != NULL ? label : "Reconfigure";
             (void)fbwl_menu_add_server_action(cur, menu_label, icon, FBWL_MENU_SERVER_RECONFIGURE, 0, NULL);
@@ -681,22 +380,22 @@ static bool menu_parse_file_impl(struct fbwl_menu *stack[16], size_t *depth, siz
         }
 
         if (strcasecmp(key, "style") == 0) {
-            char *label = menu_parse_paren_value(close + 1);
-            char *raw = menu_parse_brace_value(close + 1);
+            char *label = fbwl_menu_parse_paren_value(close + 1);
+            char *raw = fbwl_menu_parse_brace_value(close + 1);
             fbwl_menu_parse_convert_owned_to_utf8(&label, encoding);
             fbwl_menu_parse_convert_owned_to_utf8(&raw, encoding);
 
             const char *icon_s = close + 1;
-            icon_s = menu_after_delim(icon_s, '(', ')');
-            icon_s = menu_after_delim(icon_s, '{', '}');
-            char *icon_raw = menu_parse_angle_value(icon_s);
+            icon_s = fbwl_menu_parse_after_delim(icon_s, '(', ')');
+            icon_s = fbwl_menu_parse_after_delim(icon_s, '{', '}');
+            char *icon_raw = fbwl_menu_parse_angle_value(icon_s);
             fbwl_menu_parse_convert_owned_to_utf8(&icon_raw, encoding);
-            char *icon = icon_raw != NULL ? menu_resolve_path(base_dir, icon_raw) : NULL;
+            char *icon = icon_raw != NULL ? fbwl_menu_parse_resolve_path(base_dir, icon_raw) : NULL;
 
             if (raw != NULL && *raw != '\0') {
-                char *resolved = menu_resolve_path(base_dir, raw);
+                char *resolved = fbwl_menu_parse_resolve_path(base_dir, raw);
                 if (resolved != NULL) {
-                    const char *base = label != NULL && *label != '\0' ? label : menu_basename(resolved);
+                    const char *base = label != NULL && *label != '\0' ? label : fbwl_menu_parse_basename(resolved);
                     (void)fbwl_menu_add_server_action(cur, base, icon, FBWL_MENU_SERVER_SET_STYLE, 0, resolved);
                     free(resolved);
                 }
@@ -710,21 +409,21 @@ static bool menu_parse_file_impl(struct fbwl_menu *stack[16], size_t *depth, siz
         }
 
         if (strcasecmp(key, "stylesmenu") == 0 || strcasecmp(key, "themesmenu") == 0) {
-            char *paren = menu_parse_paren_value(close + 1);
-            char *brace = menu_parse_brace_value(close + 1);
+            char *paren = fbwl_menu_parse_paren_value(close + 1);
+            char *brace = fbwl_menu_parse_brace_value(close + 1);
             fbwl_menu_parse_convert_owned_to_utf8(&paren, encoding);
             fbwl_menu_parse_convert_owned_to_utf8(&brace, encoding);
 
             const char *icon_s = close + 1;
-            icon_s = menu_after_delim(icon_s, '(', ')');
-            icon_s = menu_after_delim(icon_s, '{', '}');
-            char *icon_raw = menu_parse_angle_value(icon_s);
+            icon_s = fbwl_menu_parse_after_delim(icon_s, '(', ')');
+            icon_s = fbwl_menu_parse_after_delim(icon_s, '{', '}');
+            char *icon_raw = fbwl_menu_parse_angle_value(icon_s);
             fbwl_menu_parse_convert_owned_to_utf8(&icon_raw, encoding);
-            char *icon = icon_raw != NULL ? menu_resolve_path(base_dir, icon_raw) : NULL;
+            char *icon = icon_raw != NULL ? fbwl_menu_parse_resolve_path(base_dir, icon_raw) : NULL;
 
             const char *raw_dir = brace != NULL ? brace : paren;
             if (raw_dir != NULL && *raw_dir != '\0') {
-                char *resolved = menu_resolve_path(base_dir, raw_dir);
+                char *resolved = fbwl_menu_parse_resolve_path(base_dir, raw_dir);
                 if (resolved != NULL) {
                     (void)menu_add_styles_from_dir(cur, resolved, icon);
                     free(resolved);
@@ -739,26 +438,26 @@ static bool menu_parse_file_impl(struct fbwl_menu *stack[16], size_t *depth, siz
         }
 
         if (strcasecmp(key, "stylesdir") == 0 || strcasecmp(key, "themesdir") == 0) {
-            char *label = menu_parse_paren_value(close + 1);
-            char *dir = menu_parse_brace_value(close + 1);
+            char *label = fbwl_menu_parse_paren_value(close + 1);
+            char *dir = fbwl_menu_parse_brace_value(close + 1);
             fbwl_menu_parse_convert_owned_to_utf8(&label, encoding);
             fbwl_menu_parse_convert_owned_to_utf8(&dir, encoding);
 
             const char *icon_s = close + 1;
-            icon_s = menu_after_delim(icon_s, '(', ')');
-            icon_s = menu_after_delim(icon_s, '{', '}');
-            char *icon_raw = menu_parse_angle_value(icon_s);
+            icon_s = fbwl_menu_parse_after_delim(icon_s, '(', ')');
+            icon_s = fbwl_menu_parse_after_delim(icon_s, '{', '}');
+            char *icon_raw = fbwl_menu_parse_angle_value(icon_s);
             fbwl_menu_parse_convert_owned_to_utf8(&icon_raw, encoding);
-            char *icon = icon_raw != NULL ? menu_resolve_path(base_dir, icon_raw) : NULL;
+            char *icon = icon_raw != NULL ? fbwl_menu_parse_resolve_path(base_dir, icon_raw) : NULL;
 
             if (dir != NULL && *dir != '\0') {
-                char *resolved = menu_resolve_path(base_dir, dir);
+                char *resolved = fbwl_menu_parse_resolve_path(base_dir, dir);
                 if (resolved != NULL) {
                     const char *submenu_label = NULL;
                     if (label != NULL && *label != '\0') {
                         submenu_label = label;
-                    } else if (menu_basename(resolved) != NULL && *menu_basename(resolved) != '\0') {
-                        submenu_label = menu_basename(resolved);
+                    } else if (fbwl_menu_parse_basename(resolved) != NULL && *fbwl_menu_parse_basename(resolved) != '\0') {
+                        submenu_label = fbwl_menu_parse_basename(resolved);
                     } else {
                         submenu_label = "Styles";
                     }
@@ -774,7 +473,7 @@ static bool menu_parse_file_impl(struct fbwl_menu *stack[16], size_t *depth, siz
                     free(resolved);
                 }
             } else if (label != NULL && *label != '\0') {
-                char *resolved = menu_resolve_path(base_dir, label);
+                char *resolved = fbwl_menu_parse_resolve_path(base_dir, label);
                 if (resolved != NULL) {
                     (void)menu_add_styles_from_dir(cur, resolved, icon);
                     free(resolved);
@@ -790,20 +489,20 @@ static bool menu_parse_file_impl(struct fbwl_menu *stack[16], size_t *depth, siz
 
         if (strcasecmp(key, "wallpapers") == 0 || strcasecmp(key, "wallpapermenu") == 0 ||
                 strcasecmp(key, "rootcommands") == 0) {
-            char *raw_dir = menu_parse_paren_value(close + 1);
-            char *cmd = menu_parse_brace_value(close + 1);
+            char *raw_dir = fbwl_menu_parse_paren_value(close + 1);
+            char *cmd = fbwl_menu_parse_brace_value(close + 1);
             fbwl_menu_parse_convert_owned_to_utf8(&raw_dir, encoding);
             fbwl_menu_parse_convert_owned_to_utf8(&cmd, encoding);
 
             const char *icon_s = close + 1;
-            icon_s = menu_after_delim(icon_s, '(', ')');
-            icon_s = menu_after_delim(icon_s, '{', '}');
-            char *icon_raw = menu_parse_angle_value(icon_s);
+            icon_s = fbwl_menu_parse_after_delim(icon_s, '(', ')');
+            icon_s = fbwl_menu_parse_after_delim(icon_s, '{', '}');
+            char *icon_raw = fbwl_menu_parse_angle_value(icon_s);
             fbwl_menu_parse_convert_owned_to_utf8(&icon_raw, encoding);
-            char *icon = icon_raw != NULL ? menu_resolve_path(base_dir, icon_raw) : NULL;
+            char *icon = icon_raw != NULL ? fbwl_menu_parse_resolve_path(base_dir, icon_raw) : NULL;
 
             if (raw_dir != NULL && *raw_dir != '\0') {
-                char *resolved = menu_resolve_path(base_dir, raw_dir);
+                char *resolved = fbwl_menu_parse_resolve_path(base_dir, raw_dir);
                 if (resolved != NULL) {
                     (void)menu_add_wallpapers_from_dir(cur, resolved, cmd, icon);
                     free(resolved);
@@ -818,14 +517,14 @@ static bool menu_parse_file_impl(struct fbwl_menu *stack[16], size_t *depth, siz
         }
 
         if (strcasecmp(key, "workspaces") == 0) {
-            char *label = menu_parse_paren_value(close + 1);
+            char *label = fbwl_menu_parse_paren_value(close + 1);
             fbwl_menu_parse_convert_owned_to_utf8(&label, encoding);
 
             const char *icon_s = close + 1;
-            icon_s = menu_after_delim(icon_s, '(', ')');
-            char *icon_raw = menu_parse_angle_value(icon_s);
+            icon_s = fbwl_menu_parse_after_delim(icon_s, '(', ')');
+            char *icon_raw = fbwl_menu_parse_angle_value(icon_s);
             fbwl_menu_parse_convert_owned_to_utf8(&icon_raw, encoding);
-            char *icon = icon_raw != NULL ? menu_resolve_path(base_dir, icon_raw) : NULL;
+            char *icon = icon_raw != NULL ? fbwl_menu_parse_resolve_path(base_dir, icon_raw) : NULL;
 
             const char *menu_label = label != NULL ? label : "Workspaces";
             struct fbwl_menu *submenu = fbwl_menu_create(menu_label);
@@ -858,14 +557,14 @@ static bool menu_parse_file_impl(struct fbwl_menu *stack[16], size_t *depth, siz
         }
 
         if (strcasecmp(key, "config") == 0) {
-            char *label = menu_parse_paren_value(close + 1);
+            char *label = fbwl_menu_parse_paren_value(close + 1);
             fbwl_menu_parse_convert_owned_to_utf8(&label, encoding);
 
             const char *icon_s = close + 1;
-            icon_s = menu_after_delim(icon_s, '(', ')');
-            char *icon_raw = menu_parse_angle_value(icon_s);
+            icon_s = fbwl_menu_parse_after_delim(icon_s, '(', ')');
+            char *icon_raw = fbwl_menu_parse_angle_value(icon_s);
             fbwl_menu_parse_convert_owned_to_utf8(&icon_raw, encoding);
-            char *icon = icon_raw != NULL ? menu_resolve_path(base_dir, icon_raw) : NULL;
+            char *icon = icon_raw != NULL ? fbwl_menu_parse_resolve_path(base_dir, icon_raw) : NULL;
 
             const char *menu_label = label != NULL && *label != '\0' ? label : "Config";
             struct fbwl_menu *submenu = fbwl_menu_create(menu_label);
@@ -970,11 +669,11 @@ static bool menu_parse_path(struct fbwl_menu *stack[16], size_t *depth, size_t m
         return false;
     }
 
-    if (menu_stat_is_dir(path)) {
+    if (fbwl_menu_parse_stat_is_dir(path)) {
         return menu_parse_dir(stack, depth, min_depth, st, wm, path, include_depth);
     }
 
-    if (!menu_stat_is_regular_file(path)) {
+    if (!fbwl_menu_parse_stat_is_regular_file(path)) {
         if (required) {
             wlr_log(WLR_ERROR, "Menu: not a regular file: %s", path);
         }

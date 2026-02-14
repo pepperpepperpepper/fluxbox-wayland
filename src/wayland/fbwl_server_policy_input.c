@@ -446,6 +446,14 @@ void server_cursor_button(struct wl_listener *listener, void *data) {
     }
 
     if (event->state == WL_POINTER_BUTTON_STATE_RELEASED) {
+        if (server->decor_button_pressed_view != NULL &&
+                event->button == server->decor_button_pressed_button) {
+            struct fbwl_view *view = server->decor_button_pressed_view;
+            server->decor_button_pressed_view = NULL;
+            server->decor_button_pressed_kind = FBWL_DECOR_HIT_NONE;
+            server->decor_button_pressed_button = 0;
+            fbwl_view_decor_update(view, &server->decor_theme);
+        }
         if (server_mousebind_capture_handle_release(server, event)) {
             return;
         }
@@ -564,6 +572,23 @@ void server_cursor_button(struct wl_listener *listener, void *data) {
                 if (hit.kind == FBWL_DECOR_HIT_RESIZE) {
                     fbwl_grab_begin_resize(&server->grab, view, server->cursor, event->button, hit.edges);
                     return;
+                }
+                if (hit.kind == FBWL_DECOR_HIT_BTN_MENU ||
+                        hit.kind == FBWL_DECOR_HIT_BTN_SHADE ||
+                        hit.kind == FBWL_DECOR_HIT_BTN_STICK ||
+                        hit.kind == FBWL_DECOR_HIT_BTN_CLOSE ||
+                        hit.kind == FBWL_DECOR_HIT_BTN_MAX ||
+                        hit.kind == FBWL_DECOR_HIT_BTN_MIN ||
+                        hit.kind == FBWL_DECOR_HIT_BTN_LHALF ||
+                        hit.kind == FBWL_DECOR_HIT_BTN_RHALF) {
+                    struct fbwl_view *prev = server->decor_button_pressed_view;
+                    server->decor_button_pressed_view = view;
+                    server->decor_button_pressed_kind = hit.kind;
+                    server->decor_button_pressed_button = event->button;
+                    if (prev != NULL && prev != view) {
+                        fbwl_view_decor_update(prev, &server->decor_theme);
+                    }
+                    fbwl_view_decor_update(view, &server->decor_theme);
                 }
                 if (hit.kind == FBWL_DECOR_HIT_BTN_MENU) {
                     server_menu_ui_open_window(server, view, (int)server->cursor->x, (int)server->cursor->y);

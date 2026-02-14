@@ -256,7 +256,9 @@ fi
 fbwl_report_shot "01-menu.png" "Root menu open"
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
-./fbwl-input-injector --socket "$SOCKET" click "$((MENU_X + 10))" "$((MENU_Y + 10))"
+ITEM_H=24
+MENU_TITLE_H=$ITEM_H
+./fbwl-input-injector --socket "$SOCKET" click "$((MENU_X + 10))" "$((MENU_Y + MENU_TITLE_H + 10))"
 rg -q 'Menu: exec ' < <(tail -c +$((OFFSET + 1)) "$LOG")
 timeout 5 bash -c "until [[ -f '$MENU_MARKER' ]]; do sleep 0.05; done"
 
@@ -600,13 +602,13 @@ fi
 	fi
 	fbwl_report_shot "08-window-menu.png" "Window menu"
 	
-	CLICK_X=$((WINMENU_TB_X + 10))
-	CLOSE_IDX=$((MENU_ITEMS - 1))
-	CLICK_Y=$((WINMENU_TB_Y + TB_H * CLOSE_IDX + TB_H / 2))
+		CLICK_X=$((WINMENU_TB_X + 10))
+		CLOSE_IDX=$((MENU_ITEMS - 1))
+		CLICK_Y=$((WINMENU_TB_Y + TB_H + TB_H * CLOSE_IDX + TB_H / 2))
 
-OFFSET=$(wc -c <"$LOG" | tr -d ' ')
-./fbwl-input-injector --socket "$SOCKET" click "$CLICK_X" "$CLICK_Y"
-rg -q 'Menu: window-close title=ks-winmenu' < <(tail -c +$((OFFSET + 1)) "$LOG")
+	OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+	./fbwl-input-injector --socket "$SOCKET" click "$CLICK_X" "$CLICK_Y"
+	rg -q 'Menu: window-close title=ks-winmenu' < <(tail -c +$((OFFSET + 1)) "$LOG")
 
 timeout 5 bash -c "while kill -0 '$WINMENU_PID' 2>/dev/null; do sleep 0.05; done"
 wait "$WINMENU_PID" 2>/dev/null || true

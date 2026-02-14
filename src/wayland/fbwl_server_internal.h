@@ -397,6 +397,9 @@ struct fbwl_server {
     char *group_file;
     uint32_t last_button_time_msec;
     int last_button;
+    struct fbwl_view *decor_button_pressed_view;
+    enum fbwl_decor_hit_kind decor_button_pressed_kind;
+    uint32_t decor_button_pressed_button;
     bool mousebind_capture_active;
     bool mousebind_capture_has_click;
     bool mousebind_capture_has_move;

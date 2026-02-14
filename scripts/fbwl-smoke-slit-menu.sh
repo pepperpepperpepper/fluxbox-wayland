@@ -159,9 +159,10 @@ fbwl_report_shot "slit-menu.png" "Slit menu (Clients submenu)"
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ITEM_H=24
+MENU_TITLE_H=$ITEM_H
 CLIENT_A_IDX=3 # Cycle Up / Cycle Down / Separator / dock-a / dock-b / Separator / Save SlitList
 CLIENT_A_X=$((MENU_X + 10))
-CLIENT_A_Y=$((MENU_Y + 10 + CLIENT_A_IDX * ITEM_H))
+CLIENT_A_Y=$((MENU_Y + MENU_TITLE_H + 10 + CLIENT_A_IDX * ITEM_H))
 ./fbwl-input-injector --socket "$SOCKET" click-right "$CLIENT_A_X" "$CLIENT_A_Y" >/dev/null 2>&1 || true
 timeout 2 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Slit: client move down title=dock-a'; do sleep 0.05; done"
 if tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Menu: close'; then

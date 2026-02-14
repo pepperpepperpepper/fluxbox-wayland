@@ -16,6 +16,7 @@
 #include "wayland/fbwl_keybindings.h"
 #include "wayland/fbwl_server_internal.h"
 #include "wayland/fbwl_server_menu_actions.h"
+#include "wayland/fbwl_server_menu_state.h"
 #include "wayland/fbwl_string_list.h"
 #include "wayland/fbwl_ui_toolbar_iconbar_pattern.h"
 #include "wayland/fbwl_ui_menu_icon.h"
@@ -723,7 +724,6 @@ void server_osd_ui_update_position(struct fbwl_server *server) {
     fbwl_ui_osd_update_position(&server->osd_ui, server->output_layout);
     fbwl_ui_osd_update_position(&server->move_osd_ui, server->output_layout);
 }
-
 void server_osd_ui_destroy(struct fbwl_server *server) {
     if (server == NULL) {
         return;
@@ -731,12 +731,10 @@ void server_osd_ui_destroy(struct fbwl_server *server) {
     fbwl_ui_osd_destroy(&server->osd_ui);
     fbwl_ui_osd_destroy(&server->move_osd_ui);
 }
-
 static void menu_ui_spawn(void *userdata, const char *cmd) {
     (void)userdata;
     fbwl_spawn(cmd);
 }
-
 static void menu_ui_terminate(void *userdata) {
     struct fbwl_server *server = userdata;
     if (server == NULL) {
@@ -744,12 +742,12 @@ static void menu_ui_terminate(void *userdata) {
     }
     wl_display_terminate(server->wl_display);
 }
-
 static void menu_ui_server_action(void *userdata, enum fbwl_menu_server_action action, int arg, const char *cmd) {
     struct fbwl_server *server = userdata;
     server_menu_handle_server_action(server, action, arg, cmd);
+    if (server != NULL && server->menu_ui.open && server->menu_ui.stack[0] != NULL)
+        server_menu_sync_toggle_states(server, server->menu_ui.stack[0], server->menu_ui.target_view, server->menu_ui.x, server->menu_ui.y);
 }
-
 static void menu_ui_view_close(void *userdata, struct fbwl_view *view) {
     (void)userdata;
     if (view == NULL) {
@@ -774,7 +772,6 @@ static void menu_ui_view_set_maximized(void *userdata, struct fbwl_view *view, b
     }
     fbwl_view_set_maximized(view, maximized, server->output_layout, &server->outputs);
 }
-
 static void menu_ui_view_set_fullscreen(void *userdata, struct fbwl_view *view, bool fullscreen) {
     struct fbwl_server *server = userdata;
     if (server == NULL) {
@@ -852,6 +849,7 @@ void server_menu_ui_open_root(struct fbwl_server *server, int x, int y, const ch
     if (menu == NULL) { return; }
 
     menu_ui_apply_screen_config(server, x, y);
+    server_menu_sync_toggle_states(server, menu, NULL, x, y);
     const struct fbwl_ui_menu_env env = menu_ui_env(server);
     fbwl_ui_menu_open_root(&server->menu_ui, &env, menu, x, y);
 }
@@ -868,6 +866,7 @@ void server_menu_ui_open_window(struct fbwl_server *server, struct fbwl_view *vi
     }
 
     menu_ui_apply_screen_config(server, x, y);
+    server_menu_sync_toggle_states(server, server->window_menu, view, x, y);
     const struct fbwl_ui_menu_env env = menu_ui_env(server);
     fbwl_ui_menu_open_window(&server->menu_ui, &env, server->window_menu, view, x, y);
 }
@@ -942,6 +941,7 @@ void server_menu_ui_open_client(struct fbwl_server *server, int x, int y, const 
     }
 
     menu_ui_apply_screen_config(server, x, y);
+    server_menu_sync_toggle_states(server, server->client_menu, NULL, x, y);
     const struct fbwl_ui_menu_env env = menu_ui_env(server);
     fbwl_ui_menu_open_root(&server->menu_ui, &env, server->client_menu, x, y);
 }

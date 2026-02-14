@@ -273,7 +273,7 @@ fi
 
 CLOSE_IDX=$((MENU_ITEMS - 1))
 CLICK_X=$((MENU_CX + 10))
-CLICK_Y=$((MENU_CY + TITLE_H * CLOSE_IDX + TITLE_H / 2))
+CLICK_Y=$((MENU_CY + TITLE_H + TITLE_H * CLOSE_IDX + TITLE_H / 2))
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" click "$CLICK_X" "$CLICK_Y"

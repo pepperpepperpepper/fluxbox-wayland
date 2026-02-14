@@ -57,7 +57,7 @@ static void fbwl_ui_cmd_dialog_render(struct fbwl_cmd_dialog_ui *ui) {
     (void)snprintf(render, need, "%s%s", prefix, txt);
 
     const float fg[4] = {1.0f, 1.0f, 1.0f, 1.0f};
-    struct wlr_buffer *buf = fbwl_text_buffer_create(render, ui->width, ui->height, 8, fg, ui->font, ui->effect);
+    struct wlr_buffer *buf = fbwl_text_buffer_create(render, ui->width, ui->height, 8, fg, ui->font, ui->effect, 0);
     free(render);
     if (buf == NULL) {
         wlr_scene_buffer_set_buffer(ui->label, NULL);

@@ -61,17 +61,22 @@ struct fbwl_menu_ui {
     int x;
     int y;
     int width;
+    int border_w;
+    int title_h;
     int item_h;
-    bool any_icons;
 
     struct wlr_scene_tree *tree;
     struct fbwl_pseudo_bg pseudo_bg;
     struct wlr_scene_buffer *bg;
+    struct wlr_scene_buffer *title_bg;
+    struct wlr_scene_buffer *title_label;
     struct wlr_scene_buffer *highlight;
     struct wlr_scene_rect **item_rects;
     size_t item_rect_count;
     struct wlr_scene_buffer **item_labels;
     size_t item_label_count;
+    struct wlr_scene_buffer **item_marks;
+    size_t item_mark_count;
 };
 
 struct fbwl_ui_menu_hooks {

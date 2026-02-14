@@ -158,8 +158,11 @@ OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" click-middle 10 200
 timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Menu: open at x=10 y=200 items=4'; do sleep 0.05; done"
 
+ITEM_H=24
+MENU_TITLE_H=$ITEM_H
+MENU_Y=200
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
-./fbwl-input-injector --socket "$SOCKET" click 20 236
+./fbwl-input-injector --socket "$SOCKET" click 20 $((MENU_Y + MENU_TITLE_H + ITEM_H + 12))
 timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Policy: workspace switch( head=[0-9]+)? to 2'; do sleep 0.05; done"
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')

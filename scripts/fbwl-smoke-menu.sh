@@ -115,6 +115,7 @@ else
 fi
 
 ITEM_H=24
+MENU_TITLE_H=$ITEM_H
 if [[ "$MENU_ITEMS" != "7" ]]; then
   echo "expected 7 menu items (include + nop + separator + encoding-exec + dyn + workspaces + exit), got $MENU_ITEMS" >&2
   exit 1
@@ -122,7 +123,7 @@ fi
 
 # Click the first menu item.
 CLICK_X=$((MENU_X + 10))
-CLICK_Y=$((MENU_Y + 10))
+CLICK_Y=$((MENU_Y + MENU_TITLE_H + 10))
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" click "$CLICK_X" "$CLICK_Y"
 tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Menu: exec '
@@ -154,7 +155,7 @@ fi
 
 ENC_IDX=3
 ENC_CLICK_X=$((MENU_X + 10))
-ENC_CLICK_Y=$((MENU_Y + 10 + ENC_IDX * ITEM_H))
+ENC_CLICK_Y=$((MENU_Y + MENU_TITLE_H + 10 + ENC_IDX * ITEM_H))
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" click "$ENC_CLICK_X" "$ENC_CLICK_Y"
 tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Menu: exec label=Café cmd='
@@ -185,12 +186,12 @@ fi
 
 WS_IDX=5
 WS_CLICK_X=$((MENU_X + 10))
-WS_CLICK_Y=$((MENU_Y + 10 + WS_IDX * ITEM_H))
+WS_CLICK_Y=$((MENU_Y + MENU_TITLE_H + 10 + WS_IDX * ITEM_H))
 
 # Enter the Dyn submenu and select dynamic entries.
 DYN_IDX=4
 DYN_CLICK_X=$((MENU_X + 10))
-DYN_CLICK_Y=$((MENU_Y + 10 + DYN_IDX * ITEM_H))
+DYN_CLICK_Y=$((MENU_Y + MENU_TITLE_H + 10 + DYN_IDX * ITEM_H))
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" click "$DYN_CLICK_X" "$DYN_CLICK_Y"
@@ -211,7 +212,7 @@ fi
 # Select style from [stylesdir] (dir-style.cfg).
 STYLE1_IDX=1
 STYLE1_CLICK_X=$((MENU_X + 10))
-STYLE1_CLICK_Y=$((MENU_Y + 10 + STYLE1_IDX * ITEM_H))
+STYLE1_CLICK_Y=$((MENU_Y + MENU_TITLE_H + 10 + STYLE1_IDX * ITEM_H))
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" click "$STYLE1_CLICK_X" "$STYLE1_CLICK_Y"
 timeout 5 bash -c "until rg -q 'Menu: set-style ok path=.*dir-style\\.cfg' '$LOG'; do sleep 0.05; done"
@@ -234,7 +235,7 @@ else
 fi
 
 DYN_CLICK_X=$((MENU_X + 10))
-DYN_CLICK_Y=$((MENU_Y + 10 + DYN_IDX * ITEM_H))
+DYN_CLICK_Y=$((MENU_Y + MENU_TITLE_H + 10 + DYN_IDX * ITEM_H))
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 START=$((OFFSET + 1))
 ./fbwl-input-injector --socket "$SOCKET" click "$DYN_CLICK_X" "$DYN_CLICK_Y"
@@ -242,7 +243,7 @@ timeout 5 bash -c "until tail -c +$START '$LOG' | rg -q 'Menu: enter-submenu .*l
 
 STYLE2_IDX=2
 STYLE2_CLICK_X=$((MENU_X + 10))
-STYLE2_CLICK_Y=$((MENU_Y + 10 + STYLE2_IDX * ITEM_H))
+STYLE2_CLICK_Y=$((MENU_Y + MENU_TITLE_H + 10 + STYLE2_IDX * ITEM_H))
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" click "$STYLE2_CLICK_X" "$STYLE2_CLICK_Y"
 timeout 5 bash -c "until rg -q 'Menu: set-style ok path=.*menu-style\\.cfg' '$LOG'; do sleep 0.05; done"
@@ -265,7 +266,7 @@ else
 fi
 
 DYN_CLICK_X=$((MENU_X + 10))
-DYN_CLICK_Y=$((MENU_Y + 10 + DYN_IDX * ITEM_H))
+DYN_CLICK_Y=$((MENU_Y + MENU_TITLE_H + 10 + DYN_IDX * ITEM_H))
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 START=$((OFFSET + 1))
 ./fbwl-input-injector --socket "$SOCKET" click "$DYN_CLICK_X" "$DYN_CLICK_Y"
@@ -273,7 +274,7 @@ timeout 5 bash -c "until tail -c +$START '$LOG' | rg -q 'Menu: enter-submenu .*l
 
 WALL_IDX=3
 WALL_CLICK_X=$((MENU_X + 10))
-WALL_CLICK_Y=$((MENU_Y + 10 + WALL_IDX * ITEM_H))
+WALL_CLICK_Y=$((MENU_Y + MENU_TITLE_H + 10 + WALL_IDX * ITEM_H))
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" click "$WALL_CLICK_X" "$WALL_CLICK_Y"
 tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Menu: exec '
@@ -296,7 +297,7 @@ else
 fi
 
 DYN_CLICK_X=$((MENU_X + 10))
-DYN_CLICK_Y=$((MENU_Y + 10 + DYN_IDX * ITEM_H))
+DYN_CLICK_Y=$((MENU_Y + MENU_TITLE_H + 10 + DYN_IDX * ITEM_H))
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 START=$((OFFSET + 1))
 ./fbwl-input-injector --socket "$SOCKET" click "$DYN_CLICK_X" "$DYN_CLICK_Y"
@@ -304,7 +305,7 @@ timeout 5 bash -c "until tail -c +$START '$LOG' | rg -q 'Menu: enter-submenu .*l
 
 CFG_IDX=0
 CFG_CLICK_X=$((MENU_X + 10))
-CFG_CLICK_Y=$((MENU_Y + 10 + CFG_IDX * ITEM_H))
+CFG_CLICK_Y=$((MENU_Y + MENU_TITLE_H + 10 + CFG_IDX * ITEM_H))
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" click "$CFG_CLICK_X" "$CFG_CLICK_Y"
 submenu_line="$(tail -c +$((OFFSET + 1)) "$LOG" | rg -m1 'Menu: enter-submenu ' || true)"
@@ -319,7 +320,7 @@ fi
 
 AUTO_RAISE_IDX=2
 AUTO_RAISE_X=$((MENU_X + 10))
-AUTO_RAISE_Y=$((MENU_Y + 10 + AUTO_RAISE_IDX * ITEM_H))
+AUTO_RAISE_Y=$((MENU_Y + MENU_TITLE_H + 10 + AUTO_RAISE_IDX * ITEM_H))
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" click "$AUTO_RAISE_X" "$AUTO_RAISE_Y"
 tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Menu: toggle autoRaise='
@@ -341,7 +342,7 @@ else
 fi
 
 WS_CLICK_X=$((MENU_X + 10))
-WS_CLICK_Y=$((MENU_Y + 10 + WS_IDX * ITEM_H))
+WS_CLICK_Y=$((MENU_Y + MENU_TITLE_H + 10 + WS_IDX * ITEM_H))
 
 # Enter the workspace submenu.
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
@@ -362,7 +363,7 @@ fi
 
 # Switch to workspace 2.
 WS2_CLICK_X=$((MENU_X + 10))
-WS2_CLICK_Y=$((MENU_Y + 10 + 1 * ITEM_H))
+WS2_CLICK_Y=$((MENU_Y + MENU_TITLE_H + 10 + 1 * ITEM_H))
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" click "$WS2_CLICK_X" "$WS2_CLICK_Y"
 tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Menu: workspace-switch .* workspace=2'

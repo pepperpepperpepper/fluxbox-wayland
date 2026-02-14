@@ -68,6 +68,7 @@ EOF
   cat >"$STYLE_FILE" <<'EOF'
 toolbar: Flat Gradient Vertical
 toolbar.height: 48
+toolbar.borderWidth: 0
 toolbar.color: #ff0000
 toolbar.colorTo: #00ff00
 toolbar.textColor: #ffffff
@@ -170,6 +171,7 @@ PY
   cat >"$STYLE_FILE" <<EOF
 toolbar: Flat Solid Tiled
 toolbar.height: 48
+toolbar.borderWidth: 0
 toolbar.color: #000000
 toolbar.pixmap: $PIXMAP_PNG
 toolbar.textColor: #ffffff
@@ -256,6 +258,7 @@ EOF
   cat >"$STYLE_FILE" <<'EOF'
 toolbar: ParentRelative
 toolbar.height: 48
+toolbar.borderWidth: 0
 toolbar.textColor: #ffffff
 toolbar.font: monospace-10
 EOF

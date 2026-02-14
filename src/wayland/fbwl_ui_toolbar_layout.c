@@ -57,6 +57,24 @@ void fbwl_ui_toolbar_layout_apply(struct fbwl_toolbar_ui *ui, const struct fbwl_
         return;
     }
 
+    int border_w = ui->border_w;
+    if (border_w < 0) {
+        border_w = 0;
+    }
+    if (border_w > 20) {
+        border_w = 20;
+    }
+
+    int bevel_w = ui->bevel_w;
+    if (bevel_w < 0) {
+        bevel_w = 0;
+    }
+    if (bevel_w > 20) {
+        bevel_w = 20;
+    }
+
+    const int offset = border_w + bevel_w;
+
     int workspaces = fbwm_core_workspace_count(env->wm);
     if (workspaces < 1) {
         workspaces = 1;
@@ -79,22 +97,38 @@ void fbwl_ui_toolbar_layout_apply(struct fbwl_toolbar_ui *ui, const struct fbwl_
     if (percent < 1 || percent > 100) {
         percent = 100;
     }
-    const int desired_main = output_main > 0 ? (output_main * percent) / 100 : 0;
-    if (vertical) {
-        ui->width = ui->thickness;
-        ui->height = desired_main;
-        if (ui->height < 1) {
-            ui->height = 1;
-        }
-    } else {
-        ui->height = ui->thickness;
-        ui->width = desired_main;
-        if (ui->width < 1) {
-            ui->width = 1;
-        }
+
+    int avail = output_main > 0 ? output_main - 2 * border_w : 0;
+    if (avail < 1) {
+        avail = 1;
     }
 
-    const int main_total = vertical ? ui->height : ui->width;
+    int inner_main = (avail * percent) / 100;
+    if (inner_main < 1) {
+        inner_main = 1;
+    }
+
+    const int outer_main = inner_main + 2 * border_w;
+
+    int payload_main = inner_main - 2 * bevel_w;
+    if (payload_main < 1) {
+        payload_main = 1;
+    }
+
+    int outer_cross = ui->thickness + 2 * bevel_w + 2 * border_w;
+    if (outer_cross < 1) {
+        outer_cross = 1;
+    }
+
+    if (vertical) {
+        ui->width = outer_cross;
+        ui->height = outer_main;
+    } else {
+        ui->height = outer_cross;
+        ui->width = outer_main;
+    }
+
+    const int main_total = payload_main;
 
     bool want_iconbar = false;
     bool want_tray = false;
@@ -239,7 +273,7 @@ void fbwl_ui_toolbar_layout_apply(struct fbwl_toolbar_ui *ui, const struct fbwl_
                 if (w < 0) {
                     w = 0;
                 }
-                ui->iconbar_x = cursor;
+                ui->iconbar_x = offset + cursor;
                 ui->iconbar_w = w;
                 cursor += w;
                 iconbar_placed = true;
@@ -264,7 +298,7 @@ void fbwl_ui_toolbar_layout_apply(struct fbwl_toolbar_ui *ui, const struct fbwl_
                 if ((size_t)fit > tray_count_full) {
                     fit = (int)tray_count_full;
                 }
-                ui->tray_x = cursor;
+                ui->tray_x = offset + cursor;
                 ui->tray_icon_w = tray_icon_w;
                 ui->tray_count = (size_t)fit;
                 ui->tray_w = fit * tray_icon_w;
@@ -284,7 +318,7 @@ void fbwl_ui_toolbar_layout_apply(struct fbwl_toolbar_ui *ui, const struct fbwl_
                 if (w < 0) {
                     w = 0;
                 }
-                ui->clock_x = cursor;
+                ui->clock_x = offset + cursor;
                 ui->clock_w = w;
                 cursor += w;
                 clock_placed = true;
@@ -309,7 +343,7 @@ void fbwl_ui_toolbar_layout_apply(struct fbwl_toolbar_ui *ui, const struct fbwl_
                 break;
             }
             if (toolbtn_idx < toolbtn_cap && ui->button_item_lx != NULL && ui->button_item_w != NULL && ui->button_item_tokens != NULL) {
-                ui->button_item_lx[toolbtn_idx] = cursor;
+                ui->button_item_lx[toolbtn_idx] = offset + cursor;
                 ui->button_item_w[toolbtn_idx] = bw;
                 ui->button_item_tokens[toolbtn_idx] = tok;
                 toolbtn_idx++;

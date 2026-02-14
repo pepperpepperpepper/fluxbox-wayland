@@ -109,34 +109,53 @@ void fbwl_ui_toolbar_build_buttons(struct fbwl_toolbar_ui *ui, const struct fbwl
             ui->thickness < 1) {
         return;
     }
-    ui->button_rects = calloc(ui->button_count, sizeof(*ui->button_rects));
+    ui->button_bgs = calloc(ui->button_count, sizeof(*ui->button_bgs));
     ui->button_labels = calloc(ui->button_count, sizeof(*ui->button_labels));
 
-    if (ui->button_rects == NULL || ui->button_labels == NULL) {
-        free(ui->button_rects);
-        ui->button_rects = NULL;
+    if (ui->button_bgs == NULL || ui->button_labels == NULL) {
+        free(ui->button_bgs);
+        ui->button_bgs = NULL;
         free(ui->button_labels);
         ui->button_labels = NULL;
         ui->button_count = 0;
         return;
     }
 
-    float item[4] = {0.00f, 0.00f, 0.00f, 0.01f};
+    const float alpha = (float)ui->alpha / 255.0f;
     const int pad = ui->thickness >= 24 ? 8 : 2;
+    const int cross = ui->border_w + ui->bevel_w;
 
     for (size_t i = 0; i < ui->button_count; i++) {
         const int off = ui->button_item_lx[i];
         const int tool_w = ui->button_item_w[i];
+        const char *tok = ui->button_item_tokens[i];
 
         const int w = vertical ? ui->thickness : tool_w;
         const int h = vertical ? tool_w : ui->thickness;
+        const int base_x = vertical ? cross : off;
+        const int base_y = vertical ? off : cross;
 
-        ui->button_rects[i] = wlr_scene_rect_create(ui->tree, w, h, item);
-        if (ui->button_rects[i] != NULL) {
-            wlr_scene_node_set_position(&ui->button_rects[i]->node, vertical ? 0 : off, vertical ? off : 0);
+        ui->button_bgs[i] = wlr_scene_buffer_create(ui->tree, NULL);
+        if (ui->button_bgs[i] != NULL) {
+            wlr_scene_node_set_position(&ui->button_bgs[i]->node, base_x, base_y);
+            const struct fbwl_texture *tex = NULL;
+            if (env != NULL && env->decor_theme != NULL) {
+                tex = (tok != NULL && strcmp(tok, "workspacename") == 0) ? &env->decor_theme->toolbar_workspace_tex : &env->decor_theme->toolbar_button_tex;
+            }
+            const bool parentrel = fbwl_texture_is_parentrelative(tex);
+            if (tex != NULL && !parentrel) {
+                struct wlr_buffer *buf = fbwl_texture_render_buffer(tex, w > 0 ? w : 1, h > 0 ? h : 1);
+                wlr_scene_buffer_set_buffer(ui->button_bgs[i], buf);
+                if (buf != NULL) {
+                    wlr_buffer_drop(buf);
+                }
+                wlr_scene_buffer_set_dest_size(ui->button_bgs[i], w > 0 ? w : 1, h > 0 ? h : 1);
+                wlr_scene_buffer_set_opacity(ui->button_bgs[i], alpha);
+            } else {
+                wlr_scene_node_set_enabled(&ui->button_bgs[i]->node, false);
+            }
         }
 
-        const char *tok = ui->button_item_tokens[i];
         if (tok == NULL) {
             continue;
         }
@@ -174,15 +193,18 @@ void fbwl_ui_toolbar_build_buttons(struct fbwl_toolbar_ui *ui, const struct fbwl
             continue;
         }
 
-        struct wlr_buffer *buf = fbwl_text_buffer_create(label, w, h, pad, fg, ui->font,
-            env->decor_theme != NULL ? &env->decor_theme->toolbar_label_effect : NULL);
+        const struct fbwl_text_effect *effect = NULL;
+        if (env->decor_theme != NULL) {
+            effect = strcmp(tok, "workspacename") == 0 ? &env->decor_theme->toolbar_workspace_effect : &env->decor_theme->toolbar_label_effect;
+        }
+        struct wlr_buffer *buf = fbwl_text_buffer_create(label, w, h, pad, fg, ui->font, effect, 0);
         if (buf == NULL) {
             continue;
         }
 
         ui->button_labels[i] = wlr_scene_buffer_create(ui->tree, buf);
         if (ui->button_labels[i] != NULL) {
-            wlr_scene_node_set_position(&ui->button_labels[i]->node, vertical ? 0 : off, vertical ? off : 0);
+            wlr_scene_node_set_position(&ui->button_labels[i]->node, base_x, base_y);
         }
         wlr_buffer_drop(buf);
     }

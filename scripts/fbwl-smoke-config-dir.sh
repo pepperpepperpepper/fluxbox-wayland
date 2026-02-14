@@ -201,11 +201,14 @@ fi
 
 ./fbwl-input-injector --socket "$SOCKET" motion 0 0 >/dev/null 2>&1 || true
 
+ITEM_H=24
+MENU_TITLE_H=$ITEM_H
+
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
-./fbwl-input-injector --socket "$SOCKET" motion "$((MENU_X + 10))" "$((MENU_Y + 10))" >/dev/null 2>&1 || true
+./fbwl-input-injector --socket "$SOCKET" motion "$((MENU_X + 10))" "$((MENU_Y + MENU_TITLE_H + 10))" >/dev/null 2>&1 || true
 timeout 2 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Menu: enter-submenu reason=delay'; do sleep 0.05; done"
 
-./fbwl-input-injector --socket "$SOCKET" click "$((MENU_X + 10))" "$((MENU_Y + 10))"
+./fbwl-input-injector --socket "$SOCKET" click "$((MENU_X + 10))" "$((MENU_Y + MENU_TITLE_H + 10))"
 timeout 2 bash -c "until [[ -f '$MARK_MENU' ]]; do sleep 0.05; done"
 
 OUT="$(./fbwl-remote --socket "$SOCKET" workspace 4 || true)"

@@ -3,6 +3,7 @@
 #include "wayland/fbwl_menu.h"
 #include "wayland/fbwl_ui_decor_theme.h"
 #include "wayland/fbwl_ui_menu_icon.h"
+#include "wayland/fbwl_ui_menu_marks.h"
 #include "wayland/fbwl_ui_menu_search.h"
 #include "wayland/fbwl_ui_text.h"
 #include "wayland/fbwl_view.h"
@@ -45,6 +46,10 @@ static void fbwl_ui_menu_destroy_scene(struct fbwl_menu_ui *ui) {
         ui->tree = NULL;
     }
     ui->bg = NULL;
+    ui->title_bg = NULL;
+    ui->title_label = NULL;
+    ui->title_h = 0;
+    ui->border_w = 0;
     ui->highlight = NULL;
     free(ui->item_rects);
     ui->item_rects = NULL;
@@ -52,7 +57,30 @@ static void fbwl_ui_menu_destroy_scene(struct fbwl_menu_ui *ui) {
     free(ui->item_labels);
     ui->item_labels = NULL;
     ui->item_label_count = 0;
-    ui->any_icons = false;
+    free(ui->item_marks);
+    ui->item_marks = NULL;
+    ui->item_mark_count = 0;
+}
+
+static bool fbwl_ui_menu_contains_point(const struct fbwl_menu_ui *ui, int lx, int ly) {
+    if (ui == NULL || !ui->open || ui->current == NULL) {
+        return false;
+    }
+
+    const int x = lx - ui->x;
+    const int y = ly - ui->y;
+    const int bw = ui->border_w > 0 ? ui->border_w : 0;
+    const int item_h = ui->item_h > 0 ? ui->item_h : 1;
+    const int w = ui->width > 0 ? ui->width : 1;
+    const int count = ui->current != NULL ? (int)ui->current->item_count : 0;
+    const int title_h = ui->title_h > 0 ? ui->title_h : 0;
+    const int h = title_h + (count > 0 ? count * item_h : item_h);
+    const int outer_w = w + 2 * bw;
+    const int outer_h = h + 2 * bw;
+    if (x < 0 || x >= outer_w || y < 0 || y >= outer_h) {
+        return false;
+    }
+    return true;
 }
 
 void fbwl_ui_menu_close(struct fbwl_menu_ui *ui, const char *why) {
@@ -92,38 +120,37 @@ static void fbwl_ui_menu_update_item_label(struct fbwl_menu_ui *ui, size_t idx) 
     if (it->kind == FBWL_MENU_ITEM_SEPARATOR) {
         return;
     }
-    const char *label = it->label != NULL ? it->label : "(no-label)";
-    char render_label[512];
-    const char *render = label;
-    if (it->kind == FBWL_MENU_ITEM_SUBMENU) {
-        if (snprintf(render_label, sizeof(render_label), "%s  >", label) >= 0) {
-            render = render_label;
-        }
-    }
+    const char *render = it->label != NULL ? it->label : "(no-label)";
 
+    const float alpha = (float)ui->alpha / 255.0f;
     float fg[4] = {ui->env.decor_theme->menu_text[0], ui->env.decor_theme->menu_text[1], ui->env.decor_theme->menu_text[2],
-        ui->env.decor_theme->menu_text[3]};
+        ui->env.decor_theme->menu_text[3] * alpha};
     float hi_fg[4] = {ui->env.decor_theme->menu_hilite_text[0], ui->env.decor_theme->menu_hilite_text[1],
-        ui->env.decor_theme->menu_hilite_text[2], ui->env.decor_theme->menu_hilite_text[3]};
+        ui->env.decor_theme->menu_hilite_text[2], ui->env.decor_theme->menu_hilite_text[3] * alpha};
     float dis_fg[4] = {ui->env.decor_theme->menu_disable_text[0], ui->env.decor_theme->menu_disable_text[1],
-        ui->env.decor_theme->menu_disable_text[2], ui->env.decor_theme->menu_disable_text[3]};
+        ui->env.decor_theme->menu_disable_text[2], ui->env.decor_theme->menu_disable_text[3] * alpha};
 
     const float *use_fg = fg;
+    const char *font = ui->env.decor_theme->menu_font;
+    const struct fbwl_text_effect *effect = &ui->env.decor_theme->menu_frame_effect;
+    int justify = ui->env.decor_theme->menu_frame_justify;
     if (it->kind == FBWL_MENU_ITEM_NOP) {
         use_fg = dis_fg;
     } else if (idx == ui->selected) {
         use_fg = hi_fg;
+        font = ui->env.decor_theme->menu_hilite_font[0] != '\0' ? ui->env.decor_theme->menu_hilite_font : font;
+        effect = &ui->env.decor_theme->menu_hilite_effect;
+        justify = ui->env.decor_theme->menu_hilite_justify;
     }
 
     const int item_h = ui->item_h > 0 ? ui->item_h : 1;
     const int w = ui->width > 0 ? ui->width : 200;
-    int pad_x = 8;
-    if (ui->any_icons) {
-        pad_x += item_h;
-    }
+    const int bevel = ui->env.decor_theme->menu_bevel_width > 0 ? ui->env.decor_theme->menu_bevel_width : 0;
+    const int left_reserve = bevel + item_h + 1;
+    const int right_reserve = bevel + item_h;
+    const int label_w = w - left_reserve - right_reserve > 1 ? w - left_reserve - right_reserve : 1;
 
-    struct wlr_buffer *text_buf = fbwl_text_buffer_create(render, w, item_h, pad_x, use_fg, ui->env.decor_theme->menu_font,
-        &ui->env.decor_theme->menu_frame_effect);
+    struct wlr_buffer *text_buf = fbwl_text_buffer_create(render, label_w, item_h, 0, use_fg, font, effect, justify);
     if (text_buf == NULL) {
         return;
     }
@@ -160,27 +187,73 @@ static void fbwl_ui_menu_rebuild(struct fbwl_menu_ui *ui, const struct fbwl_ui_m
     const int count = (int)ui->current->item_count;
     int item_h = ui->item_h;
     if (item_h <= 0) {
-        item_h = env->decor_theme->menu_item_height > 0 ? env->decor_theme->menu_item_height : env->decor_theme->title_height;
+        item_h = env->decor_theme->menu_item_height > 0 ? env->decor_theme->menu_item_height : 24;
     }
     if (item_h < 1) {
         item_h = 1;
     }
+    ui->item_h = item_h;
     const int w = ui->width > 0 ? ui->width : 200;
-    const int h = count > 0 ? count * item_h : item_h;
+    const char *title = ui->current->label;
+    const bool has_title = title != NULL && *title != '\0';
+    int title_h = 0;
+    if (has_title) {
+        title_h = env->decor_theme->menu_title_height > 0 ? env->decor_theme->menu_title_height : item_h;
+        if (title_h < 1) {
+            title_h = item_h;
+        }
+        if (title_h < 1) {
+            title_h = 1;
+        }
+    }
+    ui->title_h = title_h;
+    const int h = title_h + (count > 0 ? count * item_h : item_h);
+
+    const int bevel = env->decor_theme->menu_bevel_width > 0 ? env->decor_theme->menu_bevel_width : 0;
+    const int bw = env->decor_theme->menu_border_width > 0 ? env->decor_theme->menu_border_width : 0;
+    ui->border_w = bw;
+    const int outer_w = w + 2 * bw;
+    const int outer_h = h + 2 * bw;
 
     const float alpha = (float)ui->alpha / 255.0f;
     const bool frame_parentrel = fbwl_texture_is_parentrelative(&env->decor_theme->menu_frame_tex);
     const bool pseudo = frame_parentrel || (env->force_pseudo_transparency && ui->alpha < 255);
     if (pseudo) {
         fbwl_pseudo_bg_update(&ui->pseudo_bg, ui->tree, env->output_layout,
-            ui->x, ui->y, 0, 0, w, h, env->wallpaper_mode, env->wallpaper_buf, env->background_color);
+            ui->x, ui->y, 0, 0, outer_w, outer_h, env->wallpaper_mode, env->wallpaper_buf, env->background_color);
     } else {
         fbwl_pseudo_bg_destroy(&ui->pseudo_bg);
     }
 
+    if (bw > 0) {
+        float bc[4] = {
+            env->decor_theme->menu_border_color[0],
+            env->decor_theme->menu_border_color[1],
+            env->decor_theme->menu_border_color[2],
+            env->decor_theme->menu_border_color[3] * alpha,
+        };
+
+        struct wlr_scene_rect *top = wlr_scene_rect_create(ui->tree, outer_w, bw, bc);
+        if (top != NULL) {
+            wlr_scene_node_set_position(&top->node, 0, 0);
+        }
+        struct wlr_scene_rect *bottom = wlr_scene_rect_create(ui->tree, outer_w, bw, bc);
+        if (bottom != NULL) {
+            wlr_scene_node_set_position(&bottom->node, 0, outer_h - bw);
+        }
+        struct wlr_scene_rect *left = wlr_scene_rect_create(ui->tree, bw, outer_h - 2 * bw, bc);
+        if (left != NULL) {
+            wlr_scene_node_set_position(&left->node, 0, bw);
+        }
+        struct wlr_scene_rect *right = wlr_scene_rect_create(ui->tree, bw, outer_h - 2 * bw, bc);
+        if (right != NULL) {
+            wlr_scene_node_set_position(&right->node, outer_w - bw, bw);
+        }
+    }
+
     ui->bg = wlr_scene_buffer_create(ui->tree, NULL);
     if (ui->bg != NULL) {
-        wlr_scene_node_set_position(&ui->bg->node, 0, 0);
+        wlr_scene_node_set_position(&ui->bg->node, bw, bw);
         if (!frame_parentrel) {
             struct wlr_buffer *buf = fbwl_texture_render_buffer(&env->decor_theme->menu_frame_tex, w, h);
             wlr_scene_buffer_set_buffer(ui->bg, buf);
@@ -194,13 +267,53 @@ static void fbwl_ui_menu_rebuild(struct fbwl_menu_ui *ui, const struct fbwl_ui_m
         }
     }
 
+    if (title_h > 0) {
+        const bool title_parentrel = fbwl_texture_is_parentrelative(&env->decor_theme->menu_title_tex);
+
+        ui->title_bg = wlr_scene_buffer_create(ui->tree, NULL);
+        if (ui->title_bg != NULL) {
+            wlr_scene_node_set_position(&ui->title_bg->node, bw, bw);
+            if (!title_parentrel) {
+                struct wlr_buffer *buf = fbwl_texture_render_buffer(&env->decor_theme->menu_title_tex, w, title_h);
+                wlr_scene_buffer_set_buffer(ui->title_bg, buf);
+                if (buf != NULL) {
+                    wlr_buffer_drop(buf);
+                }
+                wlr_scene_buffer_set_dest_size(ui->title_bg, w, title_h);
+                wlr_scene_buffer_set_opacity(ui->title_bg, alpha);
+            } else {
+                wlr_scene_node_set_enabled(&ui->title_bg->node, false);
+            }
+        }
+
+        float title_fg[4] = {
+            env->decor_theme->menu_title_text[0],
+            env->decor_theme->menu_title_text[1],
+            env->decor_theme->menu_title_text[2],
+            env->decor_theme->menu_title_text[3] * alpha,
+        };
+        const int title_pad_x = bevel > 0 ? bevel : 8;
+        const char *title_font =
+            env->decor_theme->menu_title_font[0] != '\0' ? env->decor_theme->menu_title_font : env->decor_theme->menu_font;
+        struct wlr_buffer *title_buf =
+            fbwl_text_buffer_create(title, w, title_h, title_pad_x, title_fg, title_font,
+                &env->decor_theme->menu_title_effect, env->decor_theme->menu_title_justify);
+        if (title_buf != NULL) {
+            ui->title_label = wlr_scene_buffer_create(ui->tree, title_buf);
+            if (ui->title_label != NULL) {
+                wlr_scene_node_set_position(&ui->title_label->node, bw, bw);
+            }
+            wlr_buffer_drop(title_buf);
+        }
+    }
+
     if (ui->selected >= ui->current->item_count) {
         ui->selected = ui->current->item_count > 0 ? ui->current->item_count - 1 : 0;
     }
     const bool hilite_parentrel = fbwl_texture_is_parentrelative(&env->decor_theme->menu_hilite_tex);
     ui->highlight = wlr_scene_buffer_create(ui->tree, NULL);
     if (ui->highlight != NULL) {
-        wlr_scene_node_set_position(&ui->highlight->node, 0, (int)ui->selected * item_h);
+        wlr_scene_node_set_position(&ui->highlight->node, bw, bw + title_h + (int)ui->selected * item_h);
         if (!hilite_parentrel) {
             struct wlr_buffer *buf = fbwl_texture_render_buffer(&env->decor_theme->menu_hilite_tex, w, item_h);
             wlr_scene_buffer_set_buffer(ui->highlight, buf);
@@ -222,7 +335,7 @@ static void fbwl_ui_menu_rebuild(struct fbwl_menu_ui *ui, const struct fbwl_ui_m
             for (size_t i = 0; i < ui->item_rect_count; i++) {
                 ui->item_rects[i] = wlr_scene_rect_create(ui->tree, w, item_h, item);
                 if (ui->item_rects[i] != NULL) {
-                    wlr_scene_node_set_position(&ui->item_rects[i]->node, 0, (int)i * item_h);
+                    wlr_scene_node_set_position(&ui->item_rects[i]->node, bw, bw + title_h + (int)i * item_h);
                 }
             }
         }
@@ -233,6 +346,11 @@ static void fbwl_ui_menu_rebuild(struct fbwl_menu_ui *ui, const struct fbwl_ui_m
         ui->item_labels = calloc(ui->item_label_count, sizeof(*ui->item_labels));
     }
 
+    ui->item_mark_count = ui->current->item_count;
+    if (ui->item_mark_count > 0) {
+        ui->item_marks = calloc(ui->item_mark_count, sizeof(*ui->item_marks));
+    }
+
     float fg[4] = {env->decor_theme->menu_text[0], env->decor_theme->menu_text[1], env->decor_theme->menu_text[2],
         env->decor_theme->menu_text[3] * alpha};
     float hi_fg[4] = {env->decor_theme->menu_hilite_text[0], env->decor_theme->menu_hilite_text[1],
@@ -240,15 +358,17 @@ static void fbwl_ui_menu_rebuild(struct fbwl_menu_ui *ui, const struct fbwl_ui_m
     float dis_fg[4] = {env->decor_theme->menu_disable_text[0], env->decor_theme->menu_disable_text[1],
         env->decor_theme->menu_disable_text[2], env->decor_theme->menu_disable_text[3] * alpha};
 
-    ui->any_icons = false;
-    for (size_t i = 0; i < ui->current->item_count; i++) {
-        const struct fbwl_menu_item *it = &ui->current->items[i];
-        if (it->kind == FBWL_MENU_ITEM_SEPARATOR) {
-            continue;
-        }
-        if (it->icon != NULL && *it->icon != '\0') {
-            ui->any_icons = true;
-            break;
+    const int left_reserve = bevel + item_h + 1;
+    const int right_reserve = bevel + item_h;
+    const int label_w = w - left_reserve - right_reserve > 1 ? w - left_reserve - right_reserve : 1;
+    const char *hilite_font =
+        env->decor_theme->menu_hilite_font[0] != '\0' ? env->decor_theme->menu_hilite_font : env->decor_theme->menu_font;
+
+    int mark_x = bw;
+    if (env->decor_theme->menu_bullet_pos == 2) {
+        mark_x = bw + w - item_h - bevel;
+        if (mark_x < bw) {
+            mark_x = bw;
         }
     }
     for (size_t i = 0; i < ui->current->item_count; i++) {
@@ -257,34 +377,34 @@ static void fbwl_ui_menu_rebuild(struct fbwl_menu_ui *ui, const struct fbwl_ui_m
             float sep[4] = {fg[0], fg[1], fg[2], 0.30f * alpha};
             struct wlr_scene_rect *line = wlr_scene_rect_create(ui->tree, w, 1, sep);
             if (line != NULL) {
-                wlr_scene_node_set_position(&line->node, 0, (int)i * item_h + item_h / 2);
+                wlr_scene_node_set_position(&line->node, bw, bw + title_h + (int)i * item_h + item_h / 2);
             }
             continue;
         }
-        const char *label = it->label != NULL ? it->label : "(no-label)";
-        char render_label[512];
-        const char *render = label;
-        if (it->kind == FBWL_MENU_ITEM_SUBMENU) {
-            if (snprintf(render_label, sizeof(render_label), "%s  >", label) >= 0) {
-                render = render_label;
+
+        if (ui->item_marks != NULL && i < ui->item_mark_count) {
+            struct wlr_scene_buffer *mb = wlr_scene_buffer_create(ui->tree, NULL);
+            ui->item_marks[i] = mb;
+            if (mb != NULL) {
+                wlr_scene_node_set_position(&mb->node, mark_x, bw + title_h + (int)i * item_h);
+                wlr_scene_buffer_set_dest_size(mb, item_h, item_h);
+                wlr_scene_buffer_set_opacity(mb, alpha);
+                fbwl_ui_menu_update_item_mark(ui, i);
             }
         }
 
-        int pad_x = 8;
-        if (ui->any_icons) {
-            pad_x += item_h;
-        }
         const bool wants_icon = it->icon != NULL && *it->icon != '\0';
         if (wants_icon) {
-            const int icon_pad = 4;
-            const int icon_px = item_h > 2 * icon_pad ? item_h - 2 * icon_pad : item_h;
-            if (icon_px > 0) {
+            const int icon_px = item_h - 2 * bevel > 1 ? item_h - 2 * bevel : item_h;
+            if (icon_px >= 1) {
                 struct wlr_buffer *icon_buf = fbwl_ui_menu_icon_buffer_create(it->icon, icon_px);
                 if (icon_buf != NULL) {
                     struct wlr_scene_buffer *ib = wlr_scene_buffer_create(ui->tree, icon_buf);
                     if (ib != NULL) {
-                        const int y = (int)i * item_h + (item_h - icon_px) / 2;
-                        wlr_scene_node_set_position(&ib->node, icon_pad, y);
+                        const int x = bw + bevel;
+                        const int y = bw + title_h + (int)i * item_h + bevel;
+                        wlr_scene_node_set_position(&ib->node, x, y);
+                        wlr_scene_buffer_set_opacity(ib, alpha);
                     }
                     wlr_buffer_drop(icon_buf);
                 }
@@ -292,17 +412,23 @@ static void fbwl_ui_menu_rebuild(struct fbwl_menu_ui *ui, const struct fbwl_ui_m
         }
 
         const float *use_fg = fg;
+        const char *font = env->decor_theme->menu_font;
+        const struct fbwl_text_effect *effect = &env->decor_theme->menu_frame_effect;
+        int justify = env->decor_theme->menu_frame_justify;
         if (it->kind == FBWL_MENU_ITEM_NOP) {
             use_fg = dis_fg;
         } else if (i == ui->selected) {
             use_fg = hi_fg;
+            font = hilite_font;
+            effect = &env->decor_theme->menu_hilite_effect;
+            justify = env->decor_theme->menu_hilite_justify;
         }
-        struct wlr_buffer *text_buf = fbwl_text_buffer_create(render, w, item_h, pad_x, use_fg, env->decor_theme->menu_font,
-            &env->decor_theme->menu_frame_effect);
+        const char *render = it->label != NULL ? it->label : "(no-label)";
+        struct wlr_buffer *text_buf = fbwl_text_buffer_create(render, label_w, item_h, 0, use_fg, font, effect, justify);
         if (text_buf != NULL) {
             struct wlr_scene_buffer *sb = wlr_scene_buffer_create(ui->tree, text_buf);
             if (sb != NULL) {
-                wlr_scene_node_set_position(&sb->node, 0, (int)i * item_h);
+                wlr_scene_node_set_position(&sb->node, bw + left_reserve, bw + title_h + (int)i * item_h);
                 if (ui->item_labels != NULL && i < ui->item_label_count) {
                     ui->item_labels[i] = sb;
                 }
@@ -376,7 +502,7 @@ void fbwl_ui_menu_open_root(struct fbwl_menu_ui *ui, const struct fbwl_ui_menu_e
     ui->y = y;
     ui->width = 200;
     if (env->decor_theme != NULL) {
-        ui->item_h = env->decor_theme->menu_item_height > 0 ? env->decor_theme->menu_item_height : env->decor_theme->title_height;
+        ui->item_h = env->decor_theme->menu_item_height > 0 ? env->decor_theme->menu_item_height : 24;
     } else {
         ui->item_h = 0;
     }
@@ -408,7 +534,7 @@ void fbwl_ui_menu_open_window(struct fbwl_menu_ui *ui, const struct fbwl_ui_menu
     ui->y = y;
     ui->width = 200;
     if (env->decor_theme != NULL) {
-        ui->item_h = env->decor_theme->menu_item_height > 0 ? env->decor_theme->menu_item_height : env->decor_theme->title_height;
+        ui->item_h = env->decor_theme->menu_item_height > 0 ? env->decor_theme->menu_item_height : 24;
     } else {
         ui->item_h = 0;
     }
@@ -422,15 +548,21 @@ ssize_t fbwl_ui_menu_index_at(const struct fbwl_menu_ui *ui, int lx, int ly) {
     if (ui == NULL || !ui->open || ui->current == NULL) {
         return -1;
     }
-    const int x = lx - ui->x;
-    const int y = ly - ui->y;
+    const int bw = ui->border_w > 0 ? ui->border_w : 0;
+    const int x = lx - ui->x - bw;
+    const int y = ly - ui->y - bw;
     const int item_h = ui->item_h > 0 ? ui->item_h : 1;
     const int w = ui->width > 0 ? ui->width : 1;
-    const int h = (int)ui->current->item_count * item_h;
+    const int items_h = (int)ui->current->item_count * item_h;
+    const int title_h = ui->title_h > 0 ? ui->title_h : 0;
+    const int h = title_h + items_h;
     if (x < 0 || x >= w || y < 0 || y >= h) {
         return -1;
     }
-    const ssize_t idx = y / item_h;
+    if (y < title_h) {
+        return -1;
+    }
+    const ssize_t idx = (y - title_h) / item_h;
     if (idx < 0 || (size_t)idx >= ui->current->item_count) {
         return -1;
     }
@@ -454,12 +586,15 @@ void fbwl_ui_menu_set_selected(struct fbwl_menu_ui *ui, size_t idx) {
     const size_t prev = ui->selected;
     ui->selected = idx;
     if (ui->highlight != NULL) {
+        const int bw = ui->border_w > 0 ? ui->border_w : 0;
         const int item_h = ui->item_h > 0 ? ui->item_h : 1;
-        wlr_scene_node_set_position(&ui->highlight->node, 0, (int)ui->selected * item_h);
+        wlr_scene_node_set_position(&ui->highlight->node, bw, bw + ui->title_h + (int)ui->selected * item_h);
     }
     if (prev != ui->selected) {
         fbwl_ui_menu_update_item_label(ui, prev);
         fbwl_ui_menu_update_item_label(ui, ui->selected);
+        fbwl_ui_menu_update_item_mark(ui, prev);
+        fbwl_ui_menu_update_item_mark(ui, ui->selected);
     }
 }
 
@@ -743,9 +878,16 @@ bool fbwl_ui_menu_handle_click(struct fbwl_menu_ui *ui, const struct fbwl_ui_men
         return false;
     }
 
+    if (!fbwl_ui_menu_contains_point(ui, lx, ly)) {
+        fbwl_ui_menu_close(ui, "click-outside");
+        return true;
+    }
+
     const ssize_t idx = fbwl_ui_menu_index_at(ui, lx, ly);
     if (idx < 0) {
-        fbwl_ui_menu_close(ui, "click-outside");
+        if (button == BTN_RIGHT) {
+            fbwl_ui_menu_close(ui, "right-click-bg");
+        }
         return true;
     }
 

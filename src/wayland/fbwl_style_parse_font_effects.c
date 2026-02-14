@@ -347,6 +347,27 @@ bool fbwl_style_parse_font_effects(struct fbwl_decor_theme *theme, const char *k
         return true;
     }
 
+    if (strcasecmp(key, "menu.hilite.font.effect") == 0 || strcasecmp(key, "menu.hilite.effect") == 0) {
+        effect_apply_kind(&theme->menu_hilite_effect, 2, val);
+        return true;
+    }
+    if (strcasecmp(key, "menu.hilite.font.shadow.color") == 0 || strcasecmp(key, "menu.hilite.shadow.color") == 0) {
+        effect_apply_shadow_color(&theme->menu_hilite_effect, 2, val);
+        return true;
+    }
+    if (strcasecmp(key, "menu.hilite.font.shadow.x") == 0 || strcasecmp(key, "menu.hilite.shadow.x") == 0) {
+        effect_apply_shadow_x(&theme->menu_hilite_effect, 2, val);
+        return true;
+    }
+    if (strcasecmp(key, "menu.hilite.font.shadow.y") == 0 || strcasecmp(key, "menu.hilite.shadow.y") == 0) {
+        effect_apply_shadow_y(&theme->menu_hilite_effect, 2, val);
+        return true;
+    }
+    if (strcasecmp(key, "menu.hilite.font.halo.color") == 0 || strcasecmp(key, "menu.hilite.halo.color") == 0) {
+        effect_apply_halo_color(&theme->menu_hilite_effect, 2, val);
+        return true;
+    }
+
     // Toolbar group + specifics.
     if (strcasecmp(key, "toolbar.font.effect") == 0 || strcasecmp(key, "toolbar.effect") == 0) {
         effects_apply_toolbar_group(theme, effect_apply_kind, 1, val);

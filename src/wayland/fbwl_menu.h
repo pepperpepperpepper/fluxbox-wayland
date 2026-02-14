@@ -70,6 +70,8 @@ struct fbwl_menu_item {
     enum fbwl_menu_view_action view_action;
     int arg;
     bool close_on_click;
+    bool toggle;
+    bool selected;
 };
 
 struct fbwl_menu {

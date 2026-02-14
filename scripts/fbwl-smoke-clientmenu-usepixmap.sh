@@ -133,8 +133,9 @@ EOF
     MENU_Y=$(echo "$open_line" | rg -o 'y=-?[0-9]+' | head -n 1 | cut -d= -f2)
 
     local ITEM_H=24
+    local MENU_TITLE_H=$ITEM_H
     local CLICK_X=$((MENU_X + 10))
-    local CLICK_Y=$((MENU_Y + 10 + idx_a * ITEM_H))
+    local CLICK_Y=$((MENU_Y + MENU_TITLE_H + 10 + idx_a * ITEM_H))
 
     # Clicking a non-focused item should change focus.
     OFFSET=$(wc -c <"$LOG" | tr -d ' ')
@@ -150,4 +151,3 @@ run_case usepixmap-on true 1
 run_case usepixmap-off false 0
 
 echo "ok: clientMenu.usePixmap smoke passed"
-

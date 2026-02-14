@@ -149,17 +149,23 @@ static void slit_hidden_offset(const struct fbwl_slit_ui *ui, int *dx, int *dy) 
     if (dy != NULL) {
         *dy = 0;
     }
-    if (ui == NULL || !ui->hidden || ui->thickness < 1) {
+    if (ui == NULL || !ui->hidden) {
+        return;
+    }
+    const enum fbwl_slit_edge edge = slit_placement_edge(ui->placement);
+    const bool vertical = edge == FBWL_SLIT_EDGE_LEFT || edge == FBWL_SLIT_EDGE_RIGHT;
+    const int thickness = vertical ? ui->width : ui->height;
+    if (thickness < 1) {
         return;
     }
 
     const int peek = 2;
-    int delta = ui->thickness - peek;
+    int delta = thickness - peek;
     if (delta < 0) {
         delta = 0;
     }
 
-    switch (slit_placement_edge(ui->placement)) {
+    switch (edge) {
     case FBWL_SLIT_EDGE_TOP:
         if (dy != NULL) {
             *dy = -delta;
@@ -233,7 +239,13 @@ static void slit_compute_size(struct fbwl_slit_ui *ui, int *out_w, int *out_h) {
         return;
     }
 
-    const int gap = 0;
+    int bevel = ui->bevel_w;
+    if (bevel < 0) {
+        bevel = 0;
+    }
+    if (bevel > 20) {
+        bevel = 20;
+    }
     int w = 0;
     int h = 0;
     size_t n = 0;
@@ -255,20 +267,24 @@ static void slit_compute_size(struct fbwl_slit_ui *ui, int *out_w, int *out_h) {
             if (vw > w) {
                 w = vw;
             }
-            h += vh;
-            if (n > 0) {
-                h += gap;
-            }
+            h += vh + bevel;
         } else {
             if (vh > h) {
                 h = vh;
             }
-            w += vw;
-            if (n > 0) {
-                w += gap;
-            }
+            w += vw + bevel;
         }
         n++;
+    }
+    if (w < 1) {
+        w = 1;
+    } else {
+        w += bevel;
+    }
+    if (h < 1) {
+        h = 1;
+    } else {
+        h += bevel * 2;
     }
     *out_w = w;
     *out_h = h;
@@ -365,6 +381,22 @@ static void slit_update_layout(struct fbwl_slit_ui *ui, const struct fbwl_ui_sli
     ui->pseudo_background_color = env->background_color;
     ui->pseudo_decor_theme = env->decor_theme;
     ui->pseudo_force_pseudo_transparency = env->force_pseudo_transparency;
+    int border_w = env->decor_theme != NULL ? env->decor_theme->slit_border_width : 0;
+    if (border_w < 0) {
+        border_w = 0;
+    }
+    if (border_w > 20) {
+        border_w = 20;
+    }
+    int bevel_w = env->decor_theme != NULL ? env->decor_theme->slit_bevel_width : 0;
+    if (bevel_w < 0) {
+        bevel_w = 0;
+    }
+    if (bevel_w > 20) {
+        bevel_w = 20;
+    }
+    ui->border_w = border_w;
+    ui->bevel_w = bevel_w;
 
     const size_t mapped = slit_mapped_client_count(ui);
     if (!ui->enabled || mapped == 0) {
@@ -416,8 +448,10 @@ static void slit_update_layout(struct fbwl_slit_ui *ui, const struct fbwl_ui_sli
         return;
     }
 
-    ui->width = w;
-    ui->height = h;
+    const int inner_w = w;
+    const int inner_h = h;
+    ui->width = inner_w + 2 * border_w;
+    ui->height = inner_h + 2 * border_w;
     const enum fbwl_slit_edge edge = slit_placement_edge(ui->placement);
     ui->thickness = (edge == FBWL_SLIT_EDGE_LEFT || edge == FBWL_SLIT_EDGE_RIGHT) ? ui->width : ui->height;
 
@@ -472,22 +506,48 @@ static void slit_update_layout(struct fbwl_slit_ui *ui, const struct fbwl_ui_sli
     fbwl_ui_slit_apply_position(ui);
 
     if (ui->bg != NULL) {
-        wlr_scene_node_set_position(&ui->bg->node, 0, 0);
+        wlr_scene_node_set_position(&ui->bg->node, border_w, border_w);
         wlr_scene_node_lower_to_bottom(&ui->bg->node);
         const float alpha = (float)ui->alpha / 255.0f;
         const bool parentrel = env->decor_theme != NULL && fbwl_texture_is_parentrelative(&env->decor_theme->slit_tex);
         if (env->decor_theme != NULL && !parentrel) {
-            struct wlr_buffer *buf = fbwl_texture_render_buffer(&env->decor_theme->slit_tex, ui->width, ui->height);
+            struct wlr_buffer *buf = fbwl_texture_render_buffer(&env->decor_theme->slit_tex, inner_w, inner_h);
             wlr_scene_buffer_set_buffer(ui->bg, buf);
             if (buf != NULL) {
                 wlr_buffer_drop(buf);
             }
-            wlr_scene_buffer_set_dest_size(ui->bg, ui->width, ui->height);
+            wlr_scene_buffer_set_dest_size(ui->bg, inner_w, inner_h);
             wlr_scene_buffer_set_opacity(ui->bg, alpha);
             wlr_scene_node_set_enabled(&ui->bg->node, true);
         } else {
             wlr_scene_buffer_set_buffer(ui->bg, NULL);
             wlr_scene_node_set_enabled(&ui->bg->node, false);
+        }
+    }
+
+    if (border_w > 0 && env->decor_theme != NULL) {
+        const float alpha = (float)ui->alpha / 255.0f;
+        float c[4] = {
+            env->decor_theme->slit_border_color[0],
+            env->decor_theme->slit_border_color[1],
+            env->decor_theme->slit_border_color[2],
+            env->decor_theme->slit_border_color[3] * alpha,
+        };
+        struct wlr_scene_rect *top = wlr_scene_rect_create(ui->tree, ui->width, border_w, c);
+        struct wlr_scene_rect *bottom = wlr_scene_rect_create(ui->tree, ui->width, border_w, c);
+        struct wlr_scene_rect *left = wlr_scene_rect_create(ui->tree, border_w, ui->height - 2 * border_w, c);
+        struct wlr_scene_rect *right = wlr_scene_rect_create(ui->tree, border_w, ui->height - 2 * border_w, c);
+        if (top != NULL) {
+            wlr_scene_node_set_position(&top->node, 0, 0);
+        }
+        if (bottom != NULL) {
+            wlr_scene_node_set_position(&bottom->node, 0, ui->height - border_w);
+        }
+        if (left != NULL) {
+            wlr_scene_node_set_position(&left->node, 0, border_w);
+        }
+        if (right != NULL) {
+            wlr_scene_node_set_position(&right->node, ui->width - border_w, border_w);
         }
     }
     const bool parentrel = ui->pseudo_decor_theme != NULL && fbwl_texture_is_parentrelative(&ui->pseudo_decor_theme->slit_tex);
@@ -502,6 +562,11 @@ static void slit_update_layout(struct fbwl_slit_ui *ui, const struct fbwl_ui_sli
 
     int xoff = 0;
     int yoff = 0;
+    if (ui->direction == FBWL_SLIT_DIR_VERTICAL) {
+        yoff = bevel_w;
+    } else {
+        xoff = bevel_w;
+    }
     struct fbwl_slit_item *it;
     wl_list_for_each(it, &ui->items, link) {
         if (!it->visible) {
@@ -521,21 +586,22 @@ static void slit_update_layout(struct fbwl_slit_ui *ui, const struct fbwl_ui_sli
             wlr_scene_node_reparent(&view->scene_tree->node, ui->tree);
         }
 
-        int lx = ui->direction == FBWL_SLIT_DIR_HORIZONTAL ? xoff : 0;
-        int ly = ui->direction == FBWL_SLIT_DIR_VERTICAL ? yoff : 0;
-        if (ui->direction == FBWL_SLIT_DIR_VERTICAL && vw < ui->width) {
-            lx = (ui->width - vw) / 2;
-        } else if (ui->direction == FBWL_SLIT_DIR_HORIZONTAL && vh < ui->height) {
-            ly = (ui->height - vh) / 2;
+        int lx = 0;
+        int ly = 0;
+        if (ui->direction == FBWL_SLIT_DIR_VERTICAL) {
+            lx = (inner_w - vw) / 2;
+            ly = yoff;
+        } else {
+            lx = xoff;
+            ly = (inner_h - vh) / 2;
         }
-
-        wlr_scene_node_set_position(&view->scene_tree->node, lx, ly);
+        wlr_scene_node_set_position(&view->scene_tree->node, border_w + lx, border_w + ly);
         view->placed = true;
 
         if (ui->direction == FBWL_SLIT_DIR_VERTICAL) {
-            yoff += vh;
+            yoff += vh + bevel_w;
         } else {
-            xoff += vw;
+            xoff += vw + bevel_w;
         }
     }
 

@@ -28,6 +28,20 @@ static int decor_theme_button_size(const struct fbwl_decor_theme *theme) {
     return size;
 }
 
+static bool decor_texture_can_use_flat_rect(const struct fbwl_texture *tex) {
+    if (tex == NULL) {
+        return true;
+    }
+    if (tex->pixmap[0] != '\0') {
+        return false;
+    }
+    const uint32_t allowed = FBWL_TEXTURE_FLAT | FBWL_TEXTURE_SOLID;
+    if ((tex->type & FBWL_TEXTURE_PARENTRELATIVE) != 0) {
+        return false;
+    }
+    return (tex->type & ~allowed) == 0;
+}
+
 static bool view_decor_button_allowed(const struct fbwl_view *view, enum fbwl_decor_hit_kind kind) {
     if (view == NULL) {
         return false;
@@ -425,53 +439,102 @@ void fbwl_view_decor_tabs_ui_build(struct fbwl_view *view, const struct fbwl_dec
         }
 
         const bool is_active_tab = tab_view == active_tab;
-        const float *bg = NULL;
-        const float *fg = NULL;
-        if (is_active_tab) {
-            bg = view->decor_active ? theme->titlebar_active : theme->titlebar_inactive;
-            fg = view->decor_active ? theme->title_text_active : theme->title_text_inactive;
-        } else {
-            bg = theme->titlebar_inactive;
-            fg = theme->title_text_inactive;
+        const bool tab_focused = is_active_tab && view->decor_active;
+        const struct fbwl_texture *tab_tex =
+            tab_focused ? &theme->window_tab_label_focus_tex : &theme->window_tab_label_unfocus_tex;
+        const float *fg =
+            tab_focused ? theme->window_tab_label_focus_text : theme->window_tab_label_unfocus_text;
+
+        int tab_border = theme->window_tab_border_width;
+        if (tab_border < 0) {
+            tab_border = 0;
+        }
+        if (tab_border * 2 >= item_w || tab_border * 2 >= item_h) {
+            tab_border = 0;
         }
 
-        struct wlr_scene_rect *rect = wlr_scene_rect_create(view->decor_tabs_tree, item_w, item_h, bg);
+        if (tab_border > 0) {
+            struct wlr_scene_rect *border_rect = wlr_scene_rect_create(view->decor_tabs_tree, item_w, item_h,
+                theme->window_tab_border_color);
+            if (border_rect != NULL) {
+                wlr_scene_node_set_position(&border_rect->node, item_x, item_y);
+            }
+        }
+
+        const int inner_x = item_x + tab_border;
+        const int inner_y = item_y + tab_border;
+        const int inner_w = item_w - 2 * tab_border;
+        const int inner_h = item_h - 2 * tab_border;
+
+        const bool parentrel = fbwl_texture_is_parentrelative(tab_tex);
+        const bool use_rect = decor_texture_can_use_flat_rect(tab_tex);
+        bool use_buffer = !use_rect && !parentrel;
+        if (use_buffer) {
+            struct wlr_buffer *bg_buf = fbwl_texture_render_buffer(tab_tex, inner_w, inner_h);
+            if (bg_buf != NULL) {
+                struct wlr_scene_buffer *sb_bg = wlr_scene_buffer_create(view->decor_tabs_tree, bg_buf);
+                if (sb_bg != NULL) {
+                    wlr_scene_buffer_set_dest_size(sb_bg, inner_w, inner_h);
+                    wlr_scene_node_set_position(&sb_bg->node, inner_x, inner_y);
+                }
+                wlr_buffer_drop(bg_buf);
+            } else {
+                use_buffer = false;
+            }
+        }
+
+        float transparent[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+        const float *bg_color = transparent;
+        if (use_rect || (!use_buffer && !parentrel)) {
+            bg_color = tab_tex->color;
+        }
+        struct wlr_scene_rect *rect = wlr_scene_rect_create(view->decor_tabs_tree, inner_w, inner_h, bg_color);
         if (rect != NULL) {
-            wlr_scene_node_set_position(&rect->node, item_x, item_y);
+            wlr_scene_node_set_position(&rect->node, inner_x, inner_y);
         }
 
-        int text_x = item_x;
-        int text_w = item_w;
+        int text_x = inner_x;
+        int text_w = inner_w;
         bool icon_loaded = false;
+        int icon_px_loaded = 0;
 
         if (!vertical && tabs->use_pixmap) {
+            int icon_px_use = icon_px;
+            if (icon_px_use > inner_h) {
+                icon_px_use = inner_h;
+            }
+            if (icon_px_use < 1) {
+                icon_px_use = 1;
+            }
             struct wlr_buffer *icon_buf = NULL;
             if (tab_view->type == FBWL_VIEW_XWAYLAND && view->server->xwayland != NULL) {
-                icon_buf = fbwl_xwayland_icon_buffer_create(view->server->xwayland, tab_view->xwayland_surface, icon_px);
+                icon_buf = fbwl_xwayland_icon_buffer_create(view->server->xwayland, tab_view->xwayland_surface, icon_px_use);
             }
             if (icon_buf == NULL) {
                 const char *icon_name = fbwl_view_app_id(tab_view);
                 char *icon_path = fbwl_icon_theme_resolve_path(icon_name);
                 if (icon_path != NULL) {
-                    icon_buf = fbwl_ui_menu_icon_buffer_create(icon_path, icon_px);
+                    icon_buf = fbwl_ui_menu_icon_buffer_create(icon_path, icon_px_use);
                     free(icon_path);
                 }
             }
             if (icon_buf != NULL) {
                 struct wlr_scene_buffer *sb_icon = wlr_scene_buffer_create(view->decor_tabs_tree, icon_buf);
                 if (sb_icon != NULL) {
-                    const int ix = item_x + pad;
-                    const int iy = item_y + (item_h > icon_px ? (item_h - icon_px) / 2 : 0);
+                    const int ix = inner_x + pad;
+                    const int iy = inner_y + (inner_h > icon_px_use ? (inner_h - icon_px_use) / 2 : 0);
                     wlr_scene_node_set_position(&sb_icon->node, ix, iy);
+                    wlr_scene_buffer_set_dest_size(sb_icon, icon_px_use, icon_px_use);
                     icon_loaded = true;
+                    icon_px_loaded = icon_px_use;
                 }
                 wlr_buffer_drop(icon_buf);
             }
         }
 
         if (icon_loaded) {
-            text_x = item_x + pad + icon_px;
-            text_w = item_w - (pad + icon_px);
+            text_x = inner_x + pad + icon_px_loaded;
+            text_w = inner_w - (pad + icon_px_loaded);
             if (text_w < 1) {
                 text_w = 1;
             }
@@ -479,12 +542,13 @@ void fbwl_view_decor_tabs_ui_build(struct fbwl_view *view, const struct fbwl_dec
 
         const char *label = fbwl_view_display_title(tab_view);
         const struct fbwl_text_effect *effect =
-            is_active_tab ? &theme->window_label_focus_effect : &theme->window_label_unfocus_effect;
-        struct wlr_buffer *buf = fbwl_text_buffer_create(label, text_w, item_h, pad, fg, theme->window_font, effect);
+            tab_focused ? &theme->window_label_focus_effect : &theme->window_label_unfocus_effect;
+        const char *font = theme->window_tab_font[0] != '\0' ? theme->window_tab_font : theme->window_font;
+        struct wlr_buffer *buf = fbwl_text_buffer_create(label, text_w, inner_h, pad, fg, font, effect, theme->window_tab_justify);
         if (buf != NULL) {
             struct wlr_scene_buffer *sb = wlr_scene_buffer_create(view->decor_tabs_tree, buf);
             if (sb != NULL) {
-                wlr_scene_node_set_position(&sb->node, text_x, item_y);
+                wlr_scene_node_set_position(&sb->node, text_x, inner_y);
             }
             wlr_buffer_drop(buf);
         }
