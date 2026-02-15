@@ -525,6 +525,11 @@ void decor_theme_set_defaults(struct fbwl_decor_theme *theme) {
     theme->button_margin = 4;
     theme->button_spacing = 2;
     theme->window_justify = 0;
+    theme->background_loaded = false;
+    theme->background_options[0] = '\0';
+    theme->background_pixmap[0] = '\0';
+    theme->background_mod_x = 1;
+    theme->background_mod_y = 1;
     theme->menu_item_height = theme->title_height;
     theme->menu_title_height = 0;
     theme->menu_border_width = 0;
@@ -851,6 +856,8 @@ void decor_theme_set_defaults(struct fbwl_decor_theme *theme) {
     theme->toolbar_iconbar_empty_tex = theme->toolbar_tex;
     theme->toolbar_iconbar_focused_tex = theme->toolbar_tex;
     theme->toolbar_iconbar_unfocused_tex = theme->toolbar_tex;
+
+    fbwl_texture_init(&theme->background_tex);
 }
 
 void server_menu_create_default(struct fbwl_server *server) {

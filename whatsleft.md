@@ -40,7 +40,7 @@ The current Wayland theme implementation is intentionally simplified (mostly col
   - [x] `toolbar.clock.justify`, `toolbar.workspace.justify`, `toolbar.iconbar.focused.justify`, `toolbar.iconbar.unfocused.justify`
   - [x] Smoke: `scripts/fbwl-smoke-style-justify.sh`
 - [ ] Remaining Fluxbox style keys (still missing on Wayland):
-  - [ ] `background.color`, `background.colorTo`, `background.pixmap`, `background.modX`, `background.modY` (map to Wayland wallpaper/background)
+  - [x] `background.color`, `background.colorTo`, `background.pixmap`, `background.modX`, `background.modY` (map to Wayland wallpaper/background; smoke: `scripts/fbwl-smoke-style-background.sh`)
   - [ ] `window.bevelWidth` (parse + apply bevel padding semantics like X11)
   - [ ] `window.roundCorners` (rounded decoration corners)
   - [ ] `toolbar.shaped`, `toolbar.button.scale` (best-effort)

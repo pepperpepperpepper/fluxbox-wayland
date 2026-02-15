@@ -17,6 +17,11 @@ struct fbwl_decor_theme {
     int button_margin;
     int button_spacing;
     int window_justify; // 0=left, 1=center, 2=right
+    bool background_loaded;
+    char background_options[128];
+    char background_pixmap[256];
+    int background_mod_x;
+    int background_mod_y;
     int menu_item_height;
     int menu_title_height;
     int menu_border_width;
@@ -142,6 +147,7 @@ struct fbwl_decor_theme {
     struct fbwl_texture toolbar_iconbar_empty_tex;
     struct fbwl_texture toolbar_iconbar_focused_tex;
     struct fbwl_texture toolbar_iconbar_unfocused_tex;
+    struct fbwl_texture background_tex;
 
     // Menu pixmaps (best-effort).
     char menu_submenu_pixmap[256];

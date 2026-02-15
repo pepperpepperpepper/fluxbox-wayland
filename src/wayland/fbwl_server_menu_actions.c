@@ -347,6 +347,7 @@ void server_menu_handle_server_action(struct fbwl_server *server, enum fbwl_menu
         }
         server->decor_theme = new_theme;
         server_toolbar_ui_rebuild(server);
+        server_background_apply_style(server, &server->decor_theme, "menu-set-style");
         wlr_log(WLR_INFO, "Menu: set-style ok path=%s", server->style_file);
         return;
     }

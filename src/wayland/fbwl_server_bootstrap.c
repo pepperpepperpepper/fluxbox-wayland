@@ -156,6 +156,7 @@ bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_
         memcpy(server->background_color, opts->background_color, sizeof(server->background_color));
     }
     server->wallpaper_mode = FBWL_WALLPAPER_MODE_STRETCH;
+    server->style_background_first = true;
     server->startup_cmd = opts->startup_cmd;
     server->terminal_cmd = opts->terminal_cmd;
     server->has_pointer = false;
@@ -913,6 +914,7 @@ bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_
 #endif
 
     setenv("WAYLAND_DISPLAY", socket, true);
+    server_background_apply_style(server, &server->decor_theme, "bootstrap-start");
     if (server->startup_cmd != NULL) {
         fbwl_spawn(server->startup_cmd);
     }

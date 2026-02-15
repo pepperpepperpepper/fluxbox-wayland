@@ -12,6 +12,7 @@
 #include <wlr/util/log.h>
 
 #include "wayland/fbwl_style_parse_font_effects.h"
+#include "wayland/fbwl_style_parse_background.h"
 #include "wayland/fbwl_style_parse_menu.h"
 #include "wayland/fbwl_style_parse_toolbar_slit.h"
 #include "wayland/fbwl_style_parse_textures.h"
@@ -279,6 +280,10 @@ bool fbwl_style_load_file(struct fbwl_decor_theme *theme, const char *path) {
         }
 
         if (fbwl_style_parse_toolbar_slit(theme, key, val)) {
+            continue;
+        }
+
+        if (fbwl_style_parse_background(theme, key, val, style_dir)) {
             continue;
         }
 

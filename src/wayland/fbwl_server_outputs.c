@@ -8,6 +8,7 @@
 #include "wayland/fbwl_ui_text.h"
 #include "wayland/fbwl_view.h"
 
+#include <ctype.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -26,6 +27,10 @@
 #include <wlr/types/wlr_scene.h>
 #include <wlr/util/box.h>
 #include <wlr/util/log.h>
+
+#ifdef HAVE_XPM
+#include <X11/xpm.h>
+#endif
 
 static uint8_t float_to_u8_clamped(float v) {
     if (v < 0.0f) {
@@ -56,7 +61,11 @@ static bool wallpaper_path_is_regular_file(const char *path) {
     if (stat(path, &st) != 0) {
         return false;
     }
-    return S_ISREG(st.st_mode);
+    if (!S_ISREG(st.st_mode)) {
+        return false;
+    }
+    const off_t max_size = 64 * 1024 * 1024;
+    return st.st_size >= 0 && st.st_size <= max_size;
 }
 
 static struct wlr_buffer *wallpaper_buffer_from_png_path(const char *path) {
@@ -105,6 +114,136 @@ static struct wlr_buffer *wallpaper_buffer_from_png_path(const char *path) {
         return NULL;
     }
     return buf;
+}
+
+#ifdef HAVE_XPM
+
+static bool xpm_parse_hex_nibble(char c, uint8_t *out) {
+    if (out == NULL) {
+        return false;
+    }
+    if (c >= '0' && c <= '9') {
+        *out = (uint8_t)(c - '0');
+        return true;
+    }
+    if (c >= 'a' && c <= 'f') {
+        *out = (uint8_t)(10 + (c - 'a'));
+        return true;
+    }
+    if (c >= 'A' && c <= 'F') {
+        *out = (uint8_t)(10 + (c - 'A'));
+        return true;
+    }
+    return false;
+}
+
+static bool xpm_parse_hex_byte(const char *s, uint8_t *out) {
+    if (s == NULL || out == NULL) {
+        return false;
+    }
+    uint8_t hi = 0;
+    uint8_t lo = 0;
+    if (!xpm_parse_hex_nibble(s[0], &hi) || !xpm_parse_hex_nibble(s[1], &lo)) {
+        return false;
+    }
+    *out = (uint8_t)((hi << 4) | lo);
+    return true;
+}
+
+static struct wlr_buffer *wallpaper_buffer_from_xpm_path(const char *path) {
+    if (!wallpaper_path_is_regular_file(path)) {
+        return NULL;
+    }
+
+    XpmImage xpm = {0};
+    XpmInfo info = {0};
+    int rc = XpmReadFileToXpmImage((char *)path, &xpm, &info);
+    if (rc != XpmSuccess) {
+        return NULL;
+    }
+
+    const unsigned int w = xpm.width;
+    const unsigned int h = xpm.height;
+    if (w == 0 || h == 0 || w > 8192 || h > 8192) {
+        XpmFreeXpmInfo(&info);
+        XpmFreeXpmImage(&xpm);
+        return NULL;
+    }
+
+    uint32_t *colors = calloc(xpm.ncolors, sizeof(*colors));
+    if (colors == NULL) {
+        XpmFreeXpmInfo(&info);
+        XpmFreeXpmImage(&xpm);
+        return NULL;
+    }
+
+    for (unsigned int i = 0; i < xpm.ncolors; i++) {
+        uint32_t px = 0xFFFFFFFFu;
+        const char *c = xpm.colorTable[i].c_color;
+        if (c != NULL) {
+            while (*c != '\0' && isspace((unsigned char)*c)) {
+                c++;
+            }
+        }
+        if (c != NULL && (strcasecmp(c, "none") == 0 || strcasecmp(c, "transparent") == 0)) {
+            px = 0x00000000u;
+        } else if (c != NULL && c[0] == '#' && strlen(c) >= 7) {
+            uint8_t r = 0, g = 0, b = 0;
+            if (xpm_parse_hex_byte(c + 1, &r) && xpm_parse_hex_byte(c + 3, &g) && xpm_parse_hex_byte(c + 5, &b)) {
+                px = 0xFF000000u | ((uint32_t)r << 16) | ((uint32_t)g << 8) | (uint32_t)b;
+            }
+        }
+        colors[i] = px;
+    }
+
+    cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, (int)w, (int)h);
+    if (surface == NULL || cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS) {
+        free(colors);
+        XpmFreeXpmInfo(&info);
+        XpmFreeXpmImage(&xpm);
+        if (surface != NULL) {
+            cairo_surface_destroy(surface);
+        }
+        return NULL;
+    }
+
+    uint8_t *data = cairo_image_surface_get_data(surface);
+    const int stride = cairo_image_surface_get_stride(surface);
+    for (int y = 0; y < (int)h; y++) {
+        uint32_t *row = (uint32_t *)(data + (size_t)y * (size_t)stride);
+        for (int x = 0; x < (int)w; x++) {
+            const unsigned int idx = xpm.data[(size_t)y * (size_t)w + (size_t)x];
+            row[x] = idx < xpm.ncolors ? colors[idx] : 0xFFFFFFFFu;
+        }
+    }
+    cairo_surface_mark_dirty(surface);
+
+    free(colors);
+    XpmFreeXpmInfo(&info);
+    XpmFreeXpmImage(&xpm);
+
+    struct wlr_buffer *buf = fbwl_cairo_buffer_create(surface);
+    if (buf == NULL) {
+        cairo_surface_destroy(surface);
+        return NULL;
+    }
+    return buf;
+}
+
+#endif
+
+static struct wlr_buffer *wallpaper_buffer_from_path(const char *path) {
+    struct wlr_buffer *buf = wallpaper_buffer_from_png_path(path);
+    if (buf != NULL) {
+        return buf;
+    }
+#ifdef HAVE_XPM
+    buf = wallpaper_buffer_from_xpm_path(path);
+    if (buf != NULL) {
+        return buf;
+    }
+#endif
+    return NULL;
 }
 
 static struct wlr_buffer *wallpaper_tile_buffer_create(struct wlr_buffer *wallpaper_buf, const struct wlr_box *output_box,
@@ -386,6 +525,33 @@ void server_pseudo_transparency_refresh(struct fbwl_server *server, const char *
     server_slit_ui_update_position(server);
 }
 
+bool server_wallpaper_set_buffer(struct fbwl_server *server, struct wlr_buffer *buf, enum fbwl_wallpaper_mode mode,
+        const char *path_label, const char *why) {
+    if (server == NULL) {
+        if (buf != NULL) {
+            wlr_buffer_drop(buf);
+        }
+        return false;
+    }
+
+    server->wallpaper_mode = mode;
+    free(server->wallpaper_path);
+    server->wallpaper_path = path_label != NULL ? strdup(path_label) : NULL;
+
+    if (server->wallpaper_buf != NULL) {
+        wlr_buffer_drop(server->wallpaper_buf);
+    }
+    server->wallpaper_buf = buf;
+
+    server_background_update_all(server);
+    server_pseudo_transparency_refresh(server, why != NULL ? why : "wallpaper-set-buffer");
+
+    wlr_log(WLR_INFO, "Background: wallpaper set path=%s mode=%s",
+        server->wallpaper_path != NULL ? server->wallpaper_path : "(buffer)",
+        fbwl_wallpaper_mode_str(server->wallpaper_mode));
+    return true;
+}
+
 bool server_wallpaper_set(struct fbwl_server *server, const char *path, enum fbwl_wallpaper_mode mode) {
     if (server == NULL) {
         return false;
@@ -406,7 +572,7 @@ bool server_wallpaper_set(struct fbwl_server *server, const char *path, enum fbw
         return true;
     }
 
-    struct wlr_buffer *buf = wallpaper_buffer_from_png_path(p);
+    struct wlr_buffer *buf = wallpaper_buffer_from_path(p);
     if (buf == NULL) {
         wlr_log(WLR_ERROR, "Background: failed to load wallpaper path=%s", p);
         return false;
