@@ -51,6 +51,8 @@ The current Wayland theme implementation is intentionally simplified (mostly col
 - [x] Add missing common aliases:
   - `MinimizeWindow` alias for `Minimize`
   - `MaximizeWindow` alias for `Maximize`
+- [x] `SetDecor <decor>` parity: accept full apps-style `[Deco]` values/masks and apply them to the active window’s decoration mask
+  - Smoke: `scripts/fbwl-smoke-setdecor.sh`
 - [x] `Tab <number>` parity: support negative indices (`Tab -1` = last tab, `Tab -2` = next-to-last, etc)
   - Smoke: extended `scripts/fbwl-smoke-tabs-commands.sh` to cover negative tab selection
 

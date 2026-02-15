@@ -56,6 +56,7 @@ scripts=(
   scripts/fbwl-smoke-xdg-decoration.sh
   scripts/fbwl-smoke-ssd.sh
   scripts/fbwl-smoke-default-deco.sh
+  scripts/fbwl-smoke-setdecor.sh
   scripts/fbwl-smoke-style.sh
   scripts/fbwl-smoke-style-textures.sh
   scripts/fbwl-smoke-menu.sh

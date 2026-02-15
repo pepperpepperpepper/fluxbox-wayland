@@ -17,6 +17,7 @@
 #include <wlr/util/log.h>
 #include <wlr/xwayland.h>
 
+#include "wayland/fbwl_deco_mask.h"
 #include "wayland/fbwl_server_internal.h"
 #include "wayland/fbwl_tabs.h"
 #include "wayland/fbwl_view.h"
@@ -534,24 +535,24 @@ void server_keybindings_view_set_decor(void *userdata, struct fbwl_view *view, c
 
     const char *v = trim_ws(norm);
 
-    bool enable = true;
-    if (strcasecmp(v, "none") == 0) {
-        enable = false;
-    } else {
-        char *end = NULL;
-        long n = strtol(v, &end, 10);
-        if (end != v && end != NULL && *end == '\0') {
-            enable = n != 0;
-        }
+    uint32_t mask = FBWL_DECOR_NORMAL;
+    if (!fbwl_deco_mask_parse(v, &mask)) {
+        wlr_log(WLR_ERROR, "SetDecor: invalid value: %s", v);
+        free(norm);
+        return;
     }
+
+    const bool enable = fbwl_deco_mask_has_frame(mask);
+    const char *preset = fbwl_deco_mask_preset_name(mask);
 
     struct fbwl_view *before = server_strict_mousefocus_view_under_cursor(server);
     view->decor_forced = true;
+    view->decor_mask = mask;
     fbwl_view_decor_set_enabled(view, enable);
     fbwl_view_decor_update(view, &server->decor_theme);
 
-    wlr_log(WLR_INFO, "SetDecor: %s value=%s enabled=%d reason=keybinding",
-        fbwl_view_display_title(view), v, enable ? 1 : 0);
+    wlr_log(WLR_INFO, "SetDecor: %s value=%s enabled=%d mask=0x%08x preset=%s reason=keybinding",
+        fbwl_view_display_title(view), v, enable ? 1 : 0, mask, preset != NULL ? preset : "(custom)");
     server_strict_mousefocus_recheck_after_restack(server, before, enable ? "decor-on" : "decor-off");
     server_toolbar_ui_rebuild(server);
 
