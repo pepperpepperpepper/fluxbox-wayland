@@ -66,7 +66,10 @@ The current Wayland theme implementation is intentionally simplified (mostly col
 
 ### Final audit (once above lands)
 
-- [ ] Re-audit against upstream manpages (`fluxbox(1)`, `fluxbox-keys(5)`, `fluxbox-apps(5)`, `fluxbox-menu(5)`, `fluxbox-style(5)`) and add smokes for any newly found gaps
+- [x] Re-audit against upstream manpages (`fluxbox(1)`, `fluxbox-keys(5)`, `fluxbox-apps(5)`, `fluxbox-menu(5)`, `fluxbox-style(5)`) and add smokes for any newly found gaps
+  - Menu syntax parity gap found: `fluxbox-menu(5)` escape semantics (`\\` escapes chars inside `(label)` / `{command}` / `<icon>`) were not fully implemented for parentheses/angle (and had an even/odd backslash bug for braces).
+  - Fix: implement proper escaped-delimiter matching + unescaping for all menu fields.
+  - Smoke: `scripts/fbwl-smoke-menu-escaping.sh` (escaped `\\)` in menu labels is searchable/selectable)
 
 ## Pseudo Transparency on Wayland
 

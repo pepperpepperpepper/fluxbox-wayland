@@ -39,6 +39,113 @@ char *fbwl_menu_parse_trim_inplace(char *s) {
     return s;
 }
 
+static bool menu_is_escaped(const char *start, const char *pos) {
+    if (start == NULL || pos == NULL || pos <= start) {
+        return false;
+    }
+    int bs = 0;
+    const char *p = pos - 1;
+    while (p >= start && *p == '\\') {
+        bs++;
+        p--;
+    }
+    return (bs % 2) == 1;
+}
+
+static const char *menu_find_matching_delim(const char *open, char open_ch, char close_ch, bool allow_nesting) {
+    if (open == NULL || *open != open_ch) {
+        return NULL;
+    }
+
+    const char *start = open + 1;
+    int nesting = 0;
+    for (const char *q = start; *q != '\0'; q++) {
+        if (allow_nesting && *q == open_ch && !menu_is_escaped(start, q)) {
+            nesting++;
+            continue;
+        }
+        if (*q == close_ch && !menu_is_escaped(start, q)) {
+            if (allow_nesting && nesting > 0) {
+                nesting--;
+                continue;
+            }
+            return q;
+        }
+    }
+    return NULL;
+}
+
+static char *menu_trim_value_inplace(char *s) {
+    if (s == NULL) {
+        return NULL;
+    }
+    while (*s != '\0' && isspace((unsigned char)*s)) {
+        s++;
+    }
+    if (*s == '\0') {
+        return s;
+    }
+    char *end = s + strlen(s);
+    while (end > s && isspace((unsigned char)end[-1])) {
+        if (menu_is_escaped(s, end - 1)) {
+            break;
+        }
+        end--;
+    }
+    *end = '\0';
+    return s;
+}
+
+static void menu_unescape_inplace(char *s) {
+    if (s == NULL) {
+        return;
+    }
+    char *dst = s;
+    for (char *src = s; *src != '\0'; src++) {
+        if (*src == '\\' && src[1] != '\0') {
+            src++;
+        }
+        *dst++ = *src;
+    }
+    *dst = '\0';
+}
+
+static char *menu_dup_trim_unescape_range(const char *start, const char *end) {
+    if (start == NULL || end == NULL || end < start) {
+        return NULL;
+    }
+    size_t len = (size_t)(end - start);
+    char *tmp = malloc(len + 1);
+    if (tmp == NULL) {
+        return NULL;
+    }
+    memcpy(tmp, start, len);
+    tmp[len] = '\0';
+
+    char *t = menu_trim_value_inplace(tmp);
+    if (t == NULL || *t == '\0') {
+        free(tmp);
+        return NULL;
+    }
+
+    char *out = NULL;
+    if (t == tmp) {
+        out = tmp;
+    } else {
+        out = strdup(t);
+        free(tmp);
+        if (out == NULL) {
+            return NULL;
+        }
+    }
+    menu_unescape_inplace(out);
+    if (*out == '\0') {
+        free(out);
+        return NULL;
+    }
+    return out;
+}
+
 char *fbwl_menu_parse_dup_trim_range(const char *start, const char *end) {
     if (start == NULL || end == NULL || end < start) {
         return NULL;
@@ -71,32 +178,11 @@ char *fbwl_menu_parse_paren_value(const char *s) {
     if (open == NULL) {
         return NULL;
     }
-    const char *close = strchr(open + 1, ')');
+    const char *close = menu_find_matching_delim(open, '(', ')', false);
     if (close == NULL) {
         return NULL;
     }
-    return fbwl_menu_parse_dup_trim_range(open + 1, close);
-}
-
-static const char *menu_find_matching_brace(const char *open) {
-    if (open == NULL || *open != '{') {
-        return NULL;
-    }
-    int nesting = 0;
-    for (const char *q = open + 1; *q != '\0'; q++) {
-        if (*q == '{' && q[-1] != '\\') {
-            nesting++;
-            continue;
-        }
-        if (*q == '}' && q[-1] != '\\') {
-            if (nesting > 0) {
-                nesting--;
-                continue;
-            }
-            return q;
-        }
-    }
-    return NULL;
+    return menu_dup_trim_unescape_range(open + 1, close);
 }
 
 char *fbwl_menu_parse_brace_value(const char *s) {
@@ -107,11 +193,11 @@ char *fbwl_menu_parse_brace_value(const char *s) {
     if (open == NULL) {
         return NULL;
     }
-    const char *close = menu_find_matching_brace(open);
+    const char *close = menu_find_matching_delim(open, '{', '}', true);
     if (close == NULL) {
         return NULL;
     }
-    return fbwl_menu_parse_dup_trim_range(open + 1, close);
+    return menu_dup_trim_unescape_range(open + 1, close);
 }
 
 char *fbwl_menu_parse_angle_value(const char *s) {
@@ -122,11 +208,11 @@ char *fbwl_menu_parse_angle_value(const char *s) {
     if (open == NULL) {
         return NULL;
     }
-    const char *close = strchr(open + 1, '>');
+    const char *close = menu_find_matching_delim(open, '<', '>', false);
     if (close == NULL) {
         return NULL;
     }
-    return fbwl_menu_parse_dup_trim_range(open + 1, close);
+    return menu_dup_trim_unescape_range(open + 1, close);
 }
 
 const char *fbwl_menu_parse_after_delim(const char *s, char open_ch, char close_ch) {
@@ -139,9 +225,9 @@ const char *fbwl_menu_parse_after_delim(const char *s, char open_ch, char close_
     }
     const char *close = NULL;
     if (open_ch == '{' && close_ch == '}') {
-        close = menu_find_matching_brace(open);
+        close = menu_find_matching_delim(open, open_ch, close_ch, true);
     } else {
-        close = strchr(open + 1, close_ch);
+        close = menu_find_matching_delim(open, open_ch, close_ch, false);
     }
     if (close == NULL) {
         return s;
@@ -318,4 +404,3 @@ const char *fbwl_menu_parse_basename(const char *path) {
     const char *slash = strrchr(path, '/');
     return slash != NULL ? slash + 1 : path;
 }
-

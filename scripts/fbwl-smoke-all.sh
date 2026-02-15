@@ -60,6 +60,7 @@ scripts=(
   scripts/fbwl-smoke-style-textures.sh
   scripts/fbwl-smoke-menu.sh
   scripts/fbwl-smoke-menu-search.sh
+  scripts/fbwl-smoke-menu-escaping.sh
   scripts/fbwl-smoke-window-menu.sh
   scripts/fbwl-smoke-titlebar-buttons.sh
   scripts/fbwl-smoke-window-alpha.sh
