@@ -1,5 +1,6 @@
 #include "wayland/fbwl_keybindings.h"
 #include <ctype.h>
+#include <limits.h>
 #include <linux/input-event-codes.h>
 #include <wlr/types/wlr_keyboard.h>
 #include <wlr/util/edges.h>
@@ -454,7 +455,15 @@ static bool execute_action_depth(enum fbwl_keybinding_action action, int arg, co
         if (view == NULL || view->tab_group == NULL) {
             return true;
         }
-        struct fbwl_view *pick = fbwl_tabs_pick_index0(view, arg);
+        int idx0 = arg;
+        if (idx0 < 0) {
+            const size_t n = fbwl_tabs_group_mapped_count(view);
+            if (n == 0 || n > (size_t)INT_MAX) {
+                return true;
+            }
+            idx0 = (int)n + idx0;
+        }
+        struct fbwl_view *pick = fbwl_tabs_pick_index0(view, idx0);
         if (pick == NULL) {
             return true;
         }

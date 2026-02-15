@@ -51,6 +51,8 @@ The current Wayland theme implementation is intentionally simplified (mostly col
 - [x] Add missing common aliases:
   - `MinimizeWindow` alias for `Minimize`
   - `MaximizeWindow` alias for `Maximize`
+- [x] `Tab <number>` parity: support negative indices (`Tab -1` = last tab, `Tab -2` = next-to-last, etc)
+  - Smoke: extended `scripts/fbwl-smoke-tabs-commands.sh` to cover negative tab selection
 
 ### Menus / WindowMenu (`fluxbox-menu(5)`)
 

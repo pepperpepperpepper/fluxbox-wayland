@@ -430,10 +430,10 @@ bool fbwl_fluxbox_cmd_resolve(const char *cmd_name, const char *cmd_args,
             if (*end != '\0') {
                 return false;
             }
-            if (tab < 1 || tab > 100000) {
+            if (tab == 0 || tab < -100000 || tab > 100000) {
                 return false;
             }
-            tab0 = (int)(tab - 1);
+            tab0 = tab > 0 ? (int)(tab - 1) : (int)tab; // negative counts from end (-1 last, -2 next-to-last, ...)
         }
         *out_action = FBWL_KEYBIND_TAB_GOTO;
         *out_arg = tab0;

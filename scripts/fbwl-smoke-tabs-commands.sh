@@ -57,6 +57,9 @@ Mod1 3 :Tab 3
 Mod1 4 :MoveTabLeft
 Mod1 5 :MoveTabRight
 Mod1 6 :DetachClient
+Mod1 7 :Tab -1
+Mod1 8 :Tab -2
+Mod1 9 :Tab -3
 EOF
 
 : >"$LOG"
@@ -123,6 +126,24 @@ timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Tabs: attach r
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" drag-alt-left "$((cx + 20))" "$((cy - TITLE_H / 2))" "$((bx + 40))" "$((by + 60))" >/dev/null 2>&1
 timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Tabs: attach reason=drag anchor=$T_A view=$T_C'; do sleep 0.05; done"
+
+# Tab negative indices count from the end (-1 is last tab). First switch away
+# from the currently-active tab so we can assert the activation log.
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-input-injector --socket "$SOCKET" key alt-1
+timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Tabs: activate reason=keybinding-tab title=$T_B'; do sleep 0.05; done"
+
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-input-injector --socket "$SOCKET" key alt-7
+timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Tabs: activate reason=keybinding-tab title=$T_C'; do sleep 0.05; done"
+
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-input-injector --socket "$SOCKET" key alt-8
+timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Tabs: activate reason=keybinding-tab title=$T_A'; do sleep 0.05; done"
+
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-input-injector --socket "$SOCKET" key alt-9
+timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Tabs: activate reason=keybinding-tab title=$T_B'; do sleep 0.05; done"
 
 # Focus A via Tab 2, then MoveTabLeft; after swap, Tab 1 should select A.
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
