@@ -9,12 +9,15 @@
 
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_scene.h>
+#include <wlr/types/wlr_xdg_shell.h>
 #include <wlr/util/log.h>
 #include <wlr/xwayland.h>
 
 #include "wayland/fbwl_cmdlang.h"
 #include "wayland/fbwl_keybindings.h"
+#include "wayland/fbwl_server_keybinding_actions.h"
 #include "wayland/fbwl_server_internal.h"
+#include "wayland/fbwl_server_window_remember.h"
 #include "wayland/fbwl_style_parse.h"
 #include "wayland/fbwl_view_foreign_toplevel.h"
 
@@ -510,6 +513,30 @@ void server_menu_handle_server_action(struct fbwl_server *server, enum fbwl_menu
         server_lower_view(view, "window-menu");
         return;
     }
+    case FBWL_MENU_SERVER_WINDOW_TOGGLE_MAXIMIZE: {
+        struct fbwl_view *view = window_menu_target_view(server, "toggle-maximize");
+        if (view == NULL || server->output_layout == NULL) {
+            return;
+        }
+        fbwl_view_set_maximized(view, !view->maximized, server->output_layout, &server->outputs);
+        return;
+    }
+    case FBWL_MENU_SERVER_WINDOW_TOGGLE_MAXIMIZE_HORIZONTAL: {
+        struct fbwl_view *view = window_menu_target_view(server, "toggle-maximize-horizontal");
+        if (view == NULL) {
+            return;
+        }
+        server_keybindings_view_toggle_maximize_horizontal(server, view);
+        return;
+    }
+    case FBWL_MENU_SERVER_WINDOW_TOGGLE_MAXIMIZE_VERTICAL: {
+        struct fbwl_view *view = window_menu_target_view(server, "toggle-maximize-vertical");
+        if (view == NULL) {
+            return;
+        }
+        server_keybindings_view_toggle_maximize_vertical(server, view);
+        return;
+    }
     case FBWL_MENU_SERVER_WINDOW_SEND_TO_WORKSPACE: {
         struct fbwl_view *view = window_menu_target_view(server, "send-to-workspace");
         if (view == NULL) {
@@ -531,6 +558,32 @@ void server_menu_handle_server_action(struct fbwl_server *server, enum fbwl_menu
                 fbwl_view_app_id(view) != NULL ? fbwl_view_app_id(view) : "(null)");
         }
         apply_workspace_visibility(server, "window-sendto");
+        return;
+    }
+    case FBWL_MENU_SERVER_WINDOW_TAKE_TO_WORKSPACE: {
+        struct fbwl_view *view = window_menu_target_view(server, "take-to-workspace");
+        if (view == NULL) {
+            return;
+        }
+
+        const int ws = arg;
+        if (ws < 0 || ws >= fbwm_core_workspace_count(&server->wm)) {
+            wlr_log(WLR_ERROR, "Menu: take-to-workspace invalid=%d", ws);
+            return;
+        }
+
+        if (server->wm.focused == &view->wm_view) {
+            fbwm_core_move_focused_to_workspace(&server->wm, ws);
+        } else {
+            view->wm_view.workspace = ws;
+            wlr_log(WLR_INFO, "Policy: move window-menu target to workspace %d title=%s app_id=%s",
+                ws + 1, fbwl_view_title(view) != NULL ? fbwl_view_title(view) : "(null)",
+                fbwl_view_app_id(view) != NULL ? fbwl_view_app_id(view) : "(null)");
+        }
+        apply_workspace_visibility(server, "window-taketo");
+
+        const size_t head = fbwl_server_screen_index_at(server, server->menu_ui.x, server->menu_ui.y);
+        server_workspace_switch_on_head(server, head, ws, "window-taketo");
         return;
     }
     case FBWL_MENU_SERVER_WINDOW_SET_LAYER: {
@@ -604,6 +657,34 @@ void server_menu_handle_server_action(struct fbwl_server *server, enum fbwl_menu
         fbwl_ui_cmd_dialog_open_prompt(&server->cmd_dialog_ui, server->scene, server->layer_overlay,
             &server->decor_theme, server->output_layout, "Set Title: ", "",
             cmd_dialog_submit_set_title, server);
+        return;
+    }
+    case FBWL_MENU_SERVER_WINDOW_KILL: {
+        struct fbwl_view *view = window_menu_target_view(server, "kill");
+        if (view == NULL) {
+            return;
+        }
+        if (view->type == FBWL_VIEW_XDG) {
+            wlr_xdg_toplevel_send_close(view->xdg_toplevel);
+        } else if (view->type == FBWL_VIEW_XWAYLAND) {
+            wlr_xwayland_surface_close(view->xwayland_surface);
+        }
+        return;
+    }
+    case FBWL_MENU_SERVER_WINDOW_REMEMBER_TOGGLE: {
+        struct fbwl_view *view = window_menu_target_view(server, "remember-toggle");
+        if (view == NULL) {
+            return;
+        }
+        server_window_remember_toggle(server, view, (enum fbwl_menu_remember_attr)arg);
+        return;
+    }
+    case FBWL_MENU_SERVER_WINDOW_REMEMBER_FORGET: {
+        struct fbwl_view *view = window_menu_target_view(server, "remember-forget");
+        if (view == NULL) {
+            return;
+        }
+        server_window_remember_forget(server, view);
         return;
     }
     case FBWL_MENU_SERVER_FOCUS_VIEW: {

@@ -109,6 +109,62 @@ static bool slit_client_visible_for_seq(const struct fbwl_server *server, const 
     return false;
 }
 
+static const struct fbwl_apps_rule *apps_rule_for_view(const struct fbwl_server *server, const struct fbwl_view *view) {
+    if (server == NULL || view == NULL || server->apps_rules == NULL || server->apps_rule_count == 0) {
+        return NULL;
+    }
+    return fbwl_apps_rules_match(server->apps_rules, server->apps_rule_count,
+        fbwl_view_app_id(view), fbwl_view_instance(view), fbwl_view_title(view), NULL);
+}
+
+static bool remember_selected(const struct fbwl_apps_rule *rule, enum fbwl_menu_remember_attr attr) {
+    if (rule == NULL) {
+        return false;
+    }
+    switch (attr) {
+    case FBWL_MENU_REMEMBER_FOCUS_HIDDEN:
+        return rule->set_focus_hidden;
+    case FBWL_MENU_REMEMBER_ICON_HIDDEN:
+        return rule->set_icon_hidden;
+    case FBWL_MENU_REMEMBER_WORKSPACE:
+        return rule->set_workspace;
+    case FBWL_MENU_REMEMBER_STICKY:
+        return rule->set_sticky;
+    case FBWL_MENU_REMEMBER_JUMP:
+        return rule->set_jump;
+    case FBWL_MENU_REMEMBER_HEAD:
+        return rule->set_head;
+    case FBWL_MENU_REMEMBER_DIMENSIONS:
+        return rule->set_dimensions;
+    case FBWL_MENU_REMEMBER_IGNORE_SIZE_HINTS:
+        return rule->set_ignore_size_hints;
+    case FBWL_MENU_REMEMBER_POSITION:
+        return rule->set_position;
+    case FBWL_MENU_REMEMBER_MINIMIZED:
+        return rule->set_minimized;
+    case FBWL_MENU_REMEMBER_MAXIMIZED:
+        return rule->set_maximized;
+    case FBWL_MENU_REMEMBER_FULLSCREEN:
+        return rule->set_fullscreen;
+    case FBWL_MENU_REMEMBER_SHADED:
+        return rule->set_shaded;
+    case FBWL_MENU_REMEMBER_TAB:
+        return rule->set_tab;
+    case FBWL_MENU_REMEMBER_ALPHA:
+        return rule->set_alpha;
+    case FBWL_MENU_REMEMBER_FOCUS_PROTECTION:
+        return rule->set_focus_protection;
+    case FBWL_MENU_REMEMBER_DECOR:
+        return rule->set_decor;
+    case FBWL_MENU_REMEMBER_LAYER:
+        return rule->set_layer;
+    case FBWL_MENU_REMEMBER_SAVE_ON_CLOSE:
+        return rule->set_save_on_close && rule->save_on_close;
+    default:
+        return false;
+    }
+}
+
 static void menu_sync_item(struct fbwl_server *server, struct fbwl_menu_item *it, struct fbwl_view *target_view,
         const struct fbwl_screen_config *cfg, size_t head0, int cur_ws) {
     if (it == NULL) {
@@ -195,6 +251,10 @@ static void menu_sync_item(struct fbwl_server *server, struct fbwl_menu_item *it
         it->toggle = true;
         it->selected = target_view != NULL && target_view->wm_view.sticky;
         return;
+    case FBWL_MENU_SERVER_WINDOW_TOGGLE_MAXIMIZE:
+        it->toggle = true;
+        it->selected = target_view != NULL && target_view->maximized;
+        return;
     case FBWL_MENU_SERVER_WINDOW_SEND_TO_WORKSPACE:
         it->toggle = true;
         it->selected = target_view != NULL && !target_view->wm_view.sticky && target_view->wm_view.workspace == it->arg;
@@ -216,6 +276,10 @@ static void menu_sync_item(struct fbwl_server *server, struct fbwl_menu_item *it
             const uint8_t cur = target_view->alpha_set ? target_view->alpha_unfocused : server->window_alpha_default_unfocused;
             it->selected = cur == (uint8_t)it->arg;
         }
+        return;
+    case FBWL_MENU_SERVER_WINDOW_REMEMBER_TOGGLE:
+        it->toggle = true;
+        it->selected = target_view != NULL && remember_selected(apps_rule_for_view(server, target_view), (enum fbwl_menu_remember_attr)it->arg);
         return;
     case FBWL_MENU_SERVER_FOCUS_VIEW: {
         it->toggle = true;

@@ -447,12 +447,14 @@ fluxbox_wayland_SOURCES = \
 					src/wayland/fbwl_server_policy_input.c \
 					src/wayland/fbwl_server_mousebind.c \
 					src/wayland/fbwl_server_ui.c \
-					src/wayland/fbwl_server_menu.c \
-					src/wayland/fbwl_server_menu_actions.c \
-				src/wayland/fbwl_server_menu_actions.h \
-				src/wayland/fbwl_server_menu_state.c \
-				src/wayland/fbwl_server_menu_state.h \
-			src/wayland/fbwl_server_ipc_command.c \
+						src/wayland/fbwl_server_menu.c \
+						src/wayland/fbwl_server_menu_actions.c \
+					src/wayland/fbwl_server_menu_actions.h \
+					src/wayland/fbwl_server_window_remember.c \
+					src/wayland/fbwl_server_window_remember.h \
+					src/wayland/fbwl_server_menu_state.c \
+					src/wayland/fbwl_server_menu_state.h \
+				src/wayland/fbwl_server_ipc_command.c \
 			src/wayland/fbwl_server_bootstrap.c \
 			src/wayland/fbwl_server_cleanup.c \
 		src/wayland/fbwl_server_outputs.c \

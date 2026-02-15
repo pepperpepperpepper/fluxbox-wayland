@@ -4,68 +4,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 #include <wlr/util/log.h>
 
 #include "wayland/fbwl_menu_parse.h"
 #include "wayland/fbwl_server_internal.h"
-
-static char *trim_inplace(char *s) {
-    if (s == NULL) {
-        return NULL;
-    }
-    while (*s != '\0' && isspace((unsigned char)*s)) {
-        s++;
-    }
-    if (*s == '\0') {
-        return s;
-    }
-    char *end = s + strlen(s) - 1;
-    while (end > s && isspace((unsigned char)*end)) {
-        *end = '\0';
-        end--;
-    }
-    return s;
-}
-
-static char *dup_trim_range(const char *start, const char *end) {
-    if (start == NULL || end == NULL || end < start) {
-        return NULL;
-    }
-    size_t len = (size_t)(end - start);
-    char *tmp = malloc(len + 1);
-    if (tmp == NULL) {
-        return NULL;
-    }
-    memcpy(tmp, start, len);
-    tmp[len] = '\0';
-    char *t = trim_inplace(tmp);
-    if (t == NULL || *t == '\0') {
-        free(tmp);
-        return NULL;
-    }
-    if (t == tmp) {
-        return tmp;
-    }
-    char *out = strdup(t);
-    free(tmp);
-    return out;
-}
-
-static char *parse_paren_value(const char *s) {
-    if (s == NULL) {
-        return NULL;
-    }
-    const char *open = strchr(s, '(');
-    if (open == NULL) {
-        return NULL;
-    }
-    const char *close = strchr(open + 1, ')');
-    if (close == NULL) {
-        return NULL;
-    }
-    return dup_trim_range(open + 1, close);
-}
 
 static const char *window_menu_default_label(const char *key) {
     if (key == NULL) {
@@ -83,7 +27,7 @@ static const char *window_menu_default_label(const char *key) {
     if (strcasecmp(key, "fullscreen") == 0) {
         return "Fullscreen";
     }
-    if (strcasecmp(key, "iconify") == 0) {
+    if (strcasecmp(key, "iconify") == 0 || strcasecmp(key, "minimize") == 0) {
         return "Iconify";
     }
     if (strcasecmp(key, "raise") == 0) {
@@ -105,10 +49,13 @@ static const char *window_menu_default_label(const char *key) {
         return "Alpha";
     }
     if (strcasecmp(key, "extramenus") == 0) {
-        return "Extra Menus";
+        return "Remember...";
     }
     if (strcasecmp(key, "close") == 0) {
         return "Close";
+    }
+    if (strcasecmp(key, "kill") == 0) {
+        return "Kill";
     }
     return "Action";
 }
@@ -182,6 +129,54 @@ static bool window_menu_fill_alpha_submenu(struct fbwl_menu *submenu) {
     return true;
 }
 
+static void window_menu_last_item_set_close_on_click(struct fbwl_menu *menu, bool close_on_click) {
+    if (menu == NULL || menu->item_count < 1) {
+        return;
+    }
+    menu->items[menu->item_count - 1].close_on_click = close_on_click;
+}
+
+static void window_menu_add_remember_toggle(struct fbwl_menu *submenu, const char *label, enum fbwl_menu_remember_attr attr) {
+    if (submenu == NULL || label == NULL || *label == '\0') {
+        return;
+    }
+    if (fbwl_menu_add_server_action(submenu, label, NULL, FBWL_MENU_SERVER_WINDOW_REMEMBER_TOGGLE, attr, NULL)) {
+        window_menu_last_item_set_close_on_click(submenu, false);
+    }
+}
+
+static bool window_menu_fill_remember_submenu(struct fbwl_menu *submenu) {
+    if (submenu == NULL) {
+        return false;
+    }
+
+    window_menu_add_remember_toggle(submenu, "Workspace", FBWL_MENU_REMEMBER_WORKSPACE);
+    window_menu_add_remember_toggle(submenu, "Jump To Workspace", FBWL_MENU_REMEMBER_JUMP);
+    window_menu_add_remember_toggle(submenu, "Head", FBWL_MENU_REMEMBER_HEAD);
+    window_menu_add_remember_toggle(submenu, "Position", FBWL_MENU_REMEMBER_POSITION);
+    window_menu_add_remember_toggle(submenu, "Dimensions", FBWL_MENU_REMEMBER_DIMENSIONS);
+    window_menu_add_remember_toggle(submenu, "Layer", FBWL_MENU_REMEMBER_LAYER);
+    window_menu_add_remember_toggle(submenu, "Alpha", FBWL_MENU_REMEMBER_ALPHA);
+    window_menu_add_remember_toggle(submenu, "Decorations", FBWL_MENU_REMEMBER_DECOR);
+    window_menu_add_remember_toggle(submenu, "Sticky", FBWL_MENU_REMEMBER_STICKY);
+    window_menu_add_remember_toggle(submenu, "Shaded", FBWL_MENU_REMEMBER_SHADED);
+    window_menu_add_remember_toggle(submenu, "Tab", FBWL_MENU_REMEMBER_TAB);
+    window_menu_add_remember_toggle(submenu, "Minimized", FBWL_MENU_REMEMBER_MINIMIZED);
+    window_menu_add_remember_toggle(submenu, "Maximized", FBWL_MENU_REMEMBER_MAXIMIZED);
+    window_menu_add_remember_toggle(submenu, "Fullscreen", FBWL_MENU_REMEMBER_FULLSCREEN);
+    window_menu_add_remember_toggle(submenu, "Focus Hidden", FBWL_MENU_REMEMBER_FOCUS_HIDDEN);
+    window_menu_add_remember_toggle(submenu, "Icon Hidden", FBWL_MENU_REMEMBER_ICON_HIDDEN);
+    window_menu_add_remember_toggle(submenu, "Ignore Size Hints", FBWL_MENU_REMEMBER_IGNORE_SIZE_HINTS);
+    window_menu_add_remember_toggle(submenu, "Focus Protection", FBWL_MENU_REMEMBER_FOCUS_PROTECTION);
+    window_menu_add_remember_toggle(submenu, "Save On Close", FBWL_MENU_REMEMBER_SAVE_ON_CLOSE);
+
+    (void)fbwl_menu_add_separator(submenu);
+
+    (void)fbwl_menu_add_server_action(submenu, "Forget", NULL, FBWL_MENU_SERVER_WINDOW_REMEMBER_FORGET, 0, NULL);
+
+    return true;
+}
+
 static bool server_window_menu_append_key(struct fbwl_server *server, struct fbwl_menu *menu,
         const char *key, const char *label) {
     if (server == NULL || menu == NULL || key == NULL) {
@@ -206,7 +201,7 @@ static bool server_window_menu_append_key(struct fbwl_server *server, struct fbw
         return fbwl_menu_add_server_action(menu, use_label, NULL, FBWL_MENU_SERVER_WINDOW_LOWER, 0, NULL);
     }
     if (strcasecmp(key, "maximize") == 0) {
-        return fbwl_menu_add_view_action(menu, use_label, NULL, FBWL_MENU_VIEW_TOGGLE_MAXIMIZE);
+        return fbwl_menu_add_server_action(menu, use_label, NULL, FBWL_MENU_SERVER_WINDOW_TOGGLE_MAXIMIZE, 0, NULL);
     }
     if (strcasecmp(key, "fullscreen") == 0) {
         return fbwl_menu_add_view_action(menu, use_label, NULL, FBWL_MENU_VIEW_TOGGLE_FULLSCREEN);
@@ -216,6 +211,9 @@ static bool server_window_menu_append_key(struct fbwl_server *server, struct fbw
     }
     if (strcasecmp(key, "close") == 0) {
         return fbwl_menu_add_view_action(menu, use_label, NULL, FBWL_MENU_VIEW_CLOSE);
+    }
+    if (strcasecmp(key, "kill") == 0) {
+        return fbwl_menu_add_server_action(menu, use_label, NULL, FBWL_MENU_SERVER_WINDOW_KILL, 0, NULL);
     }
     if (strcasecmp(key, "settitledialog") == 0) {
         return fbwl_menu_add_server_action(menu, use_label, NULL, FBWL_MENU_SERVER_WINDOW_SET_TITLE_DIALOG, 0, NULL);
@@ -262,12 +260,214 @@ static bool server_window_menu_append_key(struct fbwl_server *server, struct fbw
             fbwl_menu_free(submenu);
             return false;
         }
-        (void)fbwl_menu_add_view_action(submenu, "Fullscreen", NULL, FBWL_MENU_VIEW_TOGGLE_FULLSCREEN);
-        return true;
+        return window_menu_fill_remember_submenu(submenu);
     }
 
     wlr_log(WLR_INFO, "WindowMenu: ignoring unsupported key [%s]", key);
     return true;
+}
+
+static bool cmd_is_tag_no_args(const char *cmd, const char *tag) {
+    if (cmd == NULL || tag == NULL || *tag == '\0') {
+        return false;
+    }
+    while (*cmd != '\0' && isspace((unsigned char)*cmd)) {
+        cmd++;
+    }
+    if (*cmd == '\0') {
+        return false;
+    }
+
+    const char *end = cmd;
+    while (*end != '\0' && !isspace((unsigned char)*end)) {
+        end++;
+    }
+    const size_t tok_len = (size_t)(end - cmd);
+    if (tok_len == 0) {
+        return false;
+    }
+    if (strncasecmp(cmd, tag, tok_len) != 0 || tag[tok_len] != '\0') {
+        return false;
+    }
+    while (*end != '\0' && isspace((unsigned char)*end)) {
+        end++;
+    }
+    return *end == '\0';
+}
+
+static void window_menu_item_set_default_label(struct fbwl_menu_item *it, const char *tag) {
+    if (it == NULL || tag == NULL || *tag == '\0') {
+        return;
+    }
+    if (it->label != NULL && *it->label != '\0' && strcasecmp(it->label, tag) != 0) {
+        return;
+    }
+    const char *want = window_menu_default_label(tag);
+    if (want == NULL || *want == '\0') {
+        return;
+    }
+    char *dup = strdup(want);
+    if (dup == NULL) {
+        return;
+    }
+    free(it->label);
+    it->label = dup;
+}
+
+static void window_menu_convert_cmdlang_item(struct fbwl_server *server, struct fbwl_menu_item *it) {
+    if (server == NULL || it == NULL) {
+        return;
+    }
+    if (it->kind != FBWL_MENU_ITEM_SERVER_ACTION || it->server_action != FBWL_MENU_SERVER_CMDLANG || it->cmd == NULL) {
+        return;
+    }
+
+    if (cmd_is_tag_no_args(it->cmd, "shade")) {
+        window_menu_item_set_default_label(it, "shade");
+        free(it->cmd);
+        it->cmd = NULL;
+        it->server_action = FBWL_MENU_SERVER_WINDOW_TOGGLE_SHADE;
+        it->arg = 0;
+        return;
+    }
+    if (cmd_is_tag_no_args(it->cmd, "stick")) {
+        window_menu_item_set_default_label(it, "stick");
+        free(it->cmd);
+        it->cmd = NULL;
+        it->server_action = FBWL_MENU_SERVER_WINDOW_TOGGLE_STICK;
+        it->arg = 0;
+        return;
+    }
+    if (cmd_is_tag_no_args(it->cmd, "raise")) {
+        window_menu_item_set_default_label(it, "raise");
+        free(it->cmd);
+        it->cmd = NULL;
+        it->server_action = FBWL_MENU_SERVER_WINDOW_RAISE;
+        it->arg = 0;
+        return;
+    }
+    if (cmd_is_tag_no_args(it->cmd, "lower")) {
+        window_menu_item_set_default_label(it, "lower");
+        free(it->cmd);
+        it->cmd = NULL;
+        it->server_action = FBWL_MENU_SERVER_WINDOW_LOWER;
+        it->arg = 0;
+        return;
+    }
+    if (cmd_is_tag_no_args(it->cmd, "maximize")) {
+        window_menu_item_set_default_label(it, "maximize");
+        free(it->cmd);
+        it->cmd = NULL;
+        it->server_action = FBWL_MENU_SERVER_WINDOW_TOGGLE_MAXIMIZE;
+        it->arg = 0;
+        return;
+    }
+    if (cmd_is_tag_no_args(it->cmd, "fullscreen")) {
+        window_menu_item_set_default_label(it, "fullscreen");
+        free(it->cmd);
+        it->cmd = NULL;
+        it->kind = FBWL_MENU_ITEM_VIEW_ACTION;
+        it->view_action = FBWL_MENU_VIEW_TOGGLE_FULLSCREEN;
+        return;
+    }
+    const bool is_minimize = cmd_is_tag_no_args(it->cmd, "minimize");
+    if (cmd_is_tag_no_args(it->cmd, "iconify") || is_minimize) {
+        window_menu_item_set_default_label(it, is_minimize ? "minimize" : "iconify");
+        free(it->cmd);
+        it->cmd = NULL;
+        it->kind = FBWL_MENU_ITEM_VIEW_ACTION;
+        it->view_action = FBWL_MENU_VIEW_TOGGLE_MINIMIZE;
+        return;
+    }
+    if (cmd_is_tag_no_args(it->cmd, "close")) {
+        window_menu_item_set_default_label(it, "close");
+        free(it->cmd);
+        it->cmd = NULL;
+        it->kind = FBWL_MENU_ITEM_VIEW_ACTION;
+        it->view_action = FBWL_MENU_VIEW_CLOSE;
+        return;
+    }
+    if (cmd_is_tag_no_args(it->cmd, "kill")) {
+        window_menu_item_set_default_label(it, "kill");
+        free(it->cmd);
+        it->cmd = NULL;
+        it->server_action = FBWL_MENU_SERVER_WINDOW_KILL;
+        it->arg = 0;
+        return;
+    }
+    if (cmd_is_tag_no_args(it->cmd, "settitledialog")) {
+        window_menu_item_set_default_label(it, "settitledialog");
+        free(it->cmd);
+        it->cmd = NULL;
+        it->server_action = FBWL_MENU_SERVER_WINDOW_SET_TITLE_DIALOG;
+        it->arg = 0;
+        return;
+    }
+    if (cmd_is_tag_no_args(it->cmd, "sendto")) {
+        window_menu_item_set_default_label(it, "sendto");
+        struct fbwl_menu *submenu = fbwl_menu_create(it->label);
+        if (submenu == NULL) {
+            return;
+        }
+        free(it->cmd);
+        it->cmd = NULL;
+        it->kind = FBWL_MENU_ITEM_SUBMENU;
+        it->submenu = submenu;
+        (void)window_menu_fill_sendto_submenu(submenu, &server->wm);
+        return;
+    }
+    if (cmd_is_tag_no_args(it->cmd, "layer")) {
+        window_menu_item_set_default_label(it, "layer");
+        struct fbwl_menu *submenu = fbwl_menu_create(it->label);
+        if (submenu == NULL) {
+            return;
+        }
+        free(it->cmd);
+        it->cmd = NULL;
+        it->kind = FBWL_MENU_ITEM_SUBMENU;
+        it->submenu = submenu;
+        (void)window_menu_fill_layer_submenu(submenu);
+        return;
+    }
+    if (cmd_is_tag_no_args(it->cmd, "alpha")) {
+        window_menu_item_set_default_label(it, "alpha");
+        struct fbwl_menu *submenu = fbwl_menu_create(it->label);
+        if (submenu == NULL) {
+            return;
+        }
+        free(it->cmd);
+        it->cmd = NULL;
+        it->kind = FBWL_MENU_ITEM_SUBMENU;
+        it->submenu = submenu;
+        (void)window_menu_fill_alpha_submenu(submenu);
+        return;
+    }
+    if (cmd_is_tag_no_args(it->cmd, "extramenus")) {
+        window_menu_item_set_default_label(it, "extramenus");
+        struct fbwl_menu *submenu = fbwl_menu_create(it->label);
+        if (submenu == NULL) {
+            return;
+        }
+        free(it->cmd);
+        it->cmd = NULL;
+        it->kind = FBWL_MENU_ITEM_SUBMENU;
+        it->submenu = submenu;
+        (void)window_menu_fill_remember_submenu(submenu);
+        return;
+    }
+}
+
+static void window_menu_convert_recurse(struct fbwl_server *server, struct fbwl_menu *menu) {
+    if (server == NULL || menu == NULL) {
+        return;
+    }
+    for (size_t i = 0; i < menu->item_count; i++) {
+        struct fbwl_menu_item *it = &menu->items[i];
+        window_menu_convert_cmdlang_item(server, it);
+        if (it->submenu != NULL) {
+            window_menu_convert_recurse(server, it->submenu);
+        }
+    }
 }
 
 static bool server_window_menu_load_file(struct fbwl_server *server, const char *path) {
@@ -275,69 +475,16 @@ static bool server_window_menu_load_file(struct fbwl_server *server, const char 
         return false;
     }
 
-    FILE *f = fopen(path, "r");
-    if (f == NULL) {
-        wlr_log(WLR_ERROR, "WindowMenu: failed to open %s: %s", path, strerror(errno));
-        return false;
-    }
-
     struct fbwl_menu *menu = fbwl_menu_create("Window");
     if (menu == NULL) {
-        fclose(f);
+        return false;
+    }
+    if (!fbwl_menu_parse_file(menu, &server->wm, path)) {
+        fbwl_menu_free(menu);
         return false;
     }
 
-    char *line = NULL;
-    size_t cap = 0;
-    ssize_t n = 0;
-    while ((n = getline(&line, &cap, f)) != -1) {
-        if (n <= 0) {
-            continue;
-        }
-        while (n > 0 && (line[n - 1] == '\n' || line[n - 1] == '\r')) {
-            line[n - 1] = '\0';
-            n--;
-        }
-
-        char *s = trim_inplace(line);
-        if (s == NULL || *s == '\0' || *s == '#' || *s == '!') {
-            continue;
-        }
-
-        char *open = strchr(s, '[');
-        char *close = open != NULL ? strchr(open + 1, ']') : NULL;
-        if (open == NULL || close == NULL || close <= open + 1) {
-            continue;
-        }
-
-        char *key = dup_trim_range(open + 1, close);
-        if (key == NULL) {
-            continue;
-        }
-
-        if (strcasecmp(key, "begin") == 0) {
-            char *label = parse_paren_value(close + 1);
-            if (label != NULL && *label != '\0') {
-                free(menu->label);
-                menu->label = strdup(label);
-            }
-            free(label);
-            free(key);
-            continue;
-        }
-        if (strcasecmp(key, "end") == 0) {
-            free(key);
-            break;
-        }
-
-        char *label = parse_paren_value(close + 1);
-        (void)server_window_menu_append_key(server, menu, key, label);
-        free(label);
-        free(key);
-    }
-
-    free(line);
-    fclose(f);
+    window_menu_convert_recurse(server, menu);
 
     fbwl_menu_free(server->window_menu);
     server->window_menu = menu;

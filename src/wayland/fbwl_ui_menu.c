@@ -756,6 +756,20 @@ static void fbwl_ui_menu_activate_selected(struct fbwl_menu_ui *ui,
             }
         }
 
+        if (action == FBWL_MENU_SERVER_WINDOW_TOGGLE_MAXIMIZE) {
+            if (button == BTN_MIDDLE) {
+                action = FBWL_MENU_SERVER_WINDOW_TOGGLE_MAXIMIZE_VERTICAL;
+            } else if (button == BTN_RIGHT) {
+                action = FBWL_MENU_SERVER_WINDOW_TOGGLE_MAXIMIZE_HORIZONTAL;
+            }
+        }
+
+        if (action == FBWL_MENU_SERVER_WINDOW_SEND_TO_WORKSPACE) {
+            if (button == BTN_MIDDLE) {
+                action = FBWL_MENU_SERVER_WINDOW_TAKE_TO_WORKSPACE;
+            }
+        }
+
         wlr_log(WLR_INFO, "Menu: server-action label=%s action=%d arg=%d cmd=%s",
             label, (int)action, arg, cmd_copy != NULL ? cmd_copy : "(null)");
         if (hooks != NULL && hooks->server_action != NULL) {
@@ -896,13 +910,17 @@ bool fbwl_ui_menu_handle_click(struct fbwl_menu_ui *ui, const struct fbwl_ui_men
     if (button == BTN_LEFT) {
         fbwl_ui_menu_activate_selected(ui, env, hooks, button);
     } else if (button == BTN_RIGHT) {
-        if (!it->close_on_click) {
+        if (!it->close_on_click || (it->kind == FBWL_MENU_ITEM_SERVER_ACTION &&
+                it->server_action == FBWL_MENU_SERVER_WINDOW_TOGGLE_MAXIMIZE)) {
             fbwl_ui_menu_activate_selected(ui, env, hooks, button);
         } else {
             fbwl_ui_menu_close(ui, "right-click");
         }
     } else if (button == BTN_MIDDLE || button == 4 || button == 5) {
-        if (!it->close_on_click) {
+        if (!it->close_on_click ||
+                (it->kind == FBWL_MENU_ITEM_SERVER_ACTION &&
+                    (it->server_action == FBWL_MENU_SERVER_WINDOW_SEND_TO_WORKSPACE ||
+                        it->server_action == FBWL_MENU_SERVER_WINDOW_TOGGLE_MAXIMIZE))) {
             fbwl_ui_menu_activate_selected(ui, env, hooks, button);
         }
     }

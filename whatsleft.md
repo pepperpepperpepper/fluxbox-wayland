@@ -52,6 +52,13 @@ The current Wayland theme implementation is intentionally simplified (mostly col
   - `MinimizeWindow` alias for `Minimize`
   - `MaximizeWindow` alias for `Maximize`
 
+### Menus / WindowMenu (`fluxbox-menu(5)`)
+
+- [x] `~/.fluxbox/windowmenu` parity:
+  - Support root-menu tags in windowmenu files (`[exec]`, `[submenu]`, `[include]`, etc)
+  - Implement key windowmenu tags/semantics: `[maximize]` Btn1/2/3 mapping, `[sendto]` middle-click “send+follow”, `[extramenus]` → Remember… submenu (writes `apps`)
+  - Smoke: `scripts/fbwl-smoke-window-menu.sh`
+
 ### Session startup parity
 
 - [x] `util/startfluxbox-wayland`: default to classic `~/.fluxbox/startup`; fall back to `startup-wayland` only for backward compatibility
