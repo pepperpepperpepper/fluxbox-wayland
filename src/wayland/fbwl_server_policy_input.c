@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/types.h>
+#include <signal.h>
 
 #include <wayland-server-core.h>
 #include <wlr/types/wlr_cursor.h>
@@ -776,14 +777,41 @@ static void keybindings_workspace_switch(void *userdata, int x, int y, int works
 }
 static void keybindings_view_close(void *userdata, struct fbwl_view *view, bool force) {
     (void)userdata;
-    (void)force;
     if (view == NULL) {
         return;
     }
-    if (view->type == FBWL_VIEW_XDG && view->xdg_toplevel != NULL) {
+
+    if (!force) {
+        if (view->type == FBWL_VIEW_XDG && view->xdg_toplevel != NULL) {
+            wlr_xdg_toplevel_send_close(view->xdg_toplevel);
+        } else if (view->type == FBWL_VIEW_XWAYLAND && view->xwayland_surface != NULL) {
+            wlr_xwayland_surface_close(view->xwayland_surface);
+        }
+        return;
+    }
+
+    if (view->type == FBWL_VIEW_XDG && view->xdg_toplevel != NULL &&
+            view->xdg_toplevel->base != NULL && view->xdg_toplevel->base->surface != NULL &&
+            view->xdg_toplevel->base->surface->resource != NULL) {
+        struct wl_client *client = wl_resource_get_client(view->xdg_toplevel->base->surface->resource);
+        if (client != NULL) {
+            wlr_log(WLR_INFO, "Kill: disconnecting wayland client title=%s", fbwl_view_display_title(view));
+            wl_client_destroy(client);
+            return;
+        }
         wlr_xdg_toplevel_send_close(view->xdg_toplevel);
-    } else if (view->type == FBWL_VIEW_XWAYLAND && view->xwayland_surface != NULL) {
+        return;
+    }
+
+    if (view->type == FBWL_VIEW_XWAYLAND && view->xwayland_surface != NULL) {
+        if (view->xwayland_surface->pid > 1) {
+            wlr_log(WLR_INFO, "Kill: sending SIGKILL title=%s pid=%d",
+                fbwl_view_display_title(view), (int)view->xwayland_surface->pid);
+            (void)kill(view->xwayland_surface->pid, SIGKILL);
+            return;
+        }
         wlr_xwayland_surface_close(view->xwayland_surface);
+        return;
     }
 }
 static void keybindings_view_raise(void *userdata, struct fbwl_view *view, const char *why) {

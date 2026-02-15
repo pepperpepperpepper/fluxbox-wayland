@@ -57,6 +57,7 @@ The current Wayland theme implementation is intentionally simplified (mostly col
 - [x] `~/.fluxbox/windowmenu` parity:
   - Support root-menu tags in windowmenu files (`[exec]`, `[submenu]`, `[include]`, etc)
   - Implement key windowmenu tags/semantics: `[maximize]` Btn1/2/3 mapping, `[sendto]` middle-click “send+follow”, `[extramenus]` → Remember… submenu (writes `apps`)
+  - `[kill]` is forceful (disconnect Wayland client / SIGKILL XWayland pid) and distinct from `[close]` (xdg close)
   - Smoke: `scripts/fbwl-smoke-window-menu.sh`
 
 ### Session startup parity

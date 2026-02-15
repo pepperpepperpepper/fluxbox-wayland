@@ -23,6 +23,7 @@ APPS_PATH="$CFGDIR/$APPS_BASENAME"
 cleanup() {
   rm -rf "$CFGDIR" 2>/dev/null || true
   if [[ -n "${CLIENT_PID:-}" ]]; then kill "$CLIENT_PID" 2>/dev/null || true; fi
+  if [[ -n "${KILL_CLIENT_PID:-}" ]]; then kill "$KILL_CLIENT_PID" 2>/dev/null || true; fi
   if [[ -n "${FBW_PID:-}" ]]; then kill "$FBW_PID" 2>/dev/null || true; fi
   wait 2>/dev/null || true
 }
@@ -52,6 +53,7 @@ cat >"$CFGDIR/windowmenu-custom" <<EOF
   [alpha]
   [extramenus]
   [separator]
+  [kill]
   [close]
 [end]
 EOF
@@ -139,7 +141,7 @@ click_menu_item_right() {
   ./fbwl-input-injector --socket "$SOCKET" click-right "$click_x" "$click_y"
 }
 
-EXPECTED_TOP_ITEMS=14
+EXPECTED_TOP_ITEMS=15
 
 # Exec via [exec].
 open_menu_expect_items "$EXPECTED_TOP_ITEMS"
@@ -270,5 +272,46 @@ click_menu_item "$CLOSE_IDX"
 tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Menu: window-close title=winmenu-renamed'
 
 timeout 5 bash -c "while kill -0 '$CLIENT_PID' 2>/dev/null; do sleep 0.05; done"
+
+# Close should not kill a client that ignores xdg_toplevel.close, but Kill should.
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-smoke-client --socket "$SOCKET" --title client-winmenu-kill --app-id client-winmenu-kill --stay-ms 20000 --xdg-decoration --ignore-close >/dev/null 2>&1 &
+KILL_CLIENT_PID=$!
+
+timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'Place: client-winmenu-kill '; do sleep 0.05; done"
+
+place_line="$(tail -c +$((OFFSET + 1)) "$LOG" | rg -m1 'Place: client-winmenu-kill ')"
+if [[ "$place_line" =~ x=([-0-9]+)\ y=([-0-9]+) ]]; then
+  X0="${BASH_REMATCH[1]}"
+  Y0="${BASH_REMATCH[2]}"
+else
+  echo "failed to parse Place line: $place_line" >&2
+  exit 1
+fi
+
+TB_X=$((X0 + 10))
+TB_Y=$((Y0 - TITLE_H + 2))
+
+KILL_IDX=$((EXPECTED_TOP_ITEMS - 2))
+
+# Close (should not exit).
+open_menu_expect_items "$EXPECTED_TOP_ITEMS"
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+click_menu_item "$CLOSE_IDX"
+tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Menu: window-close title=client-winmenu-kill'
+
+sleep 0.2
+if ! kill -0 "$KILL_CLIENT_PID" 2>/dev/null; then
+  echo "expected ignore-close client to stay alive after Close" >&2
+  exit 1
+fi
+
+# Kill (should exit).
+open_menu_expect_items "$EXPECTED_TOP_ITEMS"
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+click_menu_item "$KILL_IDX"
+tail -c +$((OFFSET + 1)) "$LOG" | rg -q 'Kill: disconnecting wayland client title=client-winmenu-kill'
+
+timeout 5 bash -c "while kill -0 '$KILL_CLIENT_PID' 2>/dev/null; do sleep 0.05; done"
 
 echo "ok: window-menu smoke passed (socket=$SOCKET log=$LOG)"

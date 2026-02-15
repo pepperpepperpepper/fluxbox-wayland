@@ -39,6 +39,7 @@ struct fbwl_smoke_app {
 
     bool configured;
     bool closed;
+    bool ignore_close;
 };
 
 static int64_t now_ms(void) {
@@ -230,6 +231,9 @@ static void xdg_toplevel_handle_close(void *data, struct xdg_toplevel *xdg_tople
     struct fbwl_smoke_app *app = data;
     (void)xdg_toplevel;
     if (app != NULL) {
+        if (app->ignore_close) {
+            return;
+        }
         app->closed = true;
     }
 }
@@ -241,7 +245,7 @@ static const struct xdg_toplevel_listener xdg_toplevel_listener = {
 
 static void usage(const char *argv0) {
     fprintf(stderr,
-        "Usage: %s [--socket NAME] [--timeout-ms MS] [--title TITLE] [--app-id APPID] [--stay-ms MS] [--width PX] [--height PX] [--xdg-decoration]\n",
+        "Usage: %s [--socket NAME] [--timeout-ms MS] [--title TITLE] [--app-id APPID] [--stay-ms MS] [--width PX] [--height PX] [--xdg-decoration] [--ignore-close]\n",
         argv0);
 }
 
@@ -290,6 +294,7 @@ int main(int argc, char **argv) {
     int init_width = 32;
     int init_height = 32;
     bool want_xdg_decoration = false;
+    bool ignore_close = false;
 
     static const struct option options[] = {
         {"socket", required_argument, NULL, 1},
@@ -300,6 +305,7 @@ int main(int argc, char **argv) {
         {"xdg-decoration", no_argument, NULL, 6},
         {"width", required_argument, NULL, 7},
         {"height", required_argument, NULL, 8},
+        {"ignore-close", no_argument, NULL, 9},
         {"help", no_argument, NULL, 'h'},
         {0, 0, 0, 0},
     };
@@ -331,6 +337,9 @@ int main(int argc, char **argv) {
         case 8:
             init_height = atoi(optarg);
             break;
+        case 9:
+            ignore_close = true;
+            break;
         case 'h':
         default:
             usage(argv[0]);
@@ -343,6 +352,7 @@ int main(int argc, char **argv) {
     }
 
     struct fbwl_smoke_app app = {0};
+    app.ignore_close = ignore_close;
     app.display = wl_display_connect(socket_name);
     if (app.display == NULL) {
         fprintf(stderr, "fbwl-smoke-client: wl_display_connect failed (WAYLAND_DISPLAY=%s): %s\n",
