@@ -520,6 +520,7 @@ void decor_theme_set_defaults(struct fbwl_decor_theme *theme) {
 
     theme->border_width = 4;
     theme->bevel_width = 0;
+    theme->window_bevel_width = 4;
     theme->handle_width = 0;
     theme->title_height = 24;
     theme->button_margin = 4;
@@ -688,6 +689,7 @@ void decor_theme_set_defaults(struct fbwl_decor_theme *theme) {
     theme->toolbar_iconbar_empty_texture_explicit = false;
     theme->toolbar_iconbar_focused_texture_explicit = false;
     theme->toolbar_iconbar_unfocused_texture_explicit = false;
+    theme->window_bevel_width_explicit = false;
 
     theme->toolbar_bg[0] = theme->titlebar_inactive[0];
     theme->toolbar_bg[1] = theme->titlebar_inactive[1];

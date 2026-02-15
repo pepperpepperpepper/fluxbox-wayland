@@ -67,6 +67,7 @@ struct fbwl_view {
     struct wlr_scene_buffer *decor_title_text;
     char *decor_title_text_cache;
     int decor_title_text_cache_w;
+    int decor_title_text_cache_h;
     bool decor_title_text_cache_active;
     char *title_override;
     struct wlr_scene_rect *decor_border_top;

@@ -61,6 +61,7 @@ scripts=(
   scripts/fbwl-smoke-style-background.sh
   scripts/fbwl-smoke-style-textures.sh
   scripts/fbwl-smoke-style-justify.sh
+  scripts/fbwl-smoke-style-window-bevel.sh
   scripts/fbwl-smoke-menu.sh
   scripts/fbwl-smoke-menu-search.sh
   scripts/fbwl-smoke-menu-escaping.sh

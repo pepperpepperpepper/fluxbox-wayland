@@ -12,6 +12,7 @@ struct fbwl_pixmap_triplet {
 struct fbwl_decor_theme {
     int border_width;
     int bevel_width;
+    int window_bevel_width;
     int handle_width;
     int title_height;
     int button_margin;
@@ -187,4 +188,5 @@ struct fbwl_decor_theme {
     bool toolbar_iconbar_empty_texture_explicit;
     bool toolbar_iconbar_focused_texture_explicit;
     bool toolbar_iconbar_unfocused_texture_explicit;
+    bool window_bevel_width_explicit;
 };

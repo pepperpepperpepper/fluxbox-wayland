@@ -442,10 +442,27 @@ bool fbwl_style_load_file(struct fbwl_decor_theme *theme, const char *path) {
             }
             continue;
         }
+        if (strcasecmp(key, "window.bevelWidth") == 0) {
+            int v = 0;
+            if (parse_int_range(val, 0, 999, &v)) {
+                if (v > 20) {
+                    v = 20;
+                }
+                theme->window_bevel_width = v;
+                theme->window_bevel_width_explicit = true;
+            }
+            continue;
+        }
         if (strcasecmp(key, "bevelWidth") == 0) {
             int v = 0;
             if (parse_int_range(val, 0, 999, &v)) {
+                if (v > 20) {
+                    v = 20;
+                }
                 theme->bevel_width = v;
+                if (!theme->window_bevel_width_explicit) {
+                    theme->window_bevel_width = v;
+                }
                 if (!menu_state.bevel_width_explicit) {
                     theme->menu_bevel_width = v;
                 }

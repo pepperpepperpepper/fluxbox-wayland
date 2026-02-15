@@ -21,11 +21,42 @@ static int decor_theme_button_size(const struct fbwl_decor_theme *theme) {
     if (theme == NULL) {
         return 0;
     }
-    int size = theme->title_height - 2 * theme->button_margin;
+    int bevel = theme->window_bevel_width;
+    if (bevel < 0) {
+        bevel = 0;
+    }
+    if (bevel > 20) {
+        bevel = 20;
+    }
+    if (theme->title_height > 0) {
+        const int max_bevel = (theme->title_height - 1) / 2;
+        if (bevel > max_bevel) {
+            bevel = max_bevel;
+        }
+    }
+    int size = theme->title_height - 2 * bevel;
     if (size < 1) {
         size = 1;
     }
     return size;
+}
+
+static int decor_theme_window_bevel_px(const struct fbwl_decor_theme *theme, int title_h) {
+    if (theme == NULL || title_h < 1) {
+        return 0;
+    }
+    int bevel = theme->window_bevel_width;
+    if (bevel < 0) {
+        bevel = 0;
+    }
+    if (bevel > 20) {
+        bevel = 20;
+    }
+    const int max_bevel = (title_h - 1) / 2;
+    if (bevel > max_bevel) {
+        bevel = max_bevel;
+    }
+    return bevel;
 }
 
 static bool decor_texture_can_use_flat_rect(const struct fbwl_texture *tex) {
@@ -272,20 +303,19 @@ void fbwl_view_decor_tabs_ui_build(struct fbwl_view *view, const struct fbwl_dec
 
     if (intitlebar) {
         // Inside titlebar: always horizontal.
+        const int bevel = decor_theme_window_bevel_px(theme, title_h);
         const int btn_size = decor_theme_button_size(theme);
         const size_t left_len = view->server->titlebar_left_len;
         const size_t right_len = view->server->titlebar_right_len;
         const size_t left_vis = view_decor_visible_buttons(view, view->server->titlebar_left, left_len);
         const size_t right_vis = view_decor_visible_buttons(view, view->server->titlebar_right, right_len);
-        const int reserved_left = theme->button_margin +
-            (left_vis > 0 ? ((int)left_vis * btn_size) + ((int)(left_vis - 1) * theme->button_spacing) + theme->button_margin : 0);
-        const int reserved_right = theme->button_margin +
-            (right_vis > 0 ? ((int)right_vis * btn_size) + ((int)(right_vis - 1) * theme->button_spacing) + theme->button_margin : 0);
+        const int reserved_left = 2 * bevel + ((int)left_vis * (btn_size + bevel));
+        const int reserved_right = bevel + ((int)right_vis * (btn_size + bevel));
 
         region_x = reserved_left;
-        region_y = -title_h;
+        region_y = -title_h + bevel;
         region_w = w - reserved_left - reserved_right;
-        region_h = title_h;
+        region_h = btn_size;
         if (region_w < 1) {
             region_x = 0;
             region_w = w;

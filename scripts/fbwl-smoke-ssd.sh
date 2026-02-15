@@ -84,7 +84,7 @@ timeout 5 bash -c "until rg -q 'Surface size: client-ssd ${W1}x${H1}' '$LOG'; do
 
 # Click the maximize button.
 BTN_MARGIN=4
-BTN_SPACING=2
+BTN_SPACING="$BTN_MARGIN"
 BTN_SIZE=$((TITLE_H - 2 * BTN_MARGIN))
 CLOSE_X0=$((W1 - BTN_MARGIN - BTN_SIZE))
 MAX_X0=$((CLOSE_X0 - BTN_SPACING - BTN_SIZE))

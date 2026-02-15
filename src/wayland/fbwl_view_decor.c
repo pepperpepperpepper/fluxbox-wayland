@@ -41,11 +41,42 @@ static int decor_theme_button_size(const struct fbwl_decor_theme *theme) {
     if (theme == NULL) {
         return 0;
     }
-    int size = theme->title_height - 2 * theme->button_margin;
+    int bevel = theme->window_bevel_width;
+    if (bevel < 0) {
+        bevel = 0;
+    }
+    if (bevel > 20) {
+        bevel = 20;
+    }
+    if (theme->title_height > 0) {
+        const int max_bevel = (theme->title_height - 1) / 2;
+        if (bevel > max_bevel) {
+            bevel = max_bevel;
+        }
+    }
+    int size = theme->title_height - 2 * bevel;
     if (size < 1) {
         size = 1;
     }
     return size;
+}
+
+static int decor_theme_window_bevel_px(const struct fbwl_decor_theme *theme, int title_h) {
+    if (theme == NULL || title_h < 1) {
+        return 0;
+    }
+    int bevel = theme->window_bevel_width;
+    if (bevel < 0) {
+        bevel = 0;
+    }
+    if (bevel > 20) {
+        bevel = 20;
+    }
+    const int max_bevel = (title_h - 1) / 2;
+    if (bevel > max_bevel) {
+        bevel = max_bevel;
+    }
+    return bevel;
 }
 
 static bool decor_texture_can_use_flat_rect(const struct fbwl_texture *tex) {
@@ -386,6 +417,7 @@ void fbwl_view_decor_update_title_text(struct fbwl_view *view, const struct fbwl
     if (!titlebar_on || w < 1 || title_h < 1) {
         wlr_scene_buffer_set_buffer(view->decor_title_text, NULL);
         view->decor_title_text_cache_w = 0;
+        view->decor_title_text_cache_h = 0;
         return;
     }
 
@@ -394,6 +426,7 @@ void fbwl_view_decor_update_title_text(struct fbwl_view *view, const struct fbwl
             view->tab_group != NULL && fbwl_tabs_group_mapped_count(view) >= 2) {
         wlr_scene_buffer_set_buffer(view->decor_title_text, NULL);
         view->decor_title_text_cache_w = 0;
+        view->decor_title_text_cache_h = 0;
         return;
     }
 
@@ -401,18 +434,18 @@ void fbwl_view_decor_update_title_text(struct fbwl_view *view, const struct fbwl
     if (title == NULL || *title == '\0') {
         wlr_scene_buffer_set_buffer(view->decor_title_text, NULL);
         view->decor_title_text_cache_w = 0;
+        view->decor_title_text_cache_h = 0;
         return;
     }
+    const int bevel = decor_theme_window_bevel_px(theme, title_h);
     const int btn_size = decor_theme_button_size(theme);
     const struct fbwl_server *server = view->server;
     const size_t left_len = server != NULL ? server->titlebar_left_len : 0;
     const size_t right_len = server != NULL ? server->titlebar_right_len : 0;
     const size_t left_vis = server != NULL ? view_decor_visible_buttons(view, server->titlebar_left, left_len) : 0;
     const size_t right_vis = server != NULL ? view_decor_visible_buttons(view, server->titlebar_right, right_len) : 0;
-    const int reserved_left = theme->button_margin +
-        (left_vis > 0 ? ((int)left_vis * btn_size) + ((int)(left_vis - 1) * theme->button_spacing) + theme->button_margin : 0);
-    const int reserved_right = theme->button_margin +
-        (right_vis > 0 ? ((int)right_vis * btn_size) + ((int)(right_vis - 1) * theme->button_spacing) + theme->button_margin : 0);
+    const int reserved_left = 2 * bevel + ((int)left_vis * (btn_size + bevel));
+    const int reserved_right = bevel + ((int)right_vis * (btn_size + bevel));
     int text_x = reserved_left;
     int text_w = w - reserved_left - reserved_right;
     if (text_w < 1) {
@@ -422,11 +455,13 @@ void fbwl_view_decor_update_title_text(struct fbwl_view *view, const struct fbwl
     if (text_w < 1) {
         wlr_scene_buffer_set_buffer(view->decor_title_text, NULL);
         view->decor_title_text_cache_w = 0;
+        view->decor_title_text_cache_h = 0;
         return;
     }
-    wlr_scene_node_set_position(&view->decor_title_text->node, text_x, -title_h);
+    wlr_scene_node_set_position(&view->decor_title_text->node, text_x, -title_h + bevel);
     if (view->decor_title_text_cache != NULL &&
             view->decor_title_text_cache_w == text_w &&
+            view->decor_title_text_cache_h == btn_size &&
             view->decor_title_text_cache_active == view->decor_active &&
             strcmp(view->decor_title_text_cache, title) == 0) {
         return;
@@ -435,20 +470,23 @@ void fbwl_view_decor_update_title_text(struct fbwl_view *view, const struct fbwl
     view->decor_title_text_cache = strdup(title);
     if (view->decor_title_text_cache == NULL) {
         view->decor_title_text_cache_w = 0;
+        view->decor_title_text_cache_h = 0;
         view->decor_title_text_cache_active = false;
         wlr_scene_buffer_set_buffer(view->decor_title_text, NULL);
         return;
     }
     view->decor_title_text_cache_w = text_w;
+    view->decor_title_text_cache_h = btn_size;
     view->decor_title_text_cache_active = view->decor_active;
     const float *fg = view->decor_active ? theme->title_text_active : theme->title_text_inactive;
     const struct fbwl_text_effect *effect =
         view->decor_active ? &theme->window_label_focus_effect : &theme->window_label_unfocus_effect;
-    struct wlr_buffer *buf = fbwl_text_buffer_create(title, text_w, title_h, 8, fg, theme->window_font, effect,
+    struct wlr_buffer *buf = fbwl_text_buffer_create(title, text_w, btn_size, 8, fg, theme->window_font, effect,
         theme->window_justify);
     if (buf == NULL) {
         wlr_scene_buffer_set_buffer(view->decor_title_text, NULL);
         view->decor_title_text_cache_w = 0;
+        view->decor_title_text_cache_h = 0;
         view->decor_title_text_cache_active = false;
         return;
     }
@@ -625,15 +663,14 @@ void fbwl_view_decor_update(struct fbwl_view *view, const struct fbwl_decor_them
     }
 
     const struct fbwl_server *server = view->server;
+    const int bevel = decor_theme_window_bevel_px(theme, frame_title_h);
     const int btn_size = decor_theme_button_size(theme);
     const size_t left_len = server != NULL ? server->titlebar_left_len : 0;
     const size_t right_len = server != NULL ? server->titlebar_right_len : 0;
     const size_t left_vis = server != NULL ? view_decor_visible_buttons(view, server->titlebar_left, left_len) : 0;
     const size_t right_vis = server != NULL ? view_decor_visible_buttons(view, server->titlebar_right, right_len) : 0;
-    const int reserved_left = theme->button_margin +
-        (left_vis > 0 ? ((int)left_vis * btn_size) + ((int)(left_vis - 1) * theme->button_spacing) + theme->button_margin : 0);
-    const int reserved_right = theme->button_margin +
-        (right_vis > 0 ? ((int)right_vis * btn_size) + ((int)(right_vis - 1) * theme->button_spacing) + theme->button_margin : 0);
+    const int reserved_left = 2 * bevel + ((int)left_vis * (btn_size + bevel));
+    const int reserved_right = bevel + ((int)right_vis * (btn_size + bevel));
     int label_x = reserved_left;
     int label_w = w - reserved_left - reserved_right;
     if (label_w < 1) {
@@ -650,19 +687,19 @@ void fbwl_view_decor_update(struct fbwl_view *view, const struct fbwl_decor_them
     if (view->decor_label != NULL) {
         wlr_scene_node_set_enabled(&view->decor_label->node, show_label);
         if (show_label) {
-            wlr_scene_rect_set_size(view->decor_label, label_w, frame_title_h);
-            wlr_scene_node_set_position(&view->decor_label->node, label_x, -frame_title_h);
+            wlr_scene_rect_set_size(view->decor_label, label_w, btn_size);
+            wlr_scene_node_set_position(&view->decor_label->node, label_x, -frame_title_h + bevel);
         }
     }
     if (view->decor_label_tex != NULL) {
         wlr_scene_node_set_enabled(&view->decor_label_tex->node, label_use_buffer);
         if (label_use_buffer) {
-            struct wlr_buffer *buf = fbwl_texture_render_buffer(label_tex, label_w, frame_title_h);
+            struct wlr_buffer *buf = fbwl_texture_render_buffer(label_tex, label_w, btn_size);
             if (buf != NULL) {
                 wlr_scene_buffer_set_buffer(view->decor_label_tex, buf);
                 wlr_buffer_drop(buf);
-                wlr_scene_buffer_set_dest_size(view->decor_label_tex, label_w, frame_title_h);
-                wlr_scene_node_set_position(&view->decor_label_tex->node, label_x, -frame_title_h);
+                wlr_scene_buffer_set_dest_size(view->decor_label_tex, label_w, btn_size);
+                wlr_scene_node_set_position(&view->decor_label_tex->node, label_x, -frame_title_h + bevel);
             } else {
                 label_use_buffer = false;
                 wlr_scene_node_set_enabled(&view->decor_label_tex->node, false);
@@ -716,7 +753,7 @@ void fbwl_view_decor_update(struct fbwl_view *view, const struct fbwl_decor_them
     }
 
     fbwl_view_decor_handle_update(view, theme, show_border, handle_on, w, h, border_px);
-    const int btn_y = -frame_title_h + theme->button_margin;
+    const int btn_y = -frame_title_h + bevel;
     const enum fbwl_decor_hit_kind btn_kinds[] = {
         FBWL_DECOR_HIT_BTN_MENU,
         FBWL_DECOR_HIT_BTN_SHADE,
@@ -746,23 +783,23 @@ void fbwl_view_decor_update(struct fbwl_view *view, const struct fbwl_decor_them
     }
 
     if (server != NULL && show_titlebar) {
-        int btn_x = theme->button_margin;
+        int btn_x = bevel;
         for (size_t i = 0; i < server->titlebar_left_len; i++) {
             const enum fbwl_decor_hit_kind kind = server->titlebar_left[i];
             if (!view_decor_button_allowed(view, kind)) {
                 continue;
             }
             view_decor_button_apply(view, theme, kind, btn_x, btn_y, btn_size);
-            btn_x += btn_size + theme->button_spacing;
+            btn_x += btn_size + bevel;
         }
-        btn_x = w - theme->button_margin - btn_size;
+        btn_x = w - bevel - btn_size;
         for (size_t i = server->titlebar_right_len; i-- > 0; ) {
             const enum fbwl_decor_hit_kind kind = server->titlebar_right[i];
             if (!view_decor_button_allowed(view, kind)) {
                 continue;
             }
             view_decor_button_apply(view, theme, kind, btn_x, btn_y, btn_size);
-            btn_x -= btn_size + theme->button_spacing;
+            btn_x -= btn_size + bevel;
         }
     }
     fbwl_view_decor_update_title_text(view, theme);
@@ -865,8 +902,9 @@ struct fbwl_decor_hit fbwl_view_decor_hit_test(const struct fbwl_view *view, con
         title_h = 0;
     }
 
+    const int bevel = decor_theme_window_bevel_px(theme, title_h);
     const int btn_size = decor_theme_button_size(theme);
-    const int btn_margin = theme->button_margin;
+    const int btn_margin = bevel;
     const double x = lx - view->x;
     const double y = ly - view->y;
     if (x < -left || x >= w + right) {
@@ -890,7 +928,7 @@ struct fbwl_decor_hit fbwl_view_decor_hit_test(const struct fbwl_view *view, con
                 hit.kind = kind;
                 return hit;
             }
-            btn_x -= btn_size + theme->button_spacing;
+            btn_x -= btn_size + bevel;
         }
         btn_x = btn_margin;
         for (size_t i = 0; i < left_len; i++) {
@@ -902,7 +940,7 @@ struct fbwl_decor_hit fbwl_view_decor_hit_test(const struct fbwl_view *view, con
                 hit.kind = kind;
                 return hit;
             }
-            btn_x += btn_size + theme->button_spacing;
+            btn_x += btn_size + bevel;
         }
     }
     // Titlebar drag
