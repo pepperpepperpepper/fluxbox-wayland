@@ -32,9 +32,18 @@ The current Wayland theme implementation is intentionally simplified (mostly col
     - [x] Parse/apply `toolbar.borderWidth`, `toolbar.borderColor`, `toolbar.bevelWidth` (with Fluxbox fallbacks)
     - [x] Parse/apply `slit.borderWidth`, `slit.borderColor`, `slit.bevelWidth` (with Fluxbox fallbacks)
     - [x] Slit theme fallback: `slit` texture inherits `toolbar` when unset (Fluxbox behavior)
-    - [x] Render toolbar/slit borders + bevel padding in the Wayland UI
-    - [x] Parse/render per-tool textures (`toolbar.clock`, `toolbar.workspace`/`toolbar.label`, `toolbar.iconbar.*`, `toolbar.button` + `.pressed`, `toolbar.systray`, and legacy `toolbar.windowLabel` fallbacks)
+	    - [x] Render toolbar/slit borders + bevel padding in the Wayland UI
+	    - [x] Parse/render per-tool textures (`toolbar.clock`, `toolbar.workspace`/`toolbar.label`, `toolbar.iconbar.*`, `toolbar.button` + `.pressed`, `toolbar.systray`, and legacy `toolbar.windowLabel` fallbacks)
 - [x] Add smoke coverage for gradients/pixmaps/parentrelative and update the screenshot gallery once rendering matches X11 styles
+- [x] Support style text justification keys:
+  - [x] `window.justify`
+  - [x] `toolbar.clock.justify`, `toolbar.workspace.justify`, `toolbar.iconbar.focused.justify`, `toolbar.iconbar.unfocused.justify`
+  - [x] Smoke: `scripts/fbwl-smoke-style-justify.sh`
+- [ ] Remaining Fluxbox style keys (still missing on Wayland):
+  - [ ] `background.color`, `background.colorTo`, `background.pixmap`, `background.modX`, `background.modY` (map to Wayland wallpaper/background)
+  - [ ] `window.bevelWidth` (parse + apply bevel padding semantics like X11)
+  - [ ] `window.roundCorners` (rounded decoration corners)
+  - [ ] `toolbar.shaped`, `toolbar.button.scale` (best-effort)
 
 ### Apps file (`fluxbox-apps(5)`)
 

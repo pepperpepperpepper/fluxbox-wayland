@@ -511,12 +511,14 @@ void fbwl_ui_toolbar_build_iconbar(struct fbwl_toolbar_ui *ui, const struct fbwl
         }
 
         const struct fbwl_text_effect *effect = NULL;
+        int justify = 0;
         if (env != NULL && env->decor_theme != NULL) {
             const bool urgent = view != NULL && fbwl_view_is_urgent(view);
             const bool focused_or_urgent = view != NULL && (view == env->focused_view || urgent);
             effect = focused_or_urgent ? &env->decor_theme->toolbar_iconbar_focused_effect : &env->decor_theme->toolbar_iconbar_unfocused_effect;
+            justify = focused_or_urgent ? env->decor_theme->toolbar_iconbar_focused_justify : env->decor_theme->toolbar_iconbar_unfocused_justify;
         }
-        struct wlr_buffer *buf = fbwl_text_buffer_create(label_text != NULL ? label_text : "", text_w, h, pad, fg, ui->font, effect, 0);
+        struct wlr_buffer *buf = fbwl_text_buffer_create(label_text != NULL ? label_text : "", text_w, h, pad, fg, ui->font, effect, justify);
         if (buf != NULL) {
             struct wlr_scene_buffer *sb = wlr_scene_buffer_create(ui->tree, buf);
             if (sb != NULL) {

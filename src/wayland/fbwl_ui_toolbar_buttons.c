@@ -197,7 +197,11 @@ void fbwl_ui_toolbar_build_buttons(struct fbwl_toolbar_ui *ui, const struct fbwl
         if (env->decor_theme != NULL) {
             effect = strcmp(tok, "workspacename") == 0 ? &env->decor_theme->toolbar_workspace_effect : &env->decor_theme->toolbar_label_effect;
         }
-        struct wlr_buffer *buf = fbwl_text_buffer_create(label, w, h, pad, fg, ui->font, effect, 0);
+        int justify = 0;
+        if (env->decor_theme != NULL && strcmp(tok, "workspacename") == 0) {
+            justify = env->decor_theme->toolbar_workspace_justify;
+        }
+        struct wlr_buffer *buf = fbwl_text_buffer_create(label, w, h, pad, fg, ui->font, effect, justify);
         if (buf == NULL) {
             continue;
         }

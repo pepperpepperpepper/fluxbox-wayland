@@ -524,6 +524,7 @@ void decor_theme_set_defaults(struct fbwl_decor_theme *theme) {
     theme->title_height = 24;
     theme->button_margin = 4;
     theme->button_spacing = 2;
+    theme->window_justify = 0;
     theme->menu_item_height = theme->title_height;
     theme->menu_title_height = 0;
     theme->menu_border_width = 0;
@@ -536,6 +537,10 @@ void decor_theme_set_defaults(struct fbwl_decor_theme *theme) {
     theme->toolbar_height = 0;
     theme->toolbar_border_width = theme->border_width;
     theme->toolbar_bevel_width = theme->bevel_width;
+    theme->toolbar_clock_justify = 0;
+    theme->toolbar_workspace_justify = 0;
+    theme->toolbar_iconbar_focused_justify = 0;
+    theme->toolbar_iconbar_unfocused_justify = 0;
     theme->toolbar_clock_border_width = 0;
     theme->toolbar_workspace_border_width = 0;
     theme->toolbar_iconbar_border_width = 0;

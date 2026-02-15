@@ -48,6 +48,23 @@ static char *unquote_inplace(char *s) {
     return s;
 }
 
+static int parse_justify0_1_2(char *val) {
+    char *j = unquote_inplace(val);
+    if (j == NULL || *j == '\0') {
+        return 0;
+    }
+    if (strcasecmp(j, "left") == 0) {
+        return 0;
+    }
+    if (strcasecmp(j, "center") == 0) {
+        return 1;
+    }
+    if (strcasecmp(j, "right") == 0) {
+        return 2;
+    }
+    return 0;
+}
+
 static bool parse_int_range(const char *s, int min_incl, int max_incl, int *out) {
     if (s == NULL || out == NULL) {
         return false;
@@ -453,6 +470,10 @@ bool fbwl_style_load_file(struct fbwl_decor_theme *theme, const char *path) {
             }
             continue;
         }
+        if (strcasecmp(key, "window.justify") == 0) {
+            theme->window_justify = parse_justify0_1_2(val);
+            continue;
+        }
         if (strcasecmp(key, "window.label.focus.font") == 0 ||
                 strcasecmp(key, "window.label.unfocus.font") == 0 ||
                 strcasecmp(key, "window.label.active.font") == 0) {
@@ -743,16 +764,7 @@ bool fbwl_style_load_file(struct fbwl_decor_theme *theme, const char *path) {
             continue;
         }
         if (strcasecmp(key, "window.tab.justify") == 0) {
-            char *j = unquote_inplace(val);
-            if (j != NULL) {
-                if (strcasecmp(j, "left") == 0) {
-                    theme->window_tab_justify = 0;
-                } else if (strcasecmp(j, "center") == 0) {
-                    theme->window_tab_justify = 1;
-                } else if (strcasecmp(j, "right") == 0) {
-                    theme->window_tab_justify = 2;
-                }
-            }
+            theme->window_tab_justify = parse_justify0_1_2(val);
             continue;
         }
         if (strcasecmp(key, "window.tab.label.focus.color") == 0) {
@@ -822,6 +834,23 @@ bool fbwl_style_load_file(struct fbwl_decor_theme *theme, const char *path) {
                 (void)snprintf(theme->toolbar_font, sizeof(theme->toolbar_font), "%s", font);
                 toolbar_font_prio = 2;
             }
+            continue;
+        }
+
+        if (strcasecmp(key, "toolbar.clock.justify") == 0) {
+            theme->toolbar_clock_justify = parse_justify0_1_2(val);
+            continue;
+        }
+        if (strcasecmp(key, "toolbar.workspace.justify") == 0) {
+            theme->toolbar_workspace_justify = parse_justify0_1_2(val);
+            continue;
+        }
+        if (strcasecmp(key, "toolbar.iconbar.focused.justify") == 0) {
+            theme->toolbar_iconbar_focused_justify = parse_justify0_1_2(val);
+            continue;
+        }
+        if (strcasecmp(key, "toolbar.iconbar.unfocused.justify") == 0) {
+            theme->toolbar_iconbar_unfocused_justify = parse_justify0_1_2(val);
             continue;
         }
 

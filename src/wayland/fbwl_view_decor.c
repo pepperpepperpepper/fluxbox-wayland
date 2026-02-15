@@ -444,7 +444,8 @@ void fbwl_view_decor_update_title_text(struct fbwl_view *view, const struct fbwl
     const float *fg = view->decor_active ? theme->title_text_active : theme->title_text_inactive;
     const struct fbwl_text_effect *effect =
         view->decor_active ? &theme->window_label_focus_effect : &theme->window_label_unfocus_effect;
-    struct wlr_buffer *buf = fbwl_text_buffer_create(title, text_w, title_h, 8, fg, theme->window_font, effect, 0);
+    struct wlr_buffer *buf = fbwl_text_buffer_create(title, text_w, title_h, 8, fg, theme->window_font, effect,
+        theme->window_justify);
     if (buf == NULL) {
         wlr_scene_buffer_set_buffer(view->decor_title_text, NULL);
         view->decor_title_text_cache_w = 0;
@@ -453,7 +454,7 @@ void fbwl_view_decor_update_title_text(struct fbwl_view *view, const struct fbwl
     }
     wlr_scene_buffer_set_buffer(view->decor_title_text, buf);
     wlr_buffer_drop(buf);
-    wlr_log(WLR_INFO, "Decor: title-render %s", title);
+    wlr_log(WLR_INFO, "Decor: title-render %s justify=%d", title, theme->window_justify);
 }
 
 static void view_decor_button_apply(struct fbwl_view *view, const struct fbwl_decor_theme *theme,

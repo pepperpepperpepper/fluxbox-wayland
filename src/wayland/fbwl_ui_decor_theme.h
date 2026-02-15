@@ -16,6 +16,7 @@ struct fbwl_decor_theme {
     int title_height;
     int button_margin;
     int button_spacing;
+    int window_justify; // 0=left, 1=center, 2=right
     int menu_item_height;
     int menu_title_height;
     int menu_border_width;
@@ -28,6 +29,10 @@ struct fbwl_decor_theme {
     int toolbar_height;
     int toolbar_border_width;
     int toolbar_bevel_width;
+    int toolbar_clock_justify; // 0=left, 1=center, 2=right
+    int toolbar_workspace_justify; // 0=left, 1=center, 2=right
+    int toolbar_iconbar_focused_justify; // 0=left, 1=center, 2=right
+    int toolbar_iconbar_unfocused_justify; // 0=left, 1=center, 2=right
     int toolbar_clock_border_width;
     int toolbar_workspace_border_width;
     int toolbar_iconbar_border_width;
