@@ -17,6 +17,9 @@ enum fbwl_mousebinding_context {
     FBWL_MOUSEBIND_LEFT_GRIP,
     FBWL_MOUSEBIND_RIGHT_GRIP,
     FBWL_MOUSEBIND_WINDOW_BORDER,
+    FBWL_MOUSEBIND_WINBUTTON,
+    FBWL_MOUSEBIND_MINBUTTON,
+    FBWL_MOUSEBIND_MAXBUTTON,
 };
 
 enum fbwl_mousebinding_event_kind {

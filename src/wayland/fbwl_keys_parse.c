@@ -55,6 +55,22 @@ static bool starts_with_token(const char *s, const char *prefix) {
     return strncasecmp(s, prefix, n) == 0;
 }
 
+static bool token_contains_token(const char *s, const char *needle) {
+    if (s == NULL || needle == NULL) {
+        return false;
+    }
+    const size_t n = strlen(needle);
+    if (n == 0) {
+        return false;
+    }
+    for (const char *p = s; *p != '\0'; p++) {
+        if (strncasecmp(p, needle, n) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static bool mode_is_default(const char *mode) {
     return mode == NULL || *mode == '\0' || strcasecmp(mode, "default") == 0;
 }
@@ -354,6 +370,15 @@ static enum fbwl_mousebinding_context parse_mouse_context(const char *token) {
     if (strcasecmp(token, "ontitlebar") == 0) {
         return FBWL_MOUSEBIND_TITLEBAR;
     }
+    if (strcasecmp(token, "onwinbutton") == 0) {
+        return FBWL_MOUSEBIND_WINBUTTON;
+    }
+    if (strcasecmp(token, "onminbutton") == 0) {
+        return FBWL_MOUSEBIND_MINBUTTON;
+    }
+    if (strcasecmp(token, "onmaxbutton") == 0) {
+        return FBWL_MOUSEBIND_MAXBUTTON;
+    }
     if (strcasecmp(token, "ontab") == 0) {
         return FBWL_MOUSEBIND_TAB;
     }
@@ -368,6 +393,35 @@ static enum fbwl_mousebinding_context parse_mouse_context(const char *token) {
     }
     if (strcasecmp(token, "onrightgrip") == 0) {
         return FBWL_MOUSEBIND_RIGHT_GRIP;
+    }
+    return FBWL_MOUSEBIND_ANY;
+}
+
+static enum fbwl_mousebinding_context parse_fluxconf_mangled_mouse_context(const char *token) {
+    if (token == NULL) {
+        return FBWL_MOUSEBIND_ANY;
+    }
+    if (!starts_with_token(token, "mouse") && !starts_with_token(token, "button") &&
+            !starts_with_token(token, "click") && !starts_with_token(token, "move")) {
+        return FBWL_MOUSEBIND_ANY;
+    }
+
+    // Fluxconf mangles things like "OnWindow Mouse#" to "Mouse#ow".
+    // Match Fluxbox/X11 ordering: "ebar" must be checked before "bar".
+    if (token_contains_token(token, "top")) {
+        return FBWL_MOUSEBIND_DESKTOP;
+    }
+    if (token_contains_token(token, "ebar")) {
+        return FBWL_MOUSEBIND_TITLEBAR;
+    }
+    if (token_contains_token(token, "bar")) {
+        return FBWL_MOUSEBIND_TOOLBAR;
+    }
+    if (token_contains_token(token, "slit")) {
+        return FBWL_MOUSEBIND_SLIT;
+    }
+    if (token_contains_token(token, "ow")) {
+        return FBWL_MOUSEBIND_WINDOW;
     }
     return FBWL_MOUSEBIND_ANY;
 }
@@ -531,6 +585,10 @@ bool fbwl_keys_parse_file_mouse(const char *path, fbwl_keys_add_mouse_binding_fn
             if (parse_mouse_event_and_button(t, &k, &b)) {
                 button = b;
                 event_kind = k;
+                enum fbwl_mousebinding_context mangled = parse_fluxconf_mangled_mouse_context(t);
+                if (mangled != FBWL_MOUSEBIND_ANY) {
+                    context = mangled;
+                }
                 continue;
             }
             if (strcasecmp(t, "double") == 0) {

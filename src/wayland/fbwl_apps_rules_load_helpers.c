@@ -420,7 +420,8 @@ void apps_rule_parse_match_term(struct fbwl_apps_rule *rule, const char *term) {
         return;
     }
 
-    const char *keyname = (key != NULL && *key != '\0') ? key : "app_id";
+    // Fluxbox client patterns default to Name (instance) when no key is given.
+    const char *keyname = (key != NULL && *key != '\0') ? key : "name";
     if (strcasecmp(keyname, "title") == 0) {
         (void)apps_rule_match_set_regex(&rule->title, pat, negate);
     } else if (strcasecmp(keyname, "app_id") == 0 || strcasecmp(keyname, "appid") == 0 ||
@@ -428,6 +429,8 @@ void apps_rule_parse_match_term(struct fbwl_apps_rule *rule, const char *term) {
         (void)apps_rule_match_set_regex(&rule->app_id, pat, negate);
     } else if (strcasecmp(keyname, "name") == 0 || strcasecmp(keyname, "instance") == 0) {
         (void)apps_rule_match_set_regex(&rule->instance, pat, negate);
+    } else if (strcasecmp(keyname, "role") == 0) {
+        (void)apps_rule_match_set_regex(&rule->role, pat, negate);
     }
 
     free(tmp);

@@ -10,4 +10,5 @@ enum fbwl_menu_search_mode fbwl_menu_search_mode_parse(const char *s);
 
 void fbwl_ui_menu_search_reset(struct fbwl_menu_ui *ui);
 bool fbwl_ui_menu_search_handle_key(struct fbwl_menu_ui *ui, xkb_keysym_t sym);
-
+bool fbwl_ui_menu_search_get_match(const struct fbwl_menu_ui *ui, const struct fbwl_menu_item *it,
+    size_t *out_start_idx);

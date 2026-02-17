@@ -26,6 +26,7 @@ void fbwl_apps_rules_free(struct fbwl_apps_rule **rules, size_t *rule_count) {
     for (size_t i = 0; i < *rule_count; i++) {
         apps_rule_match_free(&(*rules)[i].app_id);
         apps_rule_match_free(&(*rules)[i].instance);
+        apps_rule_match_free(&(*rules)[i].role);
         apps_rule_match_free(&(*rules)[i].title);
     }
 
@@ -33,4 +34,3 @@ void fbwl_apps_rules_free(struct fbwl_apps_rule **rules, size_t *rule_count) {
     *rules = NULL;
     *rule_count = 0;
 }
-

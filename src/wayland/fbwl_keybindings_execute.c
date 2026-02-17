@@ -7,6 +7,7 @@
 #include <wlr/util/log.h>
 #include "wayland/fbwl_cmdlang.h"
 #include "wayland/fbwl_fluxbox_cmd.h"
+#include "wayland/fbwl_resize_edges.h"
 #include "wayland/fbwl_server_keybinding_actions.h"
 #include "wayland/fbwl_tabs.h"
 #include "wayland/fbwl_view.h"
@@ -122,34 +123,6 @@ static void parse_cycle_options_inplace(char *s, bool *out_groups, bool *out_sta
     if (out_pattern != NULL) {
         *out_pattern = trim_inplace(close + 1);
     }
-}
-static uint32_t resize_edges_from_arg(const struct fbwl_view *view, int cursor_x, int cursor_y, const char *arg) {
-    if (arg != NULL) {
-        if (strcasecmp(arg, "topleft") == 0) {
-            return WLR_EDGE_TOP | WLR_EDGE_LEFT;
-        }
-        if (strcasecmp(arg, "topright") == 0) {
-            return WLR_EDGE_TOP | WLR_EDGE_RIGHT;
-        }
-        if (strcasecmp(arg, "bottomleft") == 0) {
-            return WLR_EDGE_BOTTOM | WLR_EDGE_LEFT;
-        }
-        if (strcasecmp(arg, "bottomright") == 0) {
-            return WLR_EDGE_BOTTOM | WLR_EDGE_RIGHT;
-        }
-        if (strcasecmp(arg, "nearestcorner") == 0) {
-            if (view != NULL) {
-                const int w = fbwl_view_current_width(view);
-                const int h = fbwl_view_current_height(view);
-                const int mid_x = view->x + w / 2;
-                const int mid_y = view->y + h / 2;
-                const bool left = cursor_x < mid_x;
-                const bool top = cursor_y < mid_y;
-                return (left ? WLR_EDGE_LEFT : WLR_EDGE_RIGHT) | (top ? WLR_EDGE_TOP : WLR_EDGE_BOTTOM);
-            }
-        }
-    }
-    return WLR_EDGE_RIGHT | WLR_EDGE_BOTTOM;
 }
 static bool execute_action_depth(enum fbwl_keybinding_action action, int arg, const char *cmd,
         struct fbwl_view *target_view, const struct fbwl_keybindings_hooks *hooks, int depth) {
@@ -918,7 +891,7 @@ static bool execute_action_depth(enum fbwl_keybinding_action action, int arg, co
             if (hooks->view_raise != NULL) {
                 hooks->view_raise(hooks->userdata, view, "resize");
             }
-            const uint32_t edges = resize_edges_from_arg(view, hooks->cursor_x, hooks->cursor_y, cmd);
+            const uint32_t edges = fbwl_resize_edges_from_startresizing_args(view, hooks->cursor_x, hooks->cursor_y, cmd);
             hooks->grab_begin_resize(hooks->userdata, view, hooks->button, edges);
         }
         return true;

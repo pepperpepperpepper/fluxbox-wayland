@@ -408,40 +408,63 @@ void fbwl_grab_update(struct fbwl_grab *grab, struct wlr_cursor *cursor,
         if (edges == WLR_EDGE_NONE) {
             edges = WLR_EDGE_RIGHT | WLR_EDGE_BOTTOM;
         }
+        const uint32_t center_edges = WLR_EDGE_LEFT | WLR_EDGE_RIGHT | WLR_EDGE_TOP | WLR_EDGE_BOTTOM;
+        const bool center_resize = edges == center_edges;
 
         int x = grab->view_x;
         int y = grab->view_y;
         int w = grab->view_w;
         int h = grab->view_h;
 
-        if ((edges & WLR_EDGE_LEFT) != 0) {
-            x = grab->view_x + (int)dx;
-            w = grab->view_w - (int)dx;
-        } else if ((edges & WLR_EDGE_RIGHT) != 0) {
-            w = grab->view_w + (int)dx;
-        }
-
-        if ((edges & WLR_EDGE_TOP) != 0) {
-            y = grab->view_y + (int)dy;
-            h = grab->view_h - (int)dy;
-        } else if ((edges & WLR_EDGE_BOTTOM) != 0) {
-            h = grab->view_h + (int)dy;
-        }
-
-        if (w < 1) {
-            w = 1;
+        if (center_resize) {
+            const int idx = (int)dx;
+            const int idy = (int)dy;
+            if (abs(idx) >= 2 || abs(idy) >= 2) {
+                const int maxxy = idx > idy ? idx : idy;
+                const int diff = 2 * (maxxy / 2);
+                w = grab->view_w + diff;
+                h = grab->view_h + diff;
+                if (w < 1) {
+                    w = 1;
+                }
+                if (h < 1) {
+                    h = 1;
+                }
+                const int base_cx = grab->view_x + (grab->view_w / 2);
+                const int base_cy = grab->view_y + (grab->view_h / 2);
+                x = base_cx - (w / 2);
+                y = base_cy - (h / 2);
+            }
+        } else {
             if ((edges & WLR_EDGE_LEFT) != 0) {
-                x = grab->view_x + (grab->view_w - 1);
+                x = grab->view_x + (int)dx;
+                w = grab->view_w - (int)dx;
+            } else if ((edges & WLR_EDGE_RIGHT) != 0) {
+                w = grab->view_w + (int)dx;
             }
-        }
-        if (h < 1) {
-            h = 1;
+
             if ((edges & WLR_EDGE_TOP) != 0) {
-                y = grab->view_y + (grab->view_h - 1);
+                y = grab->view_y + (int)dy;
+                h = grab->view_h - (int)dy;
+            } else if ((edges & WLR_EDGE_BOTTOM) != 0) {
+                h = grab->view_h + (int)dy;
+            }
+
+            if (w < 1) {
+                w = 1;
+                if ((edges & WLR_EDGE_LEFT) != 0) {
+                    x = grab->view_x + (grab->view_w - 1);
+                }
+            }
+            if (h < 1) {
+                h = 1;
+                if ((edges & WLR_EDGE_TOP) != 0) {
+                    y = grab->view_y + (grab->view_h - 1);
+                }
             }
         }
 
-        if (edge_resize_snap_threshold_px > 0 && output_layout != NULL && outputs != NULL) {
+        if (!center_resize && edge_resize_snap_threshold_px > 0 && output_layout != NULL && outputs != NULL) {
             struct wlr_box box = {0};
             struct wlr_output *output = wlr_output_layout_output_at(output_layout, cursor->x, cursor->y);
             fbwl_view_get_output_usable_box(view, output_layout, outputs, output, &box);

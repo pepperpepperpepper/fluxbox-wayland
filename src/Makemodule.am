@@ -331,6 +331,8 @@ fluxbox_wayland_SOURCES = \
 								src/wayland/fbwl_keybindings_execute.c \
 								src/wayland/fbwl_keybindings_cycle.c \
 							src/wayland/fbwl_keybindings.h \
+							src/wayland/fbwl_resize_edges.c \
+							src/wayland/fbwl_resize_edges.h \
 							src/wayland/fbwl_fluxbox_cmd.c \
 					src/wayland/fbwl_fluxbox_cmd.h \
 					src/wayland/fbwl_cmdlang.c \
@@ -356,11 +358,17 @@ fluxbox_wayland_SOURCES = \
 				src/wayland/fbwl_texture.h \
 				src/wayland/fbwl_texture_render.c \
 				src/wayland/fbwl_texture_render_internal.h \
+				src/wayland/fbwl_round_corners.c \
+				src/wayland/fbwl_round_corners.h \
 				src/wayland/fbwl_pseudo_bg.h \
-		src/wayland/fbwl_ui_cmd_dialog.c \
+			src/wayland/fbwl_ui_cmd_dialog.c \
 		src/wayland/fbwl_ui_cmd_dialog.h \
 			src/wayland/fbwl_ui_menu.c \
+			src/wayland/fbwl_ui_menu_round.c \
 			src/wayland/fbwl_ui_menu.h \
+			src/wayland/fbwl_ui_menu_round.h \
+			src/wayland/fbwl_ui_menu_label.c \
+			src/wayland/fbwl_ui_menu_label.h \
 			src/wayland/fbwl_ui_menu_marks.c \
 			src/wayland/fbwl_ui_menu_marks.h \
 			src/wayland/fbwl_ui_menu_icon.c \
@@ -373,6 +381,8 @@ fluxbox_wayland_SOURCES = \
 				src/wayland/fbwl_ui_tooltip.h \
 				src/wayland/fbwl_ui_toolbar.c \
 				src/wayland/fbwl_ui_toolbar.h \
+				src/wayland/fbwl_ui_toolbar_shape.c \
+				src/wayland/fbwl_ui_toolbar_shape.h \
 				src/wayland/fbwl_ui_slit.c \
 				src/wayland/fbwl_ui_slit.h \
 				src/wayland/fbwl_ui_slit_order.c \
@@ -492,6 +502,9 @@ fluxbox_wayland_SOURCES = \
 						src/wayland/fbwl_view.c \
 						src/wayland/fbwl_view_maximize.c \
 						src/wayland/fbwl_view_decor.c \
+						src/wayland/fbwl_view_decor_buttons.c \
+						src/wayland/fbwl_view_decor_round.c \
+						src/wayland/fbwl_view_decor_internal.h \
 						src/wayland/fbwl_view_decor_handle.c \
 						src/wayland/fbwl_view_state.c \
 						src/wayland/fbwl_view_decor_tabs.c \

@@ -244,6 +244,7 @@ AS_IF([test "x$enable_x11" = "xno" -a "x$enable_wayland" = "xno"], [
 
 have_wayland=no
 have_systemd=no
+have_xcb_composite=no
 AS_IF([test "x$enable_wayland" = "xyes"], [
 	dnl wlroots pkg-config name may be versioned by distros
 	PKG_CHECK_MODULES([WLROOTS], [ wlroots-0.19 ],
@@ -277,6 +278,13 @@ AS_IF([test "x$enable_wayland" = "xyes"], [
 		[], [
 			AC_MSG_ERROR([--enable-wayland requires xcb, xcb-icccm, and xcb-ewmh development files (for XWayland integration).])
 		])
+	PKG_CHECK_MODULES([XCB_COMPOSITE], [ xcb-composite ],
+		[have_xcb_composite=yes], [have_xcb_composite=no])
+	AS_IF([test "x$have_xcb_composite" = "xyes"], [
+		AC_DEFINE([HAVE_XCB_COMPOSITE], [1], [Define if xcb-composite is available (for xembed-sni-proxy support)])
+	], [
+		AC_MSG_WARN([xcb-composite not found; xembed-sni-proxy will be disabled (legacy XEmbed tray icons may not render).])
+	])
 	PKG_CHECK_MODULES([PANGOCAIRO], [ pangocairo ],
 		[], [
 			AC_MSG_ERROR([--enable-wayland requires pangocairo development files (for compositor UI text rendering).])
@@ -296,6 +304,7 @@ AS_IF([test "x$enable_wayland" = "xyes"], [
 ])
 AM_CONDITIONAL([WAYLAND], [test "x$have_wayland" = "xyes"])
 AM_CONDITIONAL([HAVE_SYSTEMD], [test "x$have_systemd" = "xyes"])
+AM_CONDITIONAL([HAVE_XCB_COMPOSITE], [test "x$have_xcb_composite" = "xyes"])
 
 dnl Check for xpg4
 AC_CHECK_LIB([xpg4], [setlocale], [LIBS="-lxpg4 $LIBS"])

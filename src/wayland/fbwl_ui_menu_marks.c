@@ -6,6 +6,7 @@
 #include <wlr/interfaces/wlr_buffer.h>
 #include <wlr/types/wlr_scene.h>
 
+#include "wayland/fbwl_round_corners.h"
 #include "wayland/fbwl_ui_decor_icons.h"
 #include "wayland/fbwl_ui_decor_theme.h"
 #include "wayland/fbwl_ui_menu.h"
@@ -368,10 +369,34 @@ void fbwl_ui_menu_update_item_mark(struct fbwl_menu_ui *ui, size_t idx) {
     const bool highlighted = idx == ui->selected;
     const int size_px = ui->item_h > 0 ? ui->item_h : 1;
     struct wlr_buffer *buf = menu_mark_buffer_create(ui->env.decor_theme, it, highlighted, size_px);
+    if (buf != NULL) {
+        const uint32_t round_mask = ui->env.decor_theme->menu_round_corners;
+        if (round_mask != 0) {
+            const int bw = ui->border_w > 0 ? ui->border_w : 0;
+            const int item_h = ui->item_h > 0 ? ui->item_h : 1;
+            const int bevel = ui->env.decor_theme->menu_bevel_width > 0 ? ui->env.decor_theme->menu_bevel_width : 0;
+            const int w = ui->width > 0 ? ui->width : 1;
+            const int count = ui->current != NULL ? (int)ui->current->item_count : 0;
+            const int title_h = ui->title_h > 0 ? ui->title_h : 0;
+            const int inner_h = title_h + (count > 0 ? count * item_h : item_h);
+            const int outer_w = w + 2 * bw;
+            const int outer_h = inner_h + 2 * bw;
+
+            int mark_x = bw;
+            if (ui->env.decor_theme->menu_bullet_pos == 2) {
+                mark_x = bw + w - item_h - bevel;
+                if (mark_x < bw) {
+                    mark_x = bw;
+                }
+            }
+            const int mark_y = bw + title_h + (int)idx * item_h;
+
+            buf = fbwl_round_corners_mask_buffer_owned(buf, mark_x, mark_y, outer_w, outer_h, round_mask);
+        }
+    }
     wlr_scene_buffer_set_buffer(sb, buf);
     if (buf != NULL) {
         wlr_buffer_drop(buf);
     }
     wlr_scene_node_set_enabled(&sb->node, buf != NULL);
 }
-

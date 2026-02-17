@@ -136,6 +136,22 @@ enum fbwl_mousebinding_context server_mousebinding_context_at(struct fbwl_server
 
     const struct fbwl_decor_hit hit =
         fbwl_view_decor_hit_test(view, server != NULL ? &server->decor_theme : NULL, server->cursor->x, server->cursor->y);
+
+    if (hit.kind == FBWL_DECOR_HIT_BTN_MIN) {
+        return FBWL_MOUSEBIND_MINBUTTON;
+    }
+    if (hit.kind == FBWL_DECOR_HIT_BTN_MAX) {
+        return FBWL_MOUSEBIND_MAXBUTTON;
+    }
+    if (hit.kind == FBWL_DECOR_HIT_BTN_MENU ||
+            hit.kind == FBWL_DECOR_HIT_BTN_SHADE ||
+            hit.kind == FBWL_DECOR_HIT_BTN_STICK ||
+            hit.kind == FBWL_DECOR_HIT_BTN_CLOSE ||
+            hit.kind == FBWL_DECOR_HIT_BTN_LHALF ||
+            hit.kind == FBWL_DECOR_HIT_BTN_RHALF) {
+        return FBWL_MOUSEBIND_WINBUTTON;
+    }
+
     if (server != NULL && fbwl_view_tabs_bar_contains(view, server->cursor->x, server->cursor->y)) {
         return FBWL_MOUSEBIND_TAB;
     }

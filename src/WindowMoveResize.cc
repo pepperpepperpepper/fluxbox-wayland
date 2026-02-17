@@ -87,6 +87,8 @@ using namespace FbTk;
 
 namespace {
 
+int s_original_workspace = 0;
+
 void callForAllTransient(FluxboxWindow& win, void (*callFunc)(FluxboxWindow&)) {
     WinClient::TransientList::const_iterator it = win.winClient().transientList().begin();
     WinClient::TransientList::const_iterator it_end = win.winClient().transientList().end();

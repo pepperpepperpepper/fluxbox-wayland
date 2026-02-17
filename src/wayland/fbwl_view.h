@@ -70,6 +70,11 @@ struct fbwl_view {
     int decor_title_text_cache_h;
     bool decor_title_text_cache_active;
     char *title_override;
+    char *xwayland_role_cache;
+    struct wlr_scene_buffer *decor_border_top_tex;
+    struct wlr_scene_buffer *decor_border_bottom_tex;
+    struct wlr_scene_buffer *decor_border_left_tex;
+    struct wlr_scene_buffer *decor_border_right_tex;
     struct wlr_scene_rect *decor_border_top;
     struct wlr_scene_rect *decor_border_bottom;
     struct wlr_scene_rect *decor_border_left;
@@ -131,6 +136,7 @@ struct fbwl_view {
     struct wl_listener xwayland_request_demands_attention;
     struct wl_listener xwayland_set_title;
     struct wl_listener xwayland_set_class;
+    struct wl_listener xwayland_set_role;
     struct wl_listener xwayland_set_hints;
 
     struct wlr_foreign_toplevel_handle_v1 *foreign_toplevel;

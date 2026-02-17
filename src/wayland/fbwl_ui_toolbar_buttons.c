@@ -12,8 +12,86 @@
 
 #include "wayland/fbwl_ui_decor_theme.h"
 #include "wayland/fbwl_ui_toolbar.h"
+#include "wayland/fbwl_ui_toolbar_shape.h"
 #include "wayland/fbwl_ui_text.h"
 #include "wmcore/fbwm_core.h"
+
+enum fbwl_toolbar_arrow_dir {
+    FBWL_TOOLBAR_ARROW_LEFT,
+    FBWL_TOOLBAR_ARROW_RIGHT,
+    FBWL_TOOLBAR_ARROW_UP,
+    FBWL_TOOLBAR_ARROW_DOWN,
+};
+
+static struct wlr_buffer *toolbar_arrow_buffer(enum fbwl_toolbar_arrow_dir dir, int size_px, const float fg[static 4]) {
+    if (size_px < 1 || fg == NULL) {
+        return NULL;
+    }
+
+    cairo_surface_t *surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, size_px, size_px);
+    if (surface == NULL || cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS) {
+        if (surface != NULL) {
+            cairo_surface_destroy(surface);
+        }
+        return NULL;
+    }
+
+    cairo_t *cr = cairo_create(surface);
+    if (cr == NULL || cairo_status(cr) != CAIRO_STATUS_SUCCESS) {
+        cairo_surface_destroy(surface);
+        if (cr != NULL) {
+            cairo_destroy(cr);
+        }
+        return NULL;
+    }
+
+    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+    cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.0);
+    cairo_paint(cr);
+    cairo_set_source_rgba(cr, fg[0], fg[1], fg[2], fg[3]);
+
+    const double s = (double)size_px;
+    const double t = s * 0.20;
+    const double b = s * 0.80;
+    const double l = s * 0.20;
+    const double r = s * 0.80;
+    const double cx = s * 0.50;
+    const double cy = s * 0.50;
+
+    switch (dir) {
+    case FBWL_TOOLBAR_ARROW_LEFT:
+        cairo_move_to(cr, r, t);
+        cairo_line_to(cr, r, b);
+        cairo_line_to(cr, l, cy);
+        break;
+    case FBWL_TOOLBAR_ARROW_RIGHT:
+        cairo_move_to(cr, l, t);
+        cairo_line_to(cr, l, b);
+        cairo_line_to(cr, r, cy);
+        break;
+    case FBWL_TOOLBAR_ARROW_UP:
+        cairo_move_to(cr, l, b);
+        cairo_line_to(cr, r, b);
+        cairo_line_to(cr, cx, t);
+        break;
+    case FBWL_TOOLBAR_ARROW_DOWN:
+        cairo_move_to(cr, l, t);
+        cairo_line_to(cr, r, t);
+        cairo_line_to(cr, cx, b);
+        break;
+    }
+
+    cairo_close_path(cr);
+    cairo_fill(cr);
+    cairo_destroy(cr);
+
+    struct wlr_buffer *buf = fbwl_cairo_buffer_create(surface);
+    if (buf == NULL) {
+        cairo_surface_destroy(surface);
+        return NULL;
+    }
+    return buf;
+}
 
 static void toolbar_buttons_free(struct fbwl_toolbar_button_cfg *buttons, size_t len) {
     if (buttons == NULL) {
@@ -145,6 +223,7 @@ void fbwl_ui_toolbar_build_buttons(struct fbwl_toolbar_ui *ui, const struct fbwl
             const bool parentrel = fbwl_texture_is_parentrelative(tex);
             if (tex != NULL && !parentrel) {
                 struct wlr_buffer *buf = fbwl_texture_render_buffer(tex, w > 0 ? w : 1, h > 0 ? h : 1);
+                buf = fbwl_ui_toolbar_shaped_mask_buffer_owned(ui->placement, env->decor_theme, buf, base_x, base_y, ui->width, ui->height);
                 wlr_scene_buffer_set_buffer(ui->button_bgs[i], buf);
                 if (buf != NULL) {
                     wlr_buffer_drop(buf);
@@ -160,13 +239,48 @@ void fbwl_ui_toolbar_build_buttons(struct fbwl_toolbar_ui *ui, const struct fbwl
             continue;
         }
 
+        wlr_log(WLR_INFO, "Toolbar: tool tok=%s lx=%d w=%d", tok, off, tool_w);
+
         const char *label = "";
         char label_buf[128];
         label_buf[0] = '\0';
-        if (strcmp(tok, "prevworkspace") == 0 || strcmp(tok, "prevwindow") == 0) {
-            label = "<";
-        } else if (strcmp(tok, "nextworkspace") == 0 || strcmp(tok, "nextwindow") == 0) {
-            label = ">";
+        const bool arrow_prev = strcmp(tok, "prevworkspace") == 0 || strcmp(tok, "prevwindow") == 0;
+        const bool arrow_next = strcmp(tok, "nextworkspace") == 0 || strcmp(tok, "nextwindow") == 0;
+        if (arrow_prev || arrow_next) {
+            int scale = env != NULL && env->decor_theme != NULL ? env->decor_theme->toolbar_button_scale : 300;
+            if (scale < 1) {
+                scale = 1;
+            }
+            const int base = w < h ? w : h;
+            int arrow_size = base * 100 / scale;
+            if (arrow_size < 1) {
+                arrow_size = 1;
+            }
+            if (arrow_size > base) {
+                arrow_size = base;
+            }
+
+            enum fbwl_toolbar_arrow_dir dir = FBWL_TOOLBAR_ARROW_LEFT;
+            if (vertical) {
+                dir = arrow_prev ? FBWL_TOOLBAR_ARROW_UP : FBWL_TOOLBAR_ARROW_DOWN;
+            } else {
+                dir = arrow_prev ? FBWL_TOOLBAR_ARROW_LEFT : FBWL_TOOLBAR_ARROW_RIGHT;
+            }
+
+            struct wlr_buffer *buf = toolbar_arrow_buffer(dir, arrow_size, fg);
+            if (buf != NULL) {
+                const int ax = base_x + (w - arrow_size) / 2;
+                const int ay = base_y + (h - arrow_size) / 2;
+                buf = fbwl_ui_toolbar_shaped_mask_buffer_owned(ui->placement, env->decor_theme, buf, ax, ay, ui->width, ui->height);
+                ui->button_labels[i] = wlr_scene_buffer_create(ui->tree, buf);
+                if (ui->button_labels[i] != NULL) {
+                    wlr_scene_node_set_position(&ui->button_labels[i]->node, ax, ay);
+                    wlr_scene_buffer_set_dest_size(ui->button_labels[i], arrow_size, arrow_size);
+                }
+                wlr_buffer_drop(buf);
+                continue;
+            }
+            label = arrow_prev ? "<" : ">";
         } else if (strcmp(tok, "workspacename") == 0) {
             const size_t head = ui->on_head >= 0 ? (size_t)ui->on_head : 0;
             int cur = fbwm_core_workspace_current_for_head(env->wm, head);
@@ -187,8 +301,6 @@ void fbwl_ui_toolbar_build_buttons(struct fbwl_toolbar_ui *ui, const struct fbwl
             }
         }
 
-        wlr_log(WLR_INFO, "Toolbar: tool tok=%s lx=%d w=%d", tok, off, tool_w);
-
         if (label == NULL || *label == '\0') {
             continue;
         }
@@ -206,6 +318,7 @@ void fbwl_ui_toolbar_build_buttons(struct fbwl_toolbar_ui *ui, const struct fbwl
             continue;
         }
 
+        buf = fbwl_ui_toolbar_shaped_mask_buffer_owned(ui->placement, env->decor_theme, buf, base_x, base_y, ui->width, ui->height);
         ui->button_labels[i] = wlr_scene_buffer_create(ui->tree, buf);
         if (ui->button_labels[i] != NULL) {
             wlr_scene_node_set_position(&ui->button_labels[i]->node, base_x, base_y);

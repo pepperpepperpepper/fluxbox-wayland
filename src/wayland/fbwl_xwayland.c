@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_cursor.h>
@@ -20,6 +21,87 @@
 
 static int positive_or(int v, int fallback) {
     return v > 0 ? v : fallback;
+}
+
+static xcb_atom_t intern_atom(xcb_connection_t *conn, const char *name) {
+    if (conn == NULL || name == NULL) {
+        return XCB_ATOM_NONE;
+    }
+    xcb_intern_atom_cookie_t cookie = xcb_intern_atom(conn, 0, (uint16_t)strlen(name), name);
+    xcb_intern_atom_reply_t *reply = xcb_intern_atom_reply(conn, cookie, NULL);
+    if (reply == NULL) {
+        return XCB_ATOM_NONE;
+    }
+    xcb_atom_t atom = reply->atom;
+    free(reply);
+    return atom;
+}
+
+static char *xwayland_window_role_query(struct fbwl_server *server, xcb_window_t win) {
+    if (server == NULL || server->xwayland == NULL || win == XCB_WINDOW_NONE) {
+        return NULL;
+    }
+    xcb_connection_t *conn = wlr_xwayland_get_xwm_connection(server->xwayland);
+    if (conn == NULL) {
+        return NULL;
+    }
+
+    const xcb_atom_t atom_role = intern_atom(conn, "WM_WINDOW_ROLE");
+    if (atom_role == XCB_ATOM_NONE) {
+        return NULL;
+    }
+
+    xcb_get_property_cookie_t cookie = xcb_get_property(conn, 0, win, atom_role, XCB_ATOM_STRING, 0, 1024);
+    xcb_get_property_reply_t *reply = xcb_get_property_reply(conn, cookie, NULL);
+    if (reply == NULL) {
+        return NULL;
+    }
+
+    const int len = xcb_get_property_value_length(reply);
+    const char *val = len > 0 ? xcb_get_property_value(reply) : NULL;
+    if (len <= 0 || val == NULL) {
+        free(reply);
+        return NULL;
+    }
+
+    char *out = calloc(1, (size_t)len + 1);
+    if (out != NULL) {
+        memcpy(out, val, (size_t)len);
+    }
+    free(reply);
+    return out;
+}
+
+static void xwayland_role_cache_update(struct fbwl_view *view, const char *why) {
+    if (view == NULL || view->type != FBWL_VIEW_XWAYLAND || view->xwayland_surface == NULL) {
+        return;
+    }
+
+    const char *role = view->xwayland_surface->role;
+    if (role != NULL && role[0] != '\0') {
+        if (view->xwayland_role_cache == NULL || strcmp(view->xwayland_role_cache, role) != 0) {
+            free(view->xwayland_role_cache);
+            view->xwayland_role_cache = strdup(role);
+        }
+        return;
+    }
+
+    char *queried = xwayland_window_role_query(view->server, view->xwayland_surface->window_id);
+    if (queried == NULL || queried[0] == '\0') {
+        free(queried);
+        return;
+    }
+
+    if (view->xwayland_role_cache == NULL || strcmp(view->xwayland_role_cache, queried) != 0) {
+        free(view->xwayland_role_cache);
+        view->xwayland_role_cache = queried;
+        queried = NULL;
+        wlr_log(WLR_DEBUG, "XWayland: role=%s title=%s reason=%s",
+            view->xwayland_role_cache,
+            fbwl_view_display_title(view),
+            why != NULL ? why : "(null)");
+    }
+    free(queried);
 }
 
 static int increase_to_multiple(int val, int inc) {
@@ -180,6 +262,7 @@ void fbwl_xwayland_handle_new_surface(struct fbwl_server *server, struct wlr_xwa
         wl_notify_func_t request_demands_attention_fn,
         wl_notify_func_t set_title_fn,
         wl_notify_func_t set_class_fn,
+        wl_notify_func_t set_role_fn,
         wl_notify_func_t set_hints_fn,
         struct wlr_foreign_toplevel_manager_v1 *foreign_toplevel_mgr,
         const struct fbwl_view_foreign_toplevel_handlers *foreign_handlers) {
@@ -225,6 +308,8 @@ void fbwl_xwayland_handle_new_surface(struct fbwl_server *server, struct wlr_xwa
     wl_signal_add(&xsurface->events.set_title, &view->xwayland_set_title);
     view->xwayland_set_class.notify = set_class_fn;
     wl_signal_add(&xsurface->events.set_class, &view->xwayland_set_class);
+    view->xwayland_set_role.notify = set_role_fn;
+    wl_signal_add(&xsurface->events.set_role, &view->xwayland_set_role);
     view->xwayland_set_hints.notify = set_hints_fn;
     wl_signal_add(&xsurface->events.set_hints, &view->xwayland_set_hints);
 
@@ -246,6 +331,8 @@ void fbwl_xwayland_handle_surface_map(struct fbwl_view *view,
         return;
     }
 
+    xwayland_role_cache_update(view, "map");
+
     const struct fbwl_apps_rule *apps_rule = NULL;
     size_t apps_rule_idx = 0;
     if (!view->apps_rules_applied) {
@@ -257,8 +344,9 @@ void fbwl_xwayland_handle_surface_map(struct fbwl_view *view,
             instance = app_id;
         }
         const char *title = fbwl_view_title(view);
+        const char *role = fbwl_view_role(view);
         apps_rule = fbwl_apps_rules_match(apps_rules, apps_rule_count,
-            app_id, instance, title, &apps_rule_idx);
+            app_id, instance, title, role, &apps_rule_idx);
         if (apps_rule != NULL && apps_rule->set_tab) {
             view->tabs_enabled_override_set = true;
             view->tabs_enabled_override = apps_rule->tab;
@@ -455,6 +543,7 @@ void fbwl_xwayland_handle_surface_associate(struct fbwl_view *view,
     view->y = xsurface->y;
     wlr_scene_node_set_position(&view->scene_tree->node, view->x, view->y);
     fbwl_view_pseudo_bg_update(view, "xwayland-associate");
+    xwayland_role_cache_update(view, "associate");
     fbwl_view_foreign_update_output_from_position(view, output_layout);
 
     view->map.notify = map_fn;
@@ -615,6 +704,13 @@ void fbwl_xwayland_handle_surface_set_class(struct fbwl_view *view,
     }
 }
 
+void fbwl_xwayland_handle_surface_set_role(struct fbwl_view *view) {
+    if (view == NULL) {
+        return;
+    }
+    xwayland_role_cache_update(view, "set-role");
+}
+
 void fbwl_xwayland_handle_surface_destroy(struct fbwl_view *view,
         struct fbwm_core *wm,
         const struct fbwl_xwayland_hooks *hooks) {
@@ -642,6 +738,7 @@ void fbwl_xwayland_handle_surface_destroy(struct fbwl_view *view,
     fbwl_cleanup_listener(&view->xwayland_request_demands_attention);
     fbwl_cleanup_listener(&view->xwayland_set_title);
     fbwl_cleanup_listener(&view->xwayland_set_class);
+    fbwl_cleanup_listener(&view->xwayland_set_role);
     fbwl_cleanup_listener(&view->xwayland_set_hints);
 
     fbwl_cleanup_listener(&view->foreign_request_maximize);

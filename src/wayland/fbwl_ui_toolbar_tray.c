@@ -9,6 +9,7 @@
 
 #include "wayland/fbwl_ui_decor_theme.h"
 #include "wayland/fbwl_ui_toolbar.h"
+#include "wayland/fbwl_ui_toolbar_shape.h"
 
 #ifdef HAVE_SYSTEMD
 #include "wayland/fbwl_sni_pin.h"
@@ -78,11 +79,14 @@ void fbwl_ui_toolbar_build_tray(struct fbwl_toolbar_ui *ui, const struct fbwl_ui
     const int bg_h = vertical ? ui->tray_w : ui->thickness;
     ui->tray_bg = wlr_scene_buffer_create(ui->tree, NULL);
     if (ui->tray_bg != NULL) {
-        wlr_scene_node_set_position(&ui->tray_bg->node, vertical ? cross : ui->tray_x, vertical ? ui->tray_x : cross);
+        const int base_x = vertical ? cross : ui->tray_x;
+        const int base_y = vertical ? ui->tray_x : cross;
+        wlr_scene_node_set_position(&ui->tray_bg->node, base_x, base_y);
         const struct fbwl_texture *tex = &env->decor_theme->toolbar_systray_tex;
         const bool parentrel = fbwl_texture_is_parentrelative(tex);
         if (!parentrel) {
             struct wlr_buffer *buf = fbwl_texture_render_buffer(tex, bg_w > 0 ? bg_w : 1, bg_h > 0 ? bg_h : 1);
+            buf = fbwl_ui_toolbar_shaped_mask_buffer_owned(ui->placement, env->decor_theme, buf, base_x, base_y, ui->width, ui->height);
             wlr_scene_buffer_set_buffer(ui->tray_bg, buf);
             if (buf != NULL) {
                 wlr_buffer_drop(buf);
@@ -121,11 +125,11 @@ void fbwl_ui_toolbar_build_tray(struct fbwl_toolbar_ui *ui, const struct fbwl_ui
             ui->tray_ids[idx] = strdup(sni->id != NULL ? sni->id : "");
             ui->tray_services[idx] = strdup(sni->service != NULL ? sni->service : "");
             ui->tray_paths[idx] = strdup(sni->path != NULL ? sni->path : "");
+            const int ix = vertical ? cross + pad : xoff + pad;
+            const int iy = vertical ? xoff + pad : cross + pad;
             ui->tray_icons[idx] = wlr_scene_buffer_create(ui->tree, sni->icon_buf);
             if (ui->tray_icons[idx] != NULL) {
-                wlr_scene_node_set_position(&ui->tray_icons[idx]->node,
-                    vertical ? cross + pad : xoff + pad,
-                    vertical ? xoff + pad : cross + pad);
+                wlr_scene_node_set_position(&ui->tray_icons[idx]->node, ix, iy);
                 wlr_scene_buffer_set_dest_size(ui->tray_icons[idx], size, size);
             }
             wlr_log(WLR_INFO, "Toolbar: tray item idx=%zu lx=%d w=%d id=%s item_id=%s",

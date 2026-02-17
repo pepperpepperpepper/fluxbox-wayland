@@ -473,11 +473,6 @@ void server_cursor_button(struct wl_listener *listener, void *data) {
             }
         }
 
-        if (server_toolbar_ui_handle_click(server,
-                (int)server->cursor->x, (int)server->cursor->y, event->button)) {
-            return;
-        }
-
         double sx = 0, sy = 0;
         struct wlr_surface *surface = NULL;
         struct fbwl_view *view = fbwl_view_at(server->scene, server->cursor->x, server->cursor->y, &surface, &sx, &sy);
@@ -489,6 +484,11 @@ void server_cursor_button(struct wl_listener *listener, void *data) {
         const bool alt = (modifiers & WLR_MODIFIER_ALT) != 0;
 
         if (server_mousebind_capture_handle_press(server, view, surface, event, modifiers)) {
+            return;
+        }
+
+        if (server_toolbar_ui_handle_click(server,
+                (int)server->cursor->x, (int)server->cursor->y, event->button)) {
             return;
         }
 
@@ -677,10 +677,6 @@ void server_cursor_axis(struct wl_listener *listener, void *data) {
             !server->cmd_dialog_ui.open) {
         const int fb_button = server_fluxbox_mouse_button_from_axis(event);
         if (fb_button != 0) {
-            if (server_toolbar_ui_handle_click(server,
-                    (int)server->cursor->x, (int)server->cursor->y, (uint32_t)fb_button)) {
-                return;
-            }
             double sx = 0, sy = 0;
             struct wlr_surface *surface = NULL;
             struct fbwl_view *view =
@@ -696,8 +692,25 @@ void server_cursor_axis(struct wl_listener *listener, void *data) {
             struct fbwl_view *target =
                 (ctx == FBWL_MOUSEBIND_DESKTOP || ctx == FBWL_MOUSEBIND_TOOLBAR || ctx == FBWL_MOUSEBIND_SLIT) ? NULL : view;
 
-            if (fbwl_mousebindings_handle(server->mousebindings, server->mousebinding_count, ctx,
-                    FBWL_MOUSEBIND_EVENT_PRESS, fb_button, modifiers, false, target, &hooks)) {
+            const bool has_click = fbwl_mousebindings_has(server->mousebindings, server->mousebinding_count, ctx,
+                FBWL_MOUSEBIND_EVENT_CLICK, fb_button, modifiers, &hooks);
+
+            const bool handled_press = fbwl_mousebindings_handle(server->mousebindings, server->mousebinding_count, ctx,
+                FBWL_MOUSEBIND_EVENT_PRESS, fb_button, modifiers, false, target, &hooks);
+            bool handled_click = false;
+            if (has_click) {
+                handled_click = fbwl_mousebindings_handle(server->mousebindings, server->mousebinding_count, ctx,
+                    FBWL_MOUSEBIND_EVENT_CLICK, fb_button, modifiers, false, target, &hooks);
+            }
+
+            // Wheel events arrive as axis events on Wayland; treat them as an immediate press+release
+            // so Click4/Click5 bindings work and override toolbar defaults, matching Fluxbox/X11.
+            if (handled_press || handled_click || has_click) {
+                return;
+            }
+
+            if (server_toolbar_ui_handle_click(server,
+                    (int)server->cursor->x, (int)server->cursor->y, (uint32_t)fb_button)) {
                 return;
             }
         }

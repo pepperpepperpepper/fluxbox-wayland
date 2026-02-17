@@ -1,7 +1,7 @@
 #include "wayland/fbwl_apps_rules.h"
 
 static bool apps_rule_matches(const struct fbwl_apps_rule *rule, const char *app_id, const char *instance,
-        const char *title) {
+        const char *title, const char *role) {
     if (rule == NULL) {
         return false;
     }
@@ -36,6 +36,19 @@ static bool apps_rule_matches(const struct fbwl_apps_rule *rule, const char *app
         }
     }
 
+    if (rule->role.set) {
+        if (!rule->role.regex_valid) {
+            return false;
+        }
+        bool ok = regexec(&rule->role.regex, role != NULL ? role : "", 0, NULL, 0) == 0;
+        if (rule->role.negate) {
+            ok = !ok;
+        }
+        if (!ok) {
+            return false;
+        }
+    }
+
     if (rule->title.set) {
         if (!rule->title.regex_valid) {
             return false;
@@ -53,14 +66,14 @@ static bool apps_rule_matches(const struct fbwl_apps_rule *rule, const char *app
 }
 
 const struct fbwl_apps_rule *fbwl_apps_rules_match(const struct fbwl_apps_rule *rules, size_t rule_count,
-        const char *app_id, const char *instance, const char *title, size_t *rule_index_out) {
+        const char *app_id, const char *instance, const char *title, const char *role, size_t *rule_index_out) {
     if (rules == NULL || rule_count == 0) {
         return NULL;
     }
 
     for (size_t i = 0; i < rule_count; i++) {
         const struct fbwl_apps_rule *rule = &rules[i];
-        if (apps_rule_matches(rule, app_id, instance, title)) {
+        if (apps_rule_matches(rule, app_id, instance, title, role)) {
             if (rule_index_out != NULL) {
                 *rule_index_out = i;
             }

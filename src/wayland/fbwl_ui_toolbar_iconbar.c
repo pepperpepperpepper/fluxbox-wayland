@@ -19,6 +19,7 @@
 #include "wayland/fbwl_ui_menu_icon.h"
 #include "wayland/fbwl_ui_toolbar.h"
 #include "wayland/fbwl_ui_toolbar_iconbar_pattern.h"
+#include "wayland/fbwl_ui_toolbar_shape.h"
 #include "wayland/fbwl_ui_text.h"
 #include "wayland/fbwl_view.h"
 #include "wayland/fbwl_xwayland_icon.h"
@@ -293,11 +294,14 @@ void fbwl_ui_toolbar_build_iconbar(struct fbwl_toolbar_ui *ui, const struct fbwl
     const int bg_h = vertical ? ui->iconbar_w : ui->thickness;
     ui->iconbar_bg = wlr_scene_buffer_create(ui->tree, NULL);
     if (ui->iconbar_bg != NULL) {
-        wlr_scene_node_set_position(&ui->iconbar_bg->node, vertical ? cross : ui->iconbar_x, vertical ? ui->iconbar_x : cross);
+        const int base_x = vertical ? cross : ui->iconbar_x;
+        const int base_y = vertical ? ui->iconbar_x : cross;
+        wlr_scene_node_set_position(&ui->iconbar_bg->node, base_x, base_y);
         const struct fbwl_texture *tex = env->decor_theme != NULL ? &env->decor_theme->toolbar_iconbar_empty_tex : NULL;
         const bool parentrel = fbwl_texture_is_parentrelative(tex);
         if (tex != NULL && !parentrel) {
             struct wlr_buffer *buf = fbwl_texture_render_buffer(tex, bg_w > 0 ? bg_w : 1, bg_h > 0 ? bg_h : 1);
+            buf = fbwl_ui_toolbar_shaped_mask_buffer_owned(ui->placement, env->decor_theme, buf, base_x, base_y, ui->width, ui->height);
             wlr_scene_buffer_set_buffer(ui->iconbar_bg, buf);
             if (buf != NULL) {
                 wlr_buffer_drop(buf);
@@ -453,6 +457,7 @@ void fbwl_ui_toolbar_build_iconbar(struct fbwl_toolbar_ui *ui, const struct fbwl
             const bool parentrel = fbwl_texture_is_parentrelative(tex);
             if (tex != NULL && !parentrel) {
                 struct wlr_buffer *buf = fbwl_texture_render_buffer(tex, w > 0 ? w : 1, h > 0 ? h : 1);
+                buf = fbwl_ui_toolbar_shaped_mask_buffer_owned(ui->placement, env->decor_theme, buf, base_x, base_y, ui->width, ui->height);
                 wlr_scene_buffer_set_buffer(ui->iconbar_bgs[i], buf);
                 if (buf != NULL) {
                     wlr_buffer_drop(buf);
@@ -491,11 +496,13 @@ void fbwl_ui_toolbar_build_iconbar(struct fbwl_toolbar_ui *ui, const struct fbwl
             }
 
             if (icon_buf != NULL) {
+                const int ix = base_x + pad;
+                const int iy = base_y + (h > icon_px ? (h - icon_px) / 2 : 0);
+                icon_buf = fbwl_ui_toolbar_shaped_mask_buffer_owned(ui->placement, env->decor_theme, icon_buf, ix, iy, ui->width, ui->height);
                 struct wlr_scene_buffer *sb_icon = wlr_scene_buffer_create(ui->tree, icon_buf);
                 if (sb_icon != NULL) {
-                    const int ix = base_x + pad;
-                    const int iy = base_y + (h > icon_px ? (h - icon_px) / 2 : 0);
                     wlr_scene_node_set_position(&sb_icon->node, ix, iy);
+                    wlr_scene_buffer_set_dest_size(sb_icon, icon_px, icon_px);
                     icon_loaded = true;
                 }
                 wlr_buffer_drop(icon_buf);
@@ -520,6 +527,7 @@ void fbwl_ui_toolbar_build_iconbar(struct fbwl_toolbar_ui *ui, const struct fbwl
         }
         struct wlr_buffer *buf = fbwl_text_buffer_create(label_text != NULL ? label_text : "", text_w, h, pad, fg, ui->font, effect, justify);
         if (buf != NULL) {
+            buf = fbwl_ui_toolbar_shaped_mask_buffer_owned(ui->placement, env->decor_theme, buf, text_x, base_y, ui->width, ui->height);
             struct wlr_scene_buffer *sb = wlr_scene_buffer_create(ui->tree, buf);
             if (sb != NULL) {
                 wlr_scene_node_set_position(&sb->node, text_x, base_y);

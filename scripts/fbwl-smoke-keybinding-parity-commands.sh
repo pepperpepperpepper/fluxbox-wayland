@@ -184,11 +184,11 @@ timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'ToggleDecor: $
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" key alt-ctrl-1
-timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'SetDecor: ${SOLO_TITLE} value=NONE enabled=0 reason=keybinding'; do sleep 0.05; done"
+timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'SetDecor: ${SOLO_TITLE} value=NONE enabled=0 .* reason=keybinding'; do sleep 0.05; done"
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" key alt-ctrl-2
-timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'SetDecor: ${SOLO_TITLE} value=NORMAL enabled=1 reason=keybinding'; do sleep 0.05; done"
+timeout 5 bash -c "until tail -c +$((OFFSET + 1)) '$LOG' | rg -q 'SetDecor: ${SOLO_TITLE} value=NORMAL enabled=1 .* reason=keybinding'; do sleep 0.05; done"
 
 # SetTitle + SetTitleDialog.
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')

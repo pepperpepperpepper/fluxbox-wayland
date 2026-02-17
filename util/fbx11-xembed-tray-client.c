@@ -218,10 +218,10 @@ int main(int argc, char **argv) {
     xcb_window_t win = xcb_generate_id(conn);
     uint32_t values[] = {
         bg,
-        XCB_EVENT_MASK_EXPOSURE | XCB_EVENT_MASK_STRUCTURE_NOTIFY | XCB_EVENT_MASK_BUTTON_PRESS,
         1, // override_redirect
+        XCB_EVENT_MASK_EXPOSURE | XCB_EVENT_MASK_STRUCTURE_NOTIFY | XCB_EVENT_MASK_BUTTON_PRESS,
     };
-    uint32_t mask = XCB_CW_BACK_PIXEL | XCB_CW_EVENT_MASK | XCB_CW_OVERRIDE_REDIRECT;
+    uint32_t mask = XCB_CW_BACK_PIXEL | XCB_CW_OVERRIDE_REDIRECT | XCB_CW_EVENT_MASK;
 
     xcb_create_window(conn,
         XCB_COPY_FROM_PARENT,
@@ -231,7 +231,7 @@ int main(int argc, char **argv) {
         win_w, win_h,
         0,
         XCB_WINDOW_CLASS_INPUT_OUTPUT,
-        screen->root_visual,
+        XCB_COPY_FROM_PARENT,
         mask, values);
 
     xcb_icccm_set_wm_name(conn, win, XCB_ATOM_STRING, 8, (uint32_t)strlen(title), title);
@@ -302,6 +302,19 @@ int main(int argc, char **argv) {
 
         xcb_generic_event_t *ev;
         while ((ev = xcb_poll_for_event(conn)) != NULL) {
+            if (ev->response_type == 0) {
+                xcb_generic_error_t *err = (xcb_generic_error_t *)ev;
+                fprintf(stderr,
+                    "fbx11-xembed-tray-client: X11 error code=%u major=%u minor=%u resource=0x%x\n",
+                    (unsigned)err->error_code,
+                    (unsigned)err->major_code,
+                    (unsigned)err->minor_code,
+                    (unsigned)err->resource_id);
+                free(ev);
+                xcb_disconnect(conn);
+                return 1;
+            }
+
             const uint8_t rt = ev->response_type & ~0x80;
             switch (rt) {
             case XCB_EXPOSE:

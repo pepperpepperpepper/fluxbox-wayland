@@ -66,6 +66,9 @@ void fbwl_view_cleanup(struct fbwl_view *view) {
     free(view->title_override);
     view->title_override = NULL;
 
+    free(view->xwayland_role_cache);
+    view->xwayland_role_cache = NULL;
+
     free(view->decor_title_text_cache);
     view->decor_title_text_cache = NULL;
     view->decor_title_text_cache_w = 0;

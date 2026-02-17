@@ -20,6 +20,9 @@ static void apps_rules_write_match_terms(FILE *f, const struct fbwl_apps_rule *r
     if (rule->instance.set && rule->instance.pattern != NULL) {
         fprintf(f, " (instance%s=%s)", rule->instance.negate ? "!" : "", rule->instance.pattern);
     }
+    if (rule->role.set && rule->role.pattern != NULL) {
+        fprintf(f, " (role%s=%s)", rule->role.negate ? "!" : "", rule->role.pattern);
+    }
     if (rule->title.set && rule->title.pattern != NULL) {
         fprintf(f, " (title%s=%s)", rule->title.negate ? "!" : "", rule->title.pattern);
     }

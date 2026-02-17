@@ -41,6 +41,27 @@ static bool parse_int_range(const char *s, int min_incl, int max_incl, int *out)
     return true;
 }
 
+static bool parse_bool(const char *s, bool *out) {
+    if (s == NULL || out == NULL) {
+        return false;
+    }
+    while (*s != '\0' && isspace((unsigned char)*s)) {
+        s++;
+    }
+    if (*s == '\0') {
+        return false;
+    }
+    if (strcasecmp(s, "true") == 0 || strcasecmp(s, "yes") == 0 || strcasecmp(s, "on") == 0 || strcmp(s, "1") == 0) {
+        *out = true;
+        return true;
+    }
+    if (strcasecmp(s, "false") == 0 || strcasecmp(s, "no") == 0 || strcasecmp(s, "off") == 0 || strcmp(s, "0") == 0) {
+        *out = false;
+        return true;
+    }
+    return false;
+}
+
 static void copy_color(float dst[static 4], const float src[static 4]) {
     if (dst == NULL || src == NULL) {
         return;
@@ -87,6 +108,22 @@ bool fbwl_style_parse_toolbar_slit(struct fbwl_decor_theme *theme, const char *k
         if (parse_int_range(val, 0, 999, &v)) {
             theme->toolbar_bevel_width = v > 20 ? 20 : v;
             theme->toolbar_bevel_width_explicit = true;
+        }
+        return true;
+    }
+
+    if (strcasecmp(key, "toolbar.shaped") == 0) {
+        bool v = false;
+        if (parse_bool(val, &v)) {
+            theme->toolbar_shaped = v;
+        }
+        return true;
+    }
+
+    if (strcasecmp(key, "toolbar.button.scale") == 0) {
+        int v = 0;
+        if (parse_int_range(val, 1, 10000, &v)) {
+            theme->toolbar_button_scale = v;
         }
         return true;
     }

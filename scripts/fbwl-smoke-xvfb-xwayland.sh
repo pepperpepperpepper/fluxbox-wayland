@@ -216,6 +216,53 @@ kill "$FBW_PID" 2>/dev/null || true
 wait "$FBW_PID" 2>/dev/null || true
 unset FBW_PID
 
+cleanup_xwayland_display() {
+  local dname="$1"
+  if [[ ! "$dname" =~ ^:([0-9]+)$ ]]; then
+    return 0
+  fi
+  local d="${BASH_REMATCH[1]}"
+  local lock="/tmp/.X${d}-lock"
+  local sock="/tmp/.X11-unix/X${d}"
+
+  # Give XWayland a moment to fully exit and remove its lock/socket.
+  local end=$((SECONDS + 10))
+  while ((SECONDS <= end)); do
+    if [[ ! -e "$lock" && ! -S "$sock" ]]; then
+      return 0
+    fi
+    sleep 0.05
+  done
+
+  # If still present, the lock file should contain the X server pid.
+  if [[ -f "$lock" ]]; then
+    local pid
+    pid="$(cat "$lock" 2>/dev/null | tr -d ' ' || true)"
+    if [[ "$pid" =~ ^[0-9]+$ ]]; then
+      local comm
+      comm="$(ps -p "$pid" -o comm= 2>/dev/null | tr -d ' ' || true)"
+      if [[ "$comm" == "Xwayland" ]]; then
+        kill "$pid" 2>/dev/null || true
+        sleep 0.2
+        kill -9 "$pid" 2>/dev/null || true
+      fi
+    fi
+  fi
+
+  end=$((SECONDS + 10))
+  while ((SECONDS <= end)); do
+    if [[ ! -e "$lock" && ! -S "$sock" ]]; then
+      return 0
+    fi
+    sleep 0.05
+  done
+
+  echo "warning: XWayland display still present after cleanup: $dname (lock=$lock sock=$sock)" >&2
+  return 0
+}
+
+cleanup_xwayland_display "$DISPLAY_NAME"
+
 DISPLAY=":$DISPLAY_NUM" WLR_BACKENDS=x11 WLR_RENDERER=pixman scripts/fbwl-smoke-apps-rules-xwayland.sh
 
 echo "ok: Xvfb+x11 backend + XWayland smoke passed (display=:$DISPLAY_NUM xwayland=$DISPLAY_NAME socket=$SOCKET log=$LOG)"

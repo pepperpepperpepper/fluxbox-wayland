@@ -7,6 +7,7 @@
 #include <string.h>
 #include <strings.h>
 
+#include "wayland/fbwl_round_corners.h"
 #include "wayland/fbwl_ui_decor_theme.h"
 #include "wayland/fbwl_util.h"
 
@@ -327,6 +328,8 @@ bool fbwl_style_parse_menu(struct fbwl_decor_theme *theme, const char *key, char
     }
 
     if (strcasecmp(key, "menu.roundCorners") == 0) {
+        char *p = unquote_inplace(val);
+        theme->menu_round_corners = fbwl_round_corners_parse(p);
         return true;
     }
 

@@ -18,6 +18,7 @@ struct fbwl_decor_theme {
     int button_margin;
     int button_spacing;
     int window_justify; // 0=left, 1=center, 2=right
+    uint32_t window_round_corners; // bitmask: TopLeft/TopRight/BottomLeft/BottomRight
     bool background_loaded;
     char background_options[128];
     char background_pixmap[256];
@@ -32,9 +33,12 @@ struct fbwl_decor_theme {
     int menu_title_justify; // 0=left, 1=center, 2=right
     int menu_bullet; // 0=empty, 1=square, 2=triangle, 3=diamond
     int menu_bullet_pos; // 0=left, 2=right
+    uint32_t menu_round_corners; // bitmask: TopLeft/TopRight/BottomLeft/BottomRight
     int toolbar_height;
     int toolbar_border_width;
     int toolbar_bevel_width;
+    bool toolbar_shaped;
+    int toolbar_button_scale; // scale factor: arrow size = button_size * (100 / scale)
     int toolbar_clock_justify; // 0=left, 1=center, 2=right
     int toolbar_workspace_justify; // 0=left, 1=center, 2=right
     int toolbar_iconbar_focused_justify; // 0=left, 1=center, 2=right

@@ -194,8 +194,9 @@ void fbwl_xdg_shell_handle_toplevel_map(struct fbwl_view *view,
             instance = app_id;
         }
         const char *title = fbwl_view_title(view);
+        const char *role = fbwl_view_role(view);
         apps_rule = fbwl_apps_rules_match(apps_rules, apps_rule_count,
-            app_id, instance, title, &apps_rule_idx);
+            app_id, instance, title, role, &apps_rule_idx);
         if (apps_rule != NULL && apps_rule->set_tab) {
             view->tabs_enabled_override_set = true;
             view->tabs_enabled_override = apps_rule->tab;

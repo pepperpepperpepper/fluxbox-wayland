@@ -164,6 +164,7 @@ void fbwl_xembed_sni_proxy_maybe_start(struct fbwl_server *server, const char *d
     }
 
     static const char *const candidates[] = {
+        "./xembed-sni-proxy",
         "xembedsniproxy",
         "snixembed",
         "xembed-sni-proxy",

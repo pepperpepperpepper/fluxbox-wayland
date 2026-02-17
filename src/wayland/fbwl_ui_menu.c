@@ -1,10 +1,13 @@
 #include "wayland/fbwl_ui_menu.h"
 
 #include "wayland/fbwl_menu.h"
+#include "wayland/fbwl_round_corners.h"
 #include "wayland/fbwl_ui_decor_theme.h"
 #include "wayland/fbwl_ui_menu_icon.h"
+#include "wayland/fbwl_ui_menu_label.h"
 #include "wayland/fbwl_ui_menu_marks.h"
 #include "wayland/fbwl_ui_menu_search.h"
+#include "wayland/fbwl_ui_menu_round.h"
 #include "wayland/fbwl_ui_text.h"
 #include "wayland/fbwl_view.h"
 
@@ -62,27 +65,6 @@ static void fbwl_ui_menu_destroy_scene(struct fbwl_menu_ui *ui) {
     ui->item_mark_count = 0;
 }
 
-static bool fbwl_ui_menu_contains_point(const struct fbwl_menu_ui *ui, int lx, int ly) {
-    if (ui == NULL || !ui->open || ui->current == NULL) {
-        return false;
-    }
-
-    const int x = lx - ui->x;
-    const int y = ly - ui->y;
-    const int bw = ui->border_w > 0 ? ui->border_w : 0;
-    const int item_h = ui->item_h > 0 ? ui->item_h : 1;
-    const int w = ui->width > 0 ? ui->width : 1;
-    const int count = ui->current != NULL ? (int)ui->current->item_count : 0;
-    const int title_h = ui->title_h > 0 ? ui->title_h : 0;
-    const int h = title_h + (count > 0 ? count * item_h : item_h);
-    const int outer_w = w + 2 * bw;
-    const int outer_h = h + 2 * bw;
-    if (x < 0 || x >= outer_w || y < 0 || y >= outer_h) {
-        return false;
-    }
-    return true;
-}
-
 void fbwl_ui_menu_close(struct fbwl_menu_ui *ui, const char *why) {
     if (ui == NULL) {
         return;
@@ -102,60 +84,6 @@ void fbwl_ui_menu_close(struct fbwl_menu_ui *ui, const char *why) {
     ui->hovered_idx = -1;
 
     wlr_log(WLR_INFO, "Menu: close reason=%s", why != NULL ? why : "(null)");
-}
-
-static void fbwl_ui_menu_update_item_label(struct fbwl_menu_ui *ui, size_t idx) {
-    if (ui == NULL || !ui->open || ui->current == NULL || ui->env.decor_theme == NULL) {
-        return;
-    }
-    if (ui->item_labels == NULL || idx >= ui->item_label_count || idx >= ui->current->item_count) {
-        return;
-    }
-    struct wlr_scene_buffer *sb = ui->item_labels[idx];
-    if (sb == NULL) {
-        return;
-    }
-
-    const struct fbwl_menu_item *it = &ui->current->items[idx];
-    if (it->kind == FBWL_MENU_ITEM_SEPARATOR) {
-        return;
-    }
-    const char *render = it->label != NULL ? it->label : "(no-label)";
-
-    const float alpha = (float)ui->alpha / 255.0f;
-    float fg[4] = {ui->env.decor_theme->menu_text[0], ui->env.decor_theme->menu_text[1], ui->env.decor_theme->menu_text[2],
-        ui->env.decor_theme->menu_text[3] * alpha};
-    float hi_fg[4] = {ui->env.decor_theme->menu_hilite_text[0], ui->env.decor_theme->menu_hilite_text[1],
-        ui->env.decor_theme->menu_hilite_text[2], ui->env.decor_theme->menu_hilite_text[3] * alpha};
-    float dis_fg[4] = {ui->env.decor_theme->menu_disable_text[0], ui->env.decor_theme->menu_disable_text[1],
-        ui->env.decor_theme->menu_disable_text[2], ui->env.decor_theme->menu_disable_text[3] * alpha};
-
-    const float *use_fg = fg;
-    const char *font = ui->env.decor_theme->menu_font;
-    const struct fbwl_text_effect *effect = &ui->env.decor_theme->menu_frame_effect;
-    int justify = ui->env.decor_theme->menu_frame_justify;
-    if (it->kind == FBWL_MENU_ITEM_NOP) {
-        use_fg = dis_fg;
-    } else if (idx == ui->selected) {
-        use_fg = hi_fg;
-        font = ui->env.decor_theme->menu_hilite_font[0] != '\0' ? ui->env.decor_theme->menu_hilite_font : font;
-        effect = &ui->env.decor_theme->menu_hilite_effect;
-        justify = ui->env.decor_theme->menu_hilite_justify;
-    }
-
-    const int item_h = ui->item_h > 0 ? ui->item_h : 1;
-    const int w = ui->width > 0 ? ui->width : 200;
-    const int bevel = ui->env.decor_theme->menu_bevel_width > 0 ? ui->env.decor_theme->menu_bevel_width : 0;
-    const int left_reserve = bevel + item_h + 1;
-    const int right_reserve = bevel + item_h;
-    const int label_w = w - left_reserve - right_reserve > 1 ? w - left_reserve - right_reserve : 1;
-
-    struct wlr_buffer *text_buf = fbwl_text_buffer_create(render, label_w, item_h, 0, use_fg, font, effect, justify);
-    if (text_buf == NULL) {
-        return;
-    }
-    wlr_scene_buffer_set_buffer(sb, text_buf);
-    wlr_buffer_drop(text_buf);
 }
 
 static void fbwl_ui_menu_rebuild(struct fbwl_menu_ui *ui, const struct fbwl_ui_menu_env *env) {
@@ -214,6 +142,7 @@ static void fbwl_ui_menu_rebuild(struct fbwl_menu_ui *ui, const struct fbwl_ui_m
     ui->border_w = bw;
     const int outer_w = w + 2 * bw;
     const int outer_h = h + 2 * bw;
+    const uint32_t round_mask = env->decor_theme->menu_round_corners;
 
     const float alpha = (float)ui->alpha / 255.0f;
     const bool frame_parentrel = fbwl_texture_is_parentrelative(&env->decor_theme->menu_frame_tex);
@@ -233,21 +162,74 @@ static void fbwl_ui_menu_rebuild(struct fbwl_menu_ui *ui, const struct fbwl_ui_m
             env->decor_theme->menu_border_color[3] * alpha,
         };
 
-        struct wlr_scene_rect *top = wlr_scene_rect_create(ui->tree, outer_w, bw, bc);
-        if (top != NULL) {
-            wlr_scene_node_set_position(&top->node, 0, 0);
-        }
-        struct wlr_scene_rect *bottom = wlr_scene_rect_create(ui->tree, outer_w, bw, bc);
-        if (bottom != NULL) {
-            wlr_scene_node_set_position(&bottom->node, 0, outer_h - bw);
-        }
-        struct wlr_scene_rect *left = wlr_scene_rect_create(ui->tree, bw, outer_h - 2 * bw, bc);
-        if (left != NULL) {
-            wlr_scene_node_set_position(&left->node, 0, bw);
-        }
-        struct wlr_scene_rect *right = wlr_scene_rect_create(ui->tree, bw, outer_h - 2 * bw, bc);
-        if (right != NULL) {
-            wlr_scene_node_set_position(&right->node, outer_w - bw, bw);
+        if (round_mask == 0) {
+            struct wlr_scene_rect *top = wlr_scene_rect_create(ui->tree, outer_w, bw, bc);
+            if (top != NULL) {
+                wlr_scene_node_set_position(&top->node, 0, 0);
+            }
+            struct wlr_scene_rect *bottom = wlr_scene_rect_create(ui->tree, outer_w, bw, bc);
+            if (bottom != NULL) {
+                wlr_scene_node_set_position(&bottom->node, 0, outer_h - bw);
+            }
+            struct wlr_scene_rect *left = wlr_scene_rect_create(ui->tree, bw, outer_h - 2 * bw, bc);
+            if (left != NULL) {
+                wlr_scene_node_set_position(&left->node, 0, bw);
+            }
+            struct wlr_scene_rect *right = wlr_scene_rect_create(ui->tree, bw, outer_h - 2 * bw, bc);
+            if (right != NULL) {
+                wlr_scene_node_set_position(&right->node, outer_w - bw, bw);
+            }
+        } else {
+            struct wlr_scene_buffer *top = wlr_scene_buffer_create(ui->tree, NULL);
+            if (top != NULL) {
+                struct wlr_buffer *buf =
+                    fbwl_ui_menu_solid_color_buffer_masked(outer_w, bw, bc, 0, 0, outer_w, outer_h, round_mask);
+                wlr_scene_buffer_set_buffer(top, buf);
+                if (buf != NULL) {
+                    wlr_buffer_drop(buf);
+                }
+                wlr_scene_buffer_set_dest_size(top, outer_w, bw);
+                wlr_scene_node_set_position(&top->node, 0, 0);
+            }
+
+            struct wlr_scene_buffer *bottom = wlr_scene_buffer_create(ui->tree, NULL);
+            if (bottom != NULL) {
+                struct wlr_buffer *buf = fbwl_ui_menu_solid_color_buffer_masked(outer_w, bw, bc,
+                    0, outer_h - bw, outer_w, outer_h, round_mask);
+                wlr_scene_buffer_set_buffer(bottom, buf);
+                if (buf != NULL) {
+                    wlr_buffer_drop(buf);
+                }
+                wlr_scene_buffer_set_dest_size(bottom, outer_w, bw);
+                wlr_scene_node_set_position(&bottom->node, 0, outer_h - bw);
+            }
+
+            const int side_h = outer_h - 2 * bw;
+            if (side_h > 0) {
+                struct wlr_scene_buffer *left = wlr_scene_buffer_create(ui->tree, NULL);
+                if (left != NULL) {
+                    struct wlr_buffer *buf = fbwl_ui_menu_solid_color_buffer_masked(bw, side_h, bc,
+                        0, bw, outer_w, outer_h, round_mask);
+                    wlr_scene_buffer_set_buffer(left, buf);
+                    if (buf != NULL) {
+                        wlr_buffer_drop(buf);
+                    }
+                    wlr_scene_buffer_set_dest_size(left, bw, side_h);
+                    wlr_scene_node_set_position(&left->node, 0, bw);
+                }
+
+                struct wlr_scene_buffer *right = wlr_scene_buffer_create(ui->tree, NULL);
+                if (right != NULL) {
+                    struct wlr_buffer *buf = fbwl_ui_menu_solid_color_buffer_masked(bw, side_h, bc,
+                        outer_w - bw, bw, outer_w, outer_h, round_mask);
+                    wlr_scene_buffer_set_buffer(right, buf);
+                    if (buf != NULL) {
+                        wlr_buffer_drop(buf);
+                    }
+                    wlr_scene_buffer_set_dest_size(right, bw, side_h);
+                    wlr_scene_node_set_position(&right->node, outer_w - bw, bw);
+                }
+            }
         }
     }
 
@@ -256,6 +238,7 @@ static void fbwl_ui_menu_rebuild(struct fbwl_menu_ui *ui, const struct fbwl_ui_m
         wlr_scene_node_set_position(&ui->bg->node, bw, bw);
         if (!frame_parentrel) {
             struct wlr_buffer *buf = fbwl_texture_render_buffer(&env->decor_theme->menu_frame_tex, w, h);
+            buf = fbwl_round_corners_mask_buffer_owned(buf, bw, bw, outer_w, outer_h, round_mask);
             wlr_scene_buffer_set_buffer(ui->bg, buf);
             if (buf != NULL) {
                 wlr_buffer_drop(buf);
@@ -275,6 +258,7 @@ static void fbwl_ui_menu_rebuild(struct fbwl_menu_ui *ui, const struct fbwl_ui_m
             wlr_scene_node_set_position(&ui->title_bg->node, bw, bw);
             if (!title_parentrel) {
                 struct wlr_buffer *buf = fbwl_texture_render_buffer(&env->decor_theme->menu_title_tex, w, title_h);
+                buf = fbwl_round_corners_mask_buffer_owned(buf, bw, bw, outer_w, outer_h, round_mask);
                 wlr_scene_buffer_set_buffer(ui->title_bg, buf);
                 if (buf != NULL) {
                     wlr_buffer_drop(buf);
@@ -299,6 +283,7 @@ static void fbwl_ui_menu_rebuild(struct fbwl_menu_ui *ui, const struct fbwl_ui_m
             fbwl_text_buffer_create(title, w, title_h, title_pad_x, title_fg, title_font,
                 &env->decor_theme->menu_title_effect, env->decor_theme->menu_title_justify);
         if (title_buf != NULL) {
+            title_buf = fbwl_round_corners_mask_buffer_owned(title_buf, bw, bw, outer_w, outer_h, round_mask);
             ui->title_label = wlr_scene_buffer_create(ui->tree, title_buf);
             if (ui->title_label != NULL) {
                 wlr_scene_node_set_position(&ui->title_label->node, bw, bw);
@@ -310,28 +295,17 @@ static void fbwl_ui_menu_rebuild(struct fbwl_menu_ui *ui, const struct fbwl_ui_m
     if (ui->selected >= ui->current->item_count) {
         ui->selected = ui->current->item_count > 0 ? ui->current->item_count - 1 : 0;
     }
-    const bool hilite_parentrel = fbwl_texture_is_parentrelative(&env->decor_theme->menu_hilite_tex);
     ui->highlight = wlr_scene_buffer_create(ui->tree, NULL);
     if (ui->highlight != NULL) {
         wlr_scene_node_set_position(&ui->highlight->node, bw, bw + title_h + (int)ui->selected * item_h);
-        if (!hilite_parentrel) {
-            struct wlr_buffer *buf = fbwl_texture_render_buffer(&env->decor_theme->menu_hilite_tex, w, item_h);
-            wlr_scene_buffer_set_buffer(ui->highlight, buf);
-            if (buf != NULL) {
-                wlr_buffer_drop(buf);
-            }
-            wlr_scene_buffer_set_dest_size(ui->highlight, w, item_h);
-            wlr_scene_buffer_set_opacity(ui->highlight, alpha);
-        } else {
-            wlr_scene_node_set_enabled(&ui->highlight->node, false);
-        }
     }
+    fbwl_ui_menu_update_highlight(ui);
 
     ui->item_rect_count = ui->current->item_count;
     if (ui->item_rect_count > 0) {
         ui->item_rects = calloc(ui->item_rect_count, sizeof(*ui->item_rects));
         if (ui->item_rects != NULL) {
-            float item[4] = {0.00f, 0.00f, 0.00f, 0.01f};
+            float item[4] = {0.00f, 0.00f, 0.00f, round_mask != 0 ? 0.00f : 0.01f};
             for (size_t i = 0; i < ui->item_rect_count; i++) {
                 ui->item_rects[i] = wlr_scene_rect_create(ui->tree, w, item_h, item);
                 if (ui->item_rects[i] != NULL) {
@@ -353,16 +327,9 @@ static void fbwl_ui_menu_rebuild(struct fbwl_menu_ui *ui, const struct fbwl_ui_m
 
     float fg[4] = {env->decor_theme->menu_text[0], env->decor_theme->menu_text[1], env->decor_theme->menu_text[2],
         env->decor_theme->menu_text[3] * alpha};
-    float hi_fg[4] = {env->decor_theme->menu_hilite_text[0], env->decor_theme->menu_hilite_text[1],
-        env->decor_theme->menu_hilite_text[2], env->decor_theme->menu_hilite_text[3] * alpha};
-    float dis_fg[4] = {env->decor_theme->menu_disable_text[0], env->decor_theme->menu_disable_text[1],
-        env->decor_theme->menu_disable_text[2], env->decor_theme->menu_disable_text[3] * alpha};
 
     const int left_reserve = bevel + item_h + 1;
     const int right_reserve = bevel + item_h;
-    const int label_w = w - left_reserve - right_reserve > 1 ? w - left_reserve - right_reserve : 1;
-    const char *hilite_font =
-        env->decor_theme->menu_hilite_font[0] != '\0' ? env->decor_theme->menu_hilite_font : env->decor_theme->menu_font;
 
     int mark_x = bw;
     if (env->decor_theme->menu_bullet_pos == 2) {
@@ -399,10 +366,12 @@ static void fbwl_ui_menu_rebuild(struct fbwl_menu_ui *ui, const struct fbwl_ui_m
             if (icon_px >= 1) {
                 struct wlr_buffer *icon_buf = fbwl_ui_menu_icon_buffer_create(it->icon, icon_px);
                 if (icon_buf != NULL) {
+                    const int x = bw + bevel;
+                    const int y = bw + title_h + (int)i * item_h + bevel;
+                    icon_buf = fbwl_round_corners_mask_buffer_owned(icon_buf, x, y, outer_w, outer_h, round_mask);
+
                     struct wlr_scene_buffer *ib = wlr_scene_buffer_create(ui->tree, icon_buf);
                     if (ib != NULL) {
-                        const int x = bw + bevel;
-                        const int y = bw + title_h + (int)i * item_h + bevel;
                         wlr_scene_node_set_position(&ib->node, x, y);
                         wlr_scene_buffer_set_opacity(ib, alpha);
                     }
@@ -411,29 +380,13 @@ static void fbwl_ui_menu_rebuild(struct fbwl_menu_ui *ui, const struct fbwl_ui_m
             }
         }
 
-        const float *use_fg = fg;
-        const char *font = env->decor_theme->menu_font;
-        const struct fbwl_text_effect *effect = &env->decor_theme->menu_frame_effect;
-        int justify = env->decor_theme->menu_frame_justify;
-        if (it->kind == FBWL_MENU_ITEM_NOP) {
-            use_fg = dis_fg;
-        } else if (i == ui->selected) {
-            use_fg = hi_fg;
-            font = hilite_font;
-            effect = &env->decor_theme->menu_hilite_effect;
-            justify = env->decor_theme->menu_hilite_justify;
-        }
-        const char *render = it->label != NULL ? it->label : "(no-label)";
-        struct wlr_buffer *text_buf = fbwl_text_buffer_create(render, label_w, item_h, 0, use_fg, font, effect, justify);
-        if (text_buf != NULL) {
-            struct wlr_scene_buffer *sb = wlr_scene_buffer_create(ui->tree, text_buf);
-            if (sb != NULL) {
-                wlr_scene_node_set_position(&sb->node, bw + left_reserve, bw + title_h + (int)i * item_h);
-                if (ui->item_labels != NULL && i < ui->item_label_count) {
-                    ui->item_labels[i] = sb;
-                }
+        struct wlr_scene_buffer *sb = wlr_scene_buffer_create(ui->tree, NULL);
+        if (sb != NULL) {
+            wlr_scene_node_set_position(&sb->node, bw + left_reserve, bw + title_h + (int)i * item_h);
+            if (ui->item_labels != NULL && i < ui->item_label_count) {
+                ui->item_labels[i] = sb;
             }
-            wlr_buffer_drop(text_buf);
+            fbwl_ui_menu_render_item_label(ui, sb, i);
         }
     }
 
@@ -549,13 +502,24 @@ ssize_t fbwl_ui_menu_index_at(const struct fbwl_menu_ui *ui, int lx, int ly) {
         return -1;
     }
     const int bw = ui->border_w > 0 ? ui->border_w : 0;
-    const int x = lx - ui->x - bw;
-    const int y = ly - ui->y - bw;
     const int item_h = ui->item_h > 0 ? ui->item_h : 1;
     const int w = ui->width > 0 ? ui->width : 1;
-    const int items_h = (int)ui->current->item_count * item_h;
+    const int count = (int)ui->current->item_count;
+    const int items_h = count * item_h;
     const int title_h = ui->title_h > 0 ? ui->title_h : 0;
-    const int h = title_h + items_h;
+    const int h = title_h + (count > 0 ? items_h : item_h);
+    const int outer_w = w + 2 * bw;
+    const int outer_h = h + 2 * bw;
+
+    const int outer_x = lx - ui->x;
+    const int outer_y = ly - ui->y;
+    const uint32_t round_mask = fbwl_ui_menu_round_mask(ui);
+    if (round_mask != 0 && !fbwl_round_corners_point_visible(round_mask, outer_w, outer_h, outer_x, outer_y)) {
+        return -1;
+    }
+
+    const int x = outer_x - bw;
+    const int y = outer_y - bw;
     if (x < 0 || x >= w || y < 0 || y >= h) {
         return -1;
     }
@@ -591,6 +555,9 @@ void fbwl_ui_menu_set_selected(struct fbwl_menu_ui *ui, size_t idx) {
         wlr_scene_node_set_position(&ui->highlight->node, bw, bw + ui->title_h + (int)ui->selected * item_h);
     }
     if (prev != ui->selected) {
+        if (fbwl_ui_menu_round_mask(ui) != 0) {
+            fbwl_ui_menu_update_highlight(ui);
+        }
         fbwl_ui_menu_update_item_label(ui, prev);
         fbwl_ui_menu_update_item_label(ui, ui->selected);
         fbwl_ui_menu_update_item_mark(ui, prev);

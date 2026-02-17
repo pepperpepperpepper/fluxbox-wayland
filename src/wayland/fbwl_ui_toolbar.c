@@ -2,6 +2,7 @@
 #include "wmcore/fbwm_core.h"
 #include "wayland/fbwl_ui_toolbar_build.h"
 #include "wayland/fbwl_ui_toolbar_layout.h"
+#include "wayland/fbwl_ui_toolbar_shape.h"
 #ifdef HAVE_SYSTEMD
 #include "wayland/fbwl_sni_pin.h"
 #include "wayland/fbwl_sni_tray.h"
@@ -329,6 +330,9 @@ static void fbwl_ui_toolbar_clock_render(struct fbwl_toolbar_ui *ui) {
     const bool vertical = toolbar_edge_is_vertical(edge);
     const int w = vertical ? ui->thickness : ui->clock_w;
     const int h = vertical ? ui->clock_w : ui->thickness;
+    const int cross = ui->border_w + ui->bevel_w;
+    const int base_x = vertical ? cross : ui->clock_x;
+    const int base_y = vertical ? ui->clock_x : cross;
     const int pad = ui->thickness >= 24 ? 8 : 2;
     const int justify = ui->pseudo_decor_theme != NULL ? ui->pseudo_decor_theme->toolbar_clock_justify : 0;
     const struct fbwl_text_effect *effect =
@@ -338,6 +342,7 @@ static void fbwl_ui_toolbar_clock_render(struct fbwl_toolbar_ui *ui) {
         wlr_scene_buffer_set_buffer(ui->clock_label, NULL);
         return;
     }
+    buf = fbwl_ui_toolbar_shaped_mask_buffer_owned(ui->placement, ui->pseudo_decor_theme, buf, base_x, base_y, ui->width, ui->height);
     wlr_scene_buffer_set_buffer(ui->clock_label, buf);
     wlr_buffer_drop(buf);
     wlr_log(WLR_INFO, "Toolbar: clock text=%s justify=%d", ui->clock_text, justify);
@@ -358,12 +363,13 @@ void fbwl_ui_toolbar_update_iconbar_focus(struct fbwl_toolbar_ui *ui, const stru
         return;
     }
     if (!ui->enabled || ui->tree == NULL || ui->iconbar_count < 1 || ui->iconbar_bgs == NULL || ui->iconbar_views == NULL ||
-            ui->iconbar_item_w == NULL) {
+            ui->iconbar_item_lx == NULL || ui->iconbar_item_w == NULL) {
         return;
     }
     const float alpha = (float)ui->alpha / 255.0f;
     const enum fbwl_toolbar_edge edge = toolbar_placement_edge(ui->placement);
     const bool vertical = toolbar_edge_is_vertical(edge);
+    const int cross = ui->border_w + ui->bevel_w;
     size_t urgent_logged = 0;
     for (size_t i = 0; i < ui->iconbar_count; i++) {
         struct wlr_scene_buffer *sb = ui->iconbar_bgs[i];
@@ -380,6 +386,10 @@ void fbwl_ui_toolbar_update_iconbar_focus(struct fbwl_toolbar_ui *ui, const stru
             const int w = vertical ? ui->thickness : iw;
             const int h = vertical ? iw : ui->thickness;
             struct wlr_buffer *buf = fbwl_texture_render_buffer(tex, w > 0 ? w : 1, h > 0 ? h : 1);
+            const int off = ui->iconbar_item_lx[i];
+            const int base_x = vertical ? cross : off;
+            const int base_y = vertical ? off : cross;
+            buf = fbwl_ui_toolbar_shaped_mask_buffer_owned(ui->placement, decor_theme, buf, base_x, base_y, ui->width, ui->height);
             wlr_scene_buffer_set_buffer(sb, buf);
             if (buf != NULL) {
                 wlr_buffer_drop(buf);
@@ -470,6 +480,7 @@ void fbwl_ui_toolbar_rebuild(struct fbwl_toolbar_ui *ui, const struct fbwl_ui_to
             struct wlr_buffer *buf = fbwl_texture_render_buffer(&env->decor_theme->toolbar_tex,
                 inner_w > 0 ? inner_w : 1,
                 inner_h > 0 ? inner_h : 1);
+            buf = fbwl_ui_toolbar_shaped_mask_buffer_owned(ui->placement, env->decor_theme, buf, border_w, border_w, ui->width, ui->height);
             wlr_scene_buffer_set_buffer(ui->bg, buf);
             if (buf != NULL) {
                 wlr_buffer_drop(buf);
@@ -481,46 +492,25 @@ void fbwl_ui_toolbar_rebuild(struct fbwl_toolbar_ui *ui, const struct fbwl_ui_to
         }
     }
 
-    if (border_w > 0) {
-        float c[4] = {
-            env->decor_theme->toolbar_border_color[0],
-            env->decor_theme->toolbar_border_color[1],
-            env->decor_theme->toolbar_border_color[2],
-            env->decor_theme->toolbar_border_color[3] * alpha,
-        };
-        struct wlr_scene_rect *top = wlr_scene_rect_create(ui->tree, ui->width, border_w, c);
-        struct wlr_scene_rect *bottom = wlr_scene_rect_create(ui->tree, ui->width, border_w, c);
-        struct wlr_scene_rect *left = wlr_scene_rect_create(ui->tree, border_w, ui->height - 2 * border_w, c);
-        struct wlr_scene_rect *right = wlr_scene_rect_create(ui->tree, border_w, ui->height - 2 * border_w, c);
-        if (top != NULL) {
-            wlr_scene_node_set_position(&top->node, 0, 0);
-        }
-        if (bottom != NULL) {
-            wlr_scene_node_set_position(&bottom->node, 0, ui->height - border_w);
-        }
-        if (left != NULL) {
-            wlr_scene_node_set_position(&left->node, 0, border_w);
-        }
-        if (right != NULL) {
-            wlr_scene_node_set_position(&right->node, ui->width - border_w, border_w);
-        }
-    }
+    fbwl_ui_toolbar_build_border(ui->tree, ui->placement, env->decor_theme, ui->width, ui->height, border_w, alpha);
     ui->highlight = NULL;
     fbwl_ui_toolbar_build_buttons(ui, env, vertical, fg);
     fbwl_ui_toolbar_build_iconbar(ui, env, vertical, fg);
     fbwl_ui_toolbar_build_tray(ui, env, vertical, alpha);
     if ((ui->tools & FBWL_TOOLBAR_TOOL_CLOCK) != 0 && ui->clock_w > 0) {
+        const int cross = ui->border_w + ui->bevel_w;
+        const int clock_base_x = vertical ? cross : ui->clock_x;
+        const int clock_base_y = vertical ? ui->clock_x : cross;
         ui->clock_bg = wlr_scene_buffer_create(ui->tree, NULL);
         if (ui->clock_bg != NULL) {
-            wlr_scene_node_set_position(&ui->clock_bg->node,
-                vertical ? (ui->border_w + ui->bevel_w) : ui->clock_x,
-                vertical ? ui->clock_x : (ui->border_w + ui->bevel_w));
+            wlr_scene_node_set_position(&ui->clock_bg->node, clock_base_x, clock_base_y);
             const struct fbwl_texture *tex = env->decor_theme != NULL ? &env->decor_theme->toolbar_clock_tex : NULL;
             const bool parentrel_clock = fbwl_texture_is_parentrelative(tex);
             if (tex != NULL && !parentrel_clock) {
                 const int w = vertical ? ui->thickness : ui->clock_w;
                 const int h = vertical ? ui->clock_w : ui->thickness;
                 struct wlr_buffer *buf = fbwl_texture_render_buffer(tex, w > 0 ? w : 1, h > 0 ? h : 1);
+                buf = fbwl_ui_toolbar_shaped_mask_buffer_owned(ui->placement, env->decor_theme, buf, clock_base_x, clock_base_y, ui->width, ui->height);
                 wlr_scene_buffer_set_buffer(ui->clock_bg, buf);
                 if (buf != NULL) {
                     wlr_buffer_drop(buf);
@@ -533,9 +523,7 @@ void fbwl_ui_toolbar_rebuild(struct fbwl_toolbar_ui *ui, const struct fbwl_ui_to
         }
         ui->clock_label = wlr_scene_buffer_create(ui->tree, NULL);
         if (ui->clock_label != NULL) {
-            wlr_scene_node_set_position(&ui->clock_label->node,
-                vertical ? (ui->border_w + ui->bevel_w) : ui->clock_x,
-                vertical ? ui->clock_x : (ui->border_w + ui->bevel_w));
+            wlr_scene_node_set_position(&ui->clock_label->node, clock_base_x, clock_base_y);
             fbwl_ui_toolbar_clock_render(ui);
         }
         struct wl_event_loop *loop = env->wl_display != NULL ? wl_display_get_event_loop(env->wl_display) : NULL;
@@ -730,6 +718,11 @@ void fbwl_ui_toolbar_handle_motion(struct fbwl_toolbar_ui *ui, const struct fbwl
         lx >= ui->x && lx < ui->x + ui->width &&
         ly >= ui->y && ly < ui->y + ui->height;
     if (hovered) {
+        const int x = lx - ui->x;
+        const int y = ly - ui->y;
+        hovered = fbwl_ui_toolbar_shaped_point_visible(ui->placement, env->decor_theme, ui->width, ui->height, x, y);
+    }
+    if (hovered) {
         hovered = toolbar_is_topmost_at(ui, env, lx, ly);
     }
     ui->hovered = hovered;
@@ -783,6 +776,9 @@ bool fbwl_ui_toolbar_handle_click(struct fbwl_toolbar_ui *ui, const struct fbwl_
     const int x = lx - ui->x;
     const int y = ly - ui->y;
     if (x < 0 || x >= ui->width || y < 0 || y >= ui->height) {
+        return false;
+    }
+    if (!fbwl_ui_toolbar_shaped_point_visible(ui->placement, env->decor_theme, ui->width, ui->height, x, y)) {
         return false;
     }
     if (!toolbar_is_topmost_at(ui, env, lx, ly)) {
@@ -935,6 +931,9 @@ bool fbwl_ui_toolbar_tooltip_text_at(struct fbwl_toolbar_ui *ui, const struct fb
     const int x = lx - ui->x;
     const int y = ly - ui->y;
     if (x < 0 || x >= ui->width || y < 0 || y >= ui->height) {
+        return false;
+    }
+    if (!fbwl_ui_toolbar_shaped_point_visible(ui->placement, env->decor_theme, ui->width, ui->height, x, y)) {
         return false;
     }
     if (!toolbar_is_topmost_at(ui, env, lx, ly)) {

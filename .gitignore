@@ -37,6 +37,7 @@ Makefile.in
 /fluxbox-remote
 /fluxbox-update_configs
 /libFbTk.a
+/xembed-sni-proxy
 /src/defaults.cc
 /src/defaults.hh
 /stamp-h1
@@ -51,7 +52,6 @@ Makefile.in
 /util/fluxbox-generate_menu
 /util/startfluxbox
 /version.h
-/refactor_plan.md
 
 # build artifacts from wlroots/Wayland smoke utilities
 /fbwl-*

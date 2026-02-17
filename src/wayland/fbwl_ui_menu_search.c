@@ -7,6 +7,8 @@
 
 #include <xkbcommon/xkbcommon-keysyms.h>
 
+#include "wayland/fbwl_ui_menu_label.h"
+
 static bool menu_item_is_searchable(const struct fbwl_menu_item *it) {
     if (it == NULL) {
         return false;
@@ -39,7 +41,10 @@ static bool match_itemstart(const char *label, const char *pattern) {
     return true;
 }
 
-static bool match_somewhere(const char *label, const char *pattern) {
+static bool match_somewhere(const char *label, const char *pattern, size_t *out_start) {
+    if (out_start != NULL) {
+        *out_start = 0;
+    }
     if (pattern == NULL || *pattern == '\0') {
         return true;
     }
@@ -61,6 +66,9 @@ static bool match_somewhere(const char *label, const char *pattern) {
             }
         }
         if (ok) {
+            if (out_start != NULL) {
+                *out_start = start;
+            }
             return true;
         }
     }
@@ -76,10 +84,54 @@ static bool menu_item_matches(const struct fbwl_menu_item *it, enum fbwl_menu_se
     case FBWL_MENU_SEARCH_NOWHERE:
         return false;
     case FBWL_MENU_SEARCH_SOMEWHERE:
-        return match_somewhere(label, pattern);
+        return match_somewhere(label, pattern, NULL);
     case FBWL_MENU_SEARCH_ITEMSTART:
     default:
         return match_itemstart(label, pattern);
+    }
+}
+
+bool fbwl_ui_menu_search_get_match(const struct fbwl_menu_ui *ui, const struct fbwl_menu_item *it,
+        size_t *out_start_idx) {
+    if (out_start_idx != NULL) {
+        *out_start_idx = 0;
+    }
+    if (ui == NULL || it == NULL) {
+        return false;
+    }
+    if (ui->search_mode == FBWL_MENU_SEARCH_NOWHERE) {
+        return false;
+    }
+    if (!menu_item_is_searchable(it)) {
+        return false;
+    }
+
+    const char *pattern = ui->search_pattern;
+    if (pattern == NULL) {
+        pattern = "";
+    }
+
+    const char *label = it->label != NULL ? it->label : "";
+    switch (ui->search_mode) {
+    case FBWL_MENU_SEARCH_SOMEWHERE: {
+        size_t start = 0;
+        if (!match_somewhere(label, pattern, &start)) {
+            return false;
+        }
+        if (out_start_idx != NULL) {
+            *out_start_idx = start;
+        }
+        return true;
+    }
+    case FBWL_MENU_SEARCH_ITEMSTART:
+    default:
+        if (!match_itemstart(label, pattern)) {
+            return false;
+        }
+        if (out_start_idx != NULL) {
+            *out_start_idx = 0;
+        }
+        return true;
     }
 }
 
@@ -131,7 +183,11 @@ void fbwl_ui_menu_search_reset(struct fbwl_menu_ui *ui) {
     if (ui == NULL) {
         return;
     }
+    if (ui->search_pattern[0] == '\0') {
+        return;
+    }
     ui->search_pattern[0] = '\0';
+    fbwl_ui_menu_update_all_item_labels(ui);
 }
 
 bool fbwl_ui_menu_search_handle_key(struct fbwl_menu_ui *ui, xkb_keysym_t sym) {
@@ -145,6 +201,7 @@ bool fbwl_ui_menu_search_handle_key(struct fbwl_menu_ui *ui, xkb_keysym_t sym) {
             return false;
         }
         ui->search_pattern[len - 1] = '\0';
+        fbwl_ui_menu_update_all_item_labels(ui);
         return true;
     }
 
@@ -184,6 +241,6 @@ bool fbwl_ui_menu_search_handle_key(struct fbwl_menu_ui *ui, xkb_keysym_t sym) {
         menu_search_select_next_match(ui, ui->search_pattern);
     }
 
+    fbwl_ui_menu_update_all_item_labels(ui);
     return true;
 }
-

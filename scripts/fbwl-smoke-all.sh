@@ -4,6 +4,72 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
+# Smoke scripts assume a mostly clean environment. A stray compositor from a prior debug run
+# can create hard-to-debug flakes (XWayland display lock contention, stale IPC sockets, etc).
+# By default we fail fast when any `fluxbox-wayland` is already running.
+#
+# Override via `FBWL_SMOKE_ALLOW_RUNNING_FLUXBOX_WAYLAND=1`.
+if [[ "${FBWL_SMOKE_ALLOW_RUNNING_FLUXBOX_WAYLAND:-0}" != "1" ]]; then
+  if command -v pgrep >/dev/null 2>&1; then
+    if pgrep -a fluxbox-wayland >/dev/null 2>&1; then
+      echo "error: fluxbox-wayland already running; stop it before running this suite" >&2
+      echo "debug: running instances:" >&2
+      pgrep -a fluxbox-wayland >&2 || true
+      echo "hint: set FBWL_SMOKE_ALLOW_RUNNING_FLUXBOX_WAYLAND=1 to override" >&2
+      exit 1
+    fi
+  fi
+fi
+
+# Many smoke scripts use aggressive `timeout N ...` waits (typically `N=5`) for startup/log
+# transitions. When running the full suite sequentially, the system can get momentarily
+# loaded and those waits become flaky. To keep the scripts themselves simple/readable, we
+# install a small `timeout` wrapper (first in PATH) that scales integer-second durations.
+#
+# Override via `FBWL_SMOKE_TIMEOUT_FACTOR=<int>` (defaults to 5 for this suite).
+FBWL_SMOKE_TIMEOUT_FACTOR="${FBWL_SMOKE_TIMEOUT_FACTOR:-5}"
+export FBWL_SMOKE_TIMEOUT_FACTOR
+
+REAL_TIMEOUT="$(command -v timeout || true)"
+if [[ -n "$REAL_TIMEOUT" && -x "$REAL_TIMEOUT" ]]; then
+  FBWL_SMOKE_TMPBIN="$(mktemp -d /tmp/fbwl-smoke-bin-XXXXXX)"
+  trap 'rm -rf "$FBWL_SMOKE_TMPBIN" 2>/dev/null || true' EXIT
+
+  cat >"$FBWL_SMOKE_TMPBIN/timeout" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+
+REAL_TIMEOUT="$REAL_TIMEOUT"
+factor="\${FBWL_SMOKE_TIMEOUT_FACTOR:-1}"
+
+if [[ "\$#" -lt 1 ]]; then
+  exec "\$REAL_TIMEOUT"
+fi
+
+first="\$1"
+shift
+
+if [[ "\$first" == -* ]]; then
+  # Option form (rare in our suite) - don't try to scale.
+  exec "\$REAL_TIMEOUT" "\$first" "\$@"
+fi
+
+if [[ "\$factor" =~ ^[0-9]+$ ]] && [[ "\$factor" -gt 1 ]]; then
+  if [[ "\$first" =~ ^([0-9]+)([smhd]?)\$ ]]; then
+    n="\${BASH_REMATCH[1]}"
+    suf="\${BASH_REMATCH[2]}"
+    if [[ "\$suf" == \"\" || "\$suf" == \"s\" ]]; then
+      first="\$((n * factor))\${suf}"
+    fi
+  fi
+fi
+
+exec "\$REAL_TIMEOUT" "\$first" "\$@"
+EOF
+  chmod +x "$FBWL_SMOKE_TMPBIN/timeout"
+  export PATH="$FBWL_SMOKE_TMPBIN:$PATH"
+fi
+
 scripts=(
   scripts/fbwl-check-wayland-loc.sh
   scripts/fbwl-smoke-headless.sh
@@ -62,6 +128,10 @@ scripts=(
   scripts/fbwl-smoke-style-textures.sh
   scripts/fbwl-smoke-style-justify.sh
   scripts/fbwl-smoke-style-window-bevel.sh
+  scripts/fbwl-smoke-style-window-round-corners.sh
+  scripts/fbwl-smoke-style-menu-round-corners.sh
+  scripts/fbwl-smoke-style-menu-underline-color.sh
+  scripts/fbwl-smoke-style-toolbar-shaped-scale.sh
   scripts/fbwl-smoke-menu.sh
   scripts/fbwl-smoke-menu-search.sh
   scripts/fbwl-smoke-menu-escaping.sh
@@ -107,10 +177,14 @@ scripts=(
   scripts/fbwl-smoke-clientpattern-regex-quirk.sh
   scripts/fbwl-smoke-focusmodel-aliases.sh
   scripts/fbwl-smoke-doubleclick.sh
-  scripts/fbwl-smoke-mousebindings-click-move.sh
-  scripts/fbwl-smoke-ignore-border.sh
-  scripts/fbwl-smoke-grips.sh
-  scripts/fbwl-smoke-config-dir.sh
+	  scripts/fbwl-smoke-mousebindings-click-move.sh
+	  scripts/fbwl-smoke-mousebindings-fluxconf-mangled.sh
+	  scripts/fbwl-smoke-mousebindings-winbutton-contexts.sh
+	  scripts/fbwl-smoke-mousebindings-ontoolbar-precedence.sh
+	  scripts/fbwl-smoke-mousebindings-wheel-click.sh
+	  scripts/fbwl-smoke-ignore-border.sh
+	  scripts/fbwl-smoke-grips.sh
+	  scripts/fbwl-smoke-config-dir.sh
   scripts/fbwl-smoke-allow-remote-actions.sh
   scripts/fbwl-smoke-no-focus-while-typing.sh
   scripts/fbwl-smoke-apps-rules.sh
@@ -123,6 +197,7 @@ scripts=(
   scripts/fbwl-smoke-edge-snap.sh
   scripts/fbwl-smoke-move-resize.sh
   scripts/fbwl-smoke-keyboard-move-resize.sh
+  scripts/fbwl-smoke-startresizing-args.sh
   scripts/fbwl-smoke-geometry-cmds.sh
   scripts/fbwl-smoke-opaque-resize.sh
 	  scripts/fbwl-smoke-showwindowposition.sh

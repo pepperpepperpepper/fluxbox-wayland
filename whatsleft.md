@@ -39,11 +39,13 @@ The current Wayland theme implementation is intentionally simplified (mostly col
   - [x] `window.justify`
   - [x] `toolbar.clock.justify`, `toolbar.workspace.justify`, `toolbar.iconbar.focused.justify`, `toolbar.iconbar.unfocused.justify`
   - [x] Smoke: `scripts/fbwl-smoke-style-justify.sh`
-- [ ] Remaining Fluxbox style keys (still missing on Wayland):
+- [x] Remaining Fluxbox style keys (still missing on Wayland):
   - [x] `background.color`, `background.colorTo`, `background.pixmap`, `background.modX`, `background.modY` (map to Wayland wallpaper/background; smoke: `scripts/fbwl-smoke-style-background.sh`)
   - [x] `window.bevelWidth` (parse + apply bevel padding semantics like X11; smoke: `scripts/fbwl-smoke-style-window-bevel.sh`)
-  - [ ] `window.roundCorners` (rounded decoration corners)
-  - [ ] `toolbar.shaped`, `toolbar.button.scale` (best-effort)
+  - [x] `window.roundCorners` (rounded decoration corners; smoke: `scripts/fbwl-smoke-style-window-round-corners.sh`)
+  - [x] `menu.roundCorners` (rounded menu corners; smoke: `scripts/fbwl-smoke-style-menu-round-corners.sh`)
+  - [x] `menu.frame.underlineColor` (type-ahead underline for `session.menuSearch` matches; smoke: `scripts/fbwl-smoke-style-menu-underline-color.sh`)
+  - [x] `toolbar.shaped`, `toolbar.button.scale` (best-effort; smoke: `scripts/fbwl-smoke-style-toolbar-shaped-scale.sh`)
 
 ### Apps file (`fluxbox-apps(5)`)
 
@@ -52,6 +54,10 @@ The current Wayland theme implementation is intentionally simplified (mostly col
   - Support bitmask form and map flags onto the Wayland decoration implementation (titlebar/handle/border/buttons/tabs)
   - Ensure `apps` save/round-trip preserves unknown/bitmask values (saved as `0x...`)
   - Smoke: `scripts/fbwl-smoke-apps-deco-mask.sh`
+- [x] ClientPattern parity (match terms inside `( … )`):
+  - [x] Default property is `Name` (instance) when no key is given (Fluxbox semantics)
+  - [x] Support `(role=...)` for XWayland windows (`WM_WINDOW_ROLE`) (listen `set_role` + X11 property fallback query for deterministic matching)
+  - [x] Smoke: `scripts/fbwl-smoke-apps-rules-xwayland.sh` (instance default + role match)
 
 ### Keys / CmdLang (`fluxbox-keys(5)`)
 
@@ -64,6 +70,14 @@ The current Wayland theme implementation is intentionally simplified (mostly col
   - Smoke: `scripts/fbwl-smoke-setdecor.sh`
 - [x] `Tab <number>` parity: support negative indices (`Tab -1` = last tab, `Tab -2` = next-to-last, etc)
   - Smoke: extended `scripts/fbwl-smoke-tabs-commands.sh` to cover negative tab selection
+- [x] `StartResizing <corner>` parity: support all `fluxbox-keys(5)` modes (`NearestEdge`, `NearestCornerOrEdge` + size args, `Center`, single-edge `Top/Left/Right/Bottom`, and explicit corners)
+  - Smoke: `scripts/fbwl-smoke-startresizing-args.sh`
+- [x] Keys/mousebindings parser parity: accept fluxconf-mangled mouse tokens (e.g. `Mouse1ow`, `Mouse1top`, `Mouse1ebar`) as context synonyms for `OnWindow/OnDesktop/OnTitlebar Mouse1`
+  - Smoke: `scripts/fbwl-smoke-mousebindings-fluxconf-mangled.sh`
+- [x] Mousebinding context parity: support window button contexts (`OnWinButton`, `OnMinButton`, `OnMaxButton`) for titlebar buttons (and allow bindings to override default button actions)
+  - Smoke: `scripts/fbwl-smoke-mousebindings-winbutton-contexts.sh`
+- [x] Mousebinding precedence parity: `OnToolbar ...` bindings should override toolbar tool clicks (bindings handled before toolbar UI click handling)
+  - Smoke: `scripts/fbwl-smoke-mousebindings-ontoolbar-precedence.sh`
 
 ### Menus / WindowMenu (`fluxbox-menu(5)`)
 
@@ -83,6 +97,16 @@ The current Wayland theme implementation is intentionally simplified (mostly col
   - Menu syntax parity gap found: `fluxbox-menu(5)` escape semantics (`\\` escapes chars inside `(label)` / `{command}` / `<icon>`) were not fully implemented for parentheses/angle (and had an even/odd backslash bug for braces).
   - Fix: implement proper escaped-delimiter matching + unescaping for all menu fields.
   - Smoke: `scripts/fbwl-smoke-menu-escaping.sh` (escaped `\\)` in menu labels is searchable/selectable)
+
+## XWayland Parity — XEmbed Tray Icons (Best-effort)
+
+Goal: support legacy X11 XEmbed/system-tray icons under XWayland by translating XEmbed dock requests into StatusNotifierItems rendered by the toolbar tray.
+
+- [x] Provide an in-repo proxy (`xembed-sni-proxy`) and auto-start it when XWayland is ready
+  - Uses local `./xembed-sni-proxy` (built from this repo) or falls back to system `xembed-sni-proxy` / `xembedsniproxy` / `snixembed`.
+  - Built when Wayland + `libsystemd` + `xcb-composite` are available.
+  - Controlled via `FBWL_XEMBED_SNI_PROXY` (default: `auto`).
+  - Smoke: `scripts/fbwl-smoke-xembed-tray.sh`
 
 ## Pseudo Transparency on Wayland
 

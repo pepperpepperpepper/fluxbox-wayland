@@ -18,18 +18,18 @@ need_cmd rg
 need_cmd sed
 need_cmd timeout
 
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+
 need_exe ./fluxbox-wayland
 need_exe ./fbwl-remote
 need_exe ./fbwl-screencopy-client
 need_exe ./fbx11-xembed-tray-client
 
-if ! have_cmd xembedsniproxy && ! have_cmd snixembed && ! have_cmd xembed-sni-proxy; then
-  echo "skip: missing xembed->sni proxy (need xembedsniproxy or snixembed or xembed-sni-proxy)" >&2
+if ! have_cmd xembedsniproxy && ! have_cmd snixembed && ! have_cmd xembed-sni-proxy && [[ ! -x ./xembed-sni-proxy ]]; then
+  echo "skip: missing xembed->sni proxy (need ./xembed-sni-proxy or xembed-sni-proxy or xembedsniproxy or snixembed)" >&2
   exit 0
 fi
-
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$ROOT"
 
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/xdg-runtime-$UID}"
 mkdir -p "$XDG_RUNTIME_DIR"
@@ -81,7 +81,7 @@ dbus-run-session -- bash -c '
   timeout 10 bash -c "until rg -q \"XEmbedProxy: started\" \"$LOG\"; do sleep 0.05; done"
   timeout 10 bash -c "until rg -q \"Toolbar: position \" \"$LOG\"; do sleep 0.05; done"
 
-  DISPLAY_NAME="$(rg -m 1 \"XWayland: ready DISPLAY=\" \"$LOG\" | sed -E \"s/.*DISPLAY=//\")"
+  DISPLAY_NAME="$(rg -m1 "XWayland: ready DISPLAY=" "$LOG" | sed -E 's/.*DISPLAY=//')"
   if [[ -z "$DISPLAY_NAME" ]]; then
     echo "failed to parse XWayland DISPLAY from log: $LOG" >&2
     exit 1
@@ -95,7 +95,7 @@ dbus-run-session -- bash -c '
 
   timeout 10 bash -c "until rg -q \"Toolbar: tray item idx=0\" \"$LOG\"; do sleep 0.05; done"
 
-  pos_line="$(rg -m1 \"Toolbar: position \" \"$LOG\")"
+  pos_line="$(rg -m1 "Toolbar: position " "$LOG")"
   if [[ "$pos_line" =~ x=([-0-9]+)[[:space:]]+y=([-0-9]+)[[:space:]]+h=([0-9]+) ]]; then
     X0="${BASH_REMATCH[1]}"
     Y0="${BASH_REMATCH[2]}"
@@ -105,7 +105,7 @@ dbus-run-session -- bash -c '
     exit 1
   fi
 
-  tray_line="$(rg -m1 \"Toolbar: tray item idx=0\" \"$LOG\")"
+  tray_line="$(rg -m1 "Toolbar: tray item idx=0" "$LOG")"
   if [[ "$tray_line" =~ lx=([-0-9]+)[[:space:]]+w=([0-9]+)[[:space:]]+id= ]]; then
     LX="${BASH_REMATCH[1]}"
     W="${BASH_REMATCH[2]}"
@@ -126,7 +126,7 @@ dbus-run-session -- bash -c '
 
   fbwl_report_shot "xembed-tray.png" "XEmbed tray icon (via xembed→SNI proxy)"
 
-  ./fbwl-remote --socket "$SOCKET" quit | rg -q \"^ok quitting$\"
+  ./fbwl-remote --socket "$SOCKET" quit | rg -q '^ok quitting$'
   timeout 5 bash -c "while kill -0 \"$FBW_PID\" 2>/dev/null; do sleep 0.05; done"
   wait "$FBW_PID"
   unset FBW_PID

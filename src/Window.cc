@@ -119,7 +119,6 @@ private:
 
 
 int FluxboxWindow::s_num_grabs = 0;
-static int s_original_workspace = 0;
 
 FluxboxWindow::FluxboxWindow(WinClient &client):
     Focusable(client.screen(), this),

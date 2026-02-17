@@ -280,7 +280,7 @@ void BScreen::updateSize() {
 }
 
 void BScreen::clearXinerama() {
-    fbdbg<<"BScreen::initXinerama(): dont have Xinerama"<<endl;
+    fbdbg<<"BScreen::initXinerama(): dont have Xinerama"<<std::endl;
 
     m_xinerama.avail = false;
     m_xinerama.heads.clear();
@@ -299,7 +299,7 @@ void BScreen::initXinerama() {
 
     m_xinerama.avail = true;
 
-    fbdbg<<"BScreen::initXinerama(): have Xinerama"<<endl;
+    fbdbg<<"BScreen::initXinerama(): have Xinerama"<<std::endl;
 
     /* The call may have actually failed. If this is the first time we init
      * Xinerama, fall back to turning it off. If not, pretend nothing
@@ -319,7 +319,7 @@ void BScreen::initXinerama() {
     }
     XFree(si);
 
-    fbdbg<<"BScreen::initXinerama(): number of heads ="<<number<<endl;
+    fbdbg<<"BScreen::initXinerama(): number of heads ="<<number<<std::endl;
 
     /* Reallocate to the new number of heads. */
     int ha_num = numHeads() ? numHeads() : 1;
@@ -490,4 +490,3 @@ pair<int,int> BScreen::clampToHead(int head, int x, int y, int w, int h) const {
 
     return make_pair(x,y);
 }
-

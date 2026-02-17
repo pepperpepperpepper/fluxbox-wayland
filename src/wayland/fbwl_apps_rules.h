@@ -36,6 +36,7 @@ enum fbwl_apps_focus_protection {
 struct fbwl_apps_rule {
     struct fbwl_apps_rule_match app_id;
     struct fbwl_apps_rule_match instance;
+    struct fbwl_apps_rule_match role;
     struct fbwl_apps_rule_match title;
 
     int match_limit;
@@ -118,4 +119,4 @@ bool fbwl_apps_rules_load_file(struct fbwl_apps_rule **rules, size_t *rule_count
 bool fbwl_apps_rules_save_file(const struct fbwl_apps_rule *rules, size_t rule_count, const char *path);
 
 const struct fbwl_apps_rule *fbwl_apps_rules_match(const struct fbwl_apps_rule *rules, size_t rule_count,
-    const char *app_id, const char *instance, const char *title, size_t *rule_index_out);
+    const char *app_id, const char *instance, const char *title, const char *role, size_t *rule_index_out);

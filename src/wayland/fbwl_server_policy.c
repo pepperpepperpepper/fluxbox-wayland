@@ -836,8 +836,9 @@ void server_apps_rules_save_on_close(struct fbwl_view *view) {
             instance = app_id;
         }
         const char *title = fbwl_view_title(view);
+        const char *role = fbwl_view_role(view);
         const struct fbwl_apps_rule *matched = fbwl_apps_rules_match(server->apps_rules, server->apps_rule_count,
-            app_id, instance, title, &rule_idx);
+            app_id, instance, title, role, &rule_idx);
         if (matched == NULL || rule_idx >= server->apps_rule_count) {
             return;
         }

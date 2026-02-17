@@ -595,6 +595,12 @@ static void xwayland_surface_set_class(struct wl_listener *listener, void *data)
     fbwl_xwayland_handle_surface_set_class(view, &hooks);
 }
 
+static void xwayland_surface_set_role(struct wl_listener *listener, void *data) {
+    (void)data;
+    struct fbwl_view *view = wl_container_of(listener, view, xwayland_set_role);
+    fbwl_xwayland_handle_surface_set_role(view);
+}
+
 static bool xwayland_surface_is_urgent(const struct wlr_xwayland_surface *xsurface) {
     if (xsurface == NULL) {
         return false;
@@ -702,6 +708,7 @@ void server_xwayland_new_surface(struct wl_listener *listener, void *data) {
         xwayland_surface_request_demands_attention,
         xwayland_surface_set_title,
         xwayland_surface_set_class,
+        xwayland_surface_set_role,
         xwayland_surface_set_hints,
         server != NULL ? server->foreign_toplevel_mgr : NULL,
         foreign_handlers);

@@ -16,6 +16,7 @@
 #include "wayland/fbwl_style_parse_menu.h"
 #include "wayland/fbwl_style_parse_toolbar_slit.h"
 #include "wayland/fbwl_style_parse_textures.h"
+#include "wayland/fbwl_round_corners.h"
 #include "wayland/fbwl_util.h"
 
 static char *trim_inplace(char *s) {
@@ -494,6 +495,11 @@ bool fbwl_style_load_file(struct fbwl_decor_theme *theme, const char *path) {
         }
         if (strcasecmp(key, "window.justify") == 0) {
             theme->window_justify = parse_justify0_1_2(val);
+            continue;
+        }
+        if (strcasecmp(key, "window.roundCorners") == 0) {
+            char *p = unquote_inplace(val);
+            theme->window_round_corners = fbwl_round_corners_parse(p);
             continue;
         }
         if (strcasecmp(key, "window.label.focus.font") == 0 ||

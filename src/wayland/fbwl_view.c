@@ -106,8 +106,10 @@ const char *fbwl_view_role(const struct fbwl_view *view) {
     switch (view->type) {
     case FBWL_VIEW_XDG:
         return NULL;
-    case FBWL_VIEW_XWAYLAND:
-        return view->xwayland_surface != NULL ? view->xwayland_surface->role : NULL;
+    case FBWL_VIEW_XWAYLAND: {
+        const char *role = view->xwayland_surface != NULL ? view->xwayland_surface->role : NULL;
+        return (role != NULL && role[0] != '\0') ? role : view->xwayland_role_cache;
+    }
     default:
         return NULL;
     }

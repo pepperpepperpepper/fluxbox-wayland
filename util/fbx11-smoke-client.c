@@ -43,7 +43,7 @@ static uint32_t alloc_color_or_fallback(xcb_connection_t *conn, xcb_colormap_t c
 }
 
 static void usage(const char *argv0) {
-    fprintf(stderr, "Usage: %s [--display DISPLAY] [--title TITLE] [--class CLASS] [--instance INSTANCE] [--stay-ms MS] [--w W] [--h H] [--width-inc N] [--height-inc N] [--xprop NAME[=VALUE]] [--xprop-cardinal NAME=U32] [--urgent-after-ms MS] [--net-wm-icon] [--dock|--desktop|--splash] [--kde-dockapp]\n",
+    fprintf(stderr, "Usage: %s [--display DISPLAY] [--title TITLE] [--class CLASS] [--instance INSTANCE] [--role ROLE] [--stay-ms MS] [--w W] [--h H] [--width-inc N] [--height-inc N] [--xprop NAME[=VALUE]] [--xprop-cardinal NAME=U32] [--urgent-after-ms MS] [--net-wm-icon] [--dock|--desktop|--splash] [--kde-dockapp]\n",
         argv0);
 }
 
@@ -58,6 +58,7 @@ int main(int argc, char **argv) {
     const char *title = "fbx11-smoke";
     const char *class_name = "fbx11-smoke";
     const char *instance_name = "fbx11-smoke";
+    const char *role = NULL;
     const char *xprop_utf8 = NULL;
     const char *xprop_cardinal = NULL;
     int stay_ms = 2000;
@@ -77,6 +78,7 @@ int main(int argc, char **argv) {
         {"title", required_argument, NULL, 2},
         {"class", required_argument, NULL, 3},
         {"instance", required_argument, NULL, 4},
+        {"role", required_argument, NULL, 18},
         {"stay-ms", required_argument, NULL, 5},
         {"w", required_argument, NULL, 6},
         {"h", required_argument, NULL, 7},
@@ -108,6 +110,9 @@ int main(int argc, char **argv) {
             break;
         case 4:
             instance_name = optarg;
+            break;
+        case 18:
+            role = optarg;
             break;
         case 5:
             stay_ms = atoi(optarg);
@@ -229,6 +234,7 @@ int main(int argc, char **argv) {
     xcb_atom_t atom_wm_class = XCB_ATOM_WM_CLASS;
     xcb_atom_t atom_utf8 = intern_atom(conn, "UTF8_STRING");
     xcb_atom_t atom_net_wm_name = intern_atom(conn, "_NET_WM_NAME");
+    xcb_atom_t atom_wm_window_role = intern_atom(conn, "WM_WINDOW_ROLE");
 
     /* WM_NAME (STRING) */
     xcb_change_property(conn, XCB_PROP_MODE_REPLACE, win, atom_wm_name, XCB_ATOM_STRING, 8,
@@ -255,6 +261,12 @@ int main(int argc, char **argv) {
     xcb_change_property(conn, XCB_PROP_MODE_REPLACE, win, atom_wm_class, XCB_ATOM_STRING, 8,
         (uint32_t)class_data_len, class_data);
     free(class_data);
+
+    /* WM_WINDOW_ROLE (STRING) */
+    if (role != NULL && atom_wm_window_role != XCB_ATOM_NONE) {
+        xcb_change_property(conn, XCB_PROP_MODE_REPLACE, win, atom_wm_window_role, XCB_ATOM_STRING, 8,
+            (uint32_t)strlen(role), role);
+    }
 
     if (width_inc > 0 || height_inc > 0) {
         xcb_size_hints_t hints = {0};

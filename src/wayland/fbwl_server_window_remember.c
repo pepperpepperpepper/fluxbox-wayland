@@ -136,6 +136,7 @@ static void apps_rule_free(struct fbwl_apps_rule *rule) {
     }
     apps_rule_match_free(&rule->app_id);
     apps_rule_match_free(&rule->instance);
+    apps_rule_match_free(&rule->role);
     apps_rule_match_free(&rule->title);
     memset(rule, 0, sizeof(*rule));
 }
@@ -151,9 +152,10 @@ static struct fbwl_apps_rule *apps_rules_match_for_view(struct fbwl_server *serv
     const char *app_id = fbwl_view_app_id(view);
     const char *instance = fbwl_view_instance(view);
     const char *title = fbwl_view_title(view);
+    const char *role = fbwl_view_role(view);
     size_t idx = 0;
     const struct fbwl_apps_rule *matched = fbwl_apps_rules_match(server->apps_rules, server->apps_rule_count,
-        app_id, instance, title, &idx);
+        app_id, instance, title, role, &idx);
     if (matched == NULL || idx >= server->apps_rule_count) {
         return NULL;
     }

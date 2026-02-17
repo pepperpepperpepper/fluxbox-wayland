@@ -2,11 +2,11 @@
 
 `fluxbox-wayland` is a **wlroots-based Wayland compositor** with Fluxbox-like policy (root menu, key/mouse bindings, workspaces, theming, lightweight).
 
-This repo is an experimental/WIP port of Fluxbox concepts from X11 to Wayland:
+This repo is **BETA**: full Wayland compatibility with an explicit **1:1 Fluxbox/X11 config parity** target (everything tracked is implemented, but still stabilizing).
 
 - **`fluxbox-wayland` is a compositor**, not an X11 window manager running “on top of” Wayland.
 - It manages native Wayland `xdg_toplevel` apps and can optionally run X11 apps via **XWayland**.
-- Classic Fluxbox config formats are intentionally reused with an explicit **1:1 parity** target; remaining gaps are tracked in `whatsleft.md`.
+- Classic Fluxbox config formats are intentionally reused with an explicit **1:1 parity** target; parity notes are tracked in `whatsleft.md`.
 
 Project notes / work tracking:
 

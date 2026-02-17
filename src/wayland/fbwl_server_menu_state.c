@@ -114,7 +114,7 @@ static const struct fbwl_apps_rule *apps_rule_for_view(const struct fbwl_server 
         return NULL;
     }
     return fbwl_apps_rules_match(server->apps_rules, server->apps_rule_count,
-        fbwl_view_app_id(view), fbwl_view_instance(view), fbwl_view_title(view), NULL);
+        fbwl_view_app_id(view), fbwl_view_instance(view), fbwl_view_title(view), fbwl_view_role(view), NULL);
 }
 
 static bool remember_selected(const struct fbwl_apps_rule *rule, enum fbwl_menu_remember_attr attr) {

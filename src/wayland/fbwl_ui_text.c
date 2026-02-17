@@ -159,8 +159,10 @@ static void normalize_font_spec(const char *in, char *out, size_t out_size) {
     out[j] = '\0';
 }
 
-struct wlr_buffer *fbwl_text_buffer_create(const char *text, int width, int height,
-        int pad_x, const float rgba[static 4], const char *font, const struct fbwl_text_effect *effect, int justify) {
+static struct wlr_buffer *fbwl_text_buffer_create_internal(const char *text, int width, int height,
+        int pad_x, const float rgba[static 4], const char *font, const struct fbwl_text_effect *effect, int justify,
+        const float underline_rgba[static 4], const char *underline_font, int underline_justify,
+        int underline_start_byte, int underline_len_bytes) {
     if (width < 1 || height < 1 || rgba == NULL) {
         return NULL;
     }
@@ -199,10 +201,10 @@ struct wlr_buffer *fbwl_text_buffer_create(const char *text, int width, int heig
     char font_norm[256];
     normalize_font_spec(font_in, font_norm, sizeof(font_norm));
     const char *font_use = font_norm[0] != '\0' ? font_norm : font_in;
-    PangoFontDescription *desc = pango_font_description_from_string(font_use);
-    if (desc != NULL) {
-        pango_font_description_set_absolute_size(desc, font_px * PANGO_SCALE);
-        pango_layout_set_font_description(layout, desc);
+    PangoFontDescription *desc_text = pango_font_description_from_string(font_use);
+    if (desc_text != NULL) {
+        pango_font_description_set_absolute_size(desc_text, font_px * PANGO_SCALE);
+        pango_layout_set_font_description(layout, desc_text);
     }
 
     pango_layout_set_text(layout, text != NULL ? text : "", -1);
@@ -259,8 +261,80 @@ struct wlr_buffer *fbwl_text_buffer_create(const char *text, int width, int heig
     cairo_move_to(cr, x, y);
     pango_cairo_show_layout(cr, layout);
 
-    if (desc != NULL) {
-        pango_font_description_free(desc);
+    if (underline_rgba != NULL && underline_len_bytes > 0 && underline_start_byte >= 0 &&
+            underline_rgba[3] > 0.0f) {
+        const char *uline_in =
+            underline_font != NULL && *underline_font != '\0' ? underline_font :
+            (font != NULL && *font != '\0' ? font : "Sans");
+        char uline_norm[256];
+        normalize_font_spec(uline_in, uline_norm, sizeof(uline_norm));
+        const char *uline_use = uline_norm[0] != '\0' ? uline_norm : uline_in;
+        PangoFontDescription *desc_uline = pango_font_description_from_string(uline_use);
+        if (desc_uline != NULL) {
+            pango_font_description_set_absolute_size(desc_uline, font_px * PANGO_SCALE);
+            pango_layout_set_font_description(layout, desc_uline);
+        }
+        PangoAlignment ualign = PANGO_ALIGN_LEFT;
+        if (underline_justify == 1) {
+            ualign = PANGO_ALIGN_CENTER;
+        } else if (underline_justify == 2) {
+            ualign = PANGO_ALIGN_RIGHT;
+        }
+        pango_layout_set_alignment(layout, ualign);
+
+        int ul_text_h = 0;
+        pango_layout_get_pixel_size(layout, NULL, &ul_text_h);
+        const int ul_y = ul_text_h < height ? (height - ul_text_h) / 2 : 0;
+        const int baseline = pango_layout_get_baseline(layout) / PANGO_SCALE;
+        int y_line = ul_y + baseline + 2;
+        if (y_line < 0) {
+            y_line = 0;
+        } else if (y_line >= height) {
+            y_line = height - 1;
+        }
+
+        const char *s = text != NULL ? text : "";
+        const int slen = (int)strlen(s);
+        int start = underline_start_byte;
+        if (start > slen) {
+            start = slen;
+        }
+        int end = start + underline_len_bytes;
+        if (end > slen) {
+            end = slen;
+        }
+
+        PangoRectangle start_rect = {0};
+        PangoRectangle end_rect = {0};
+        pango_layout_get_cursor_pos(layout, start, &start_rect, NULL);
+        pango_layout_get_cursor_pos(layout, end, &end_rect, NULL);
+
+        int x0 = x + start_rect.x / PANGO_SCALE;
+        int x1 = x + end_rect.x / PANGO_SCALE;
+        if (x1 < x0) {
+            const int tmp = x0;
+            x0 = x1;
+            x1 = tmp;
+        }
+
+        if (x1 > x0) {
+            const cairo_antialias_t old_aa = cairo_get_antialias(cr);
+            cairo_set_antialias(cr, CAIRO_ANTIALIAS_NONE);
+            cairo_set_source_rgba(cr, underline_rgba[0], underline_rgba[1], underline_rgba[2], underline_rgba[3]);
+            cairo_set_line_width(cr, 1.0);
+            cairo_move_to(cr, (double)x0 + 0.5, (double)y_line + 0.5);
+            cairo_line_to(cr, (double)x1 + 0.5, (double)y_line + 0.5);
+            cairo_stroke(cr);
+            cairo_set_antialias(cr, old_aa);
+        }
+
+        if (desc_uline != NULL) {
+            pango_font_description_free(desc_uline);
+        }
+    }
+
+    if (desc_text != NULL) {
+        pango_font_description_free(desc_text);
     }
     g_object_unref(layout);
     cairo_destroy(cr);
@@ -272,6 +346,20 @@ struct wlr_buffer *fbwl_text_buffer_create(const char *text, int width, int heig
         return NULL;
     }
     return buf;
+}
+
+struct wlr_buffer *fbwl_text_buffer_create(const char *text, int width, int height,
+        int pad_x, const float rgba[static 4], const char *font, const struct fbwl_text_effect *effect, int justify) {
+    return fbwl_text_buffer_create_internal(text, width, height, pad_x, rgba, font, effect, justify,
+        NULL, NULL, 0, -1, 0);
+}
+
+struct wlr_buffer *fbwl_text_buffer_create_underlined(const char *text, int width, int height,
+        int pad_x, const float rgba[static 4], const char *font, const struct fbwl_text_effect *effect, int justify,
+        const float underline_rgba[static 4], const char *underline_font, int underline_justify,
+        int underline_start_byte, int underline_len_bytes) {
+    return fbwl_text_buffer_create_internal(text, width, height, pad_x, rgba, font, effect, justify,
+        underline_rgba, underline_font, underline_justify, underline_start_byte, underline_len_bytes);
 }
 
 bool fbwl_text_measure(const char *text, int height, const char *font, int *out_w, int *out_h) {

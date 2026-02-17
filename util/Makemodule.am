@@ -56,6 +56,10 @@ if HAVE_SYSTEMD
 bin_PROGRAMS += \
 	fbwl-sni-item-client \
 	fbwl-xdp-portal-client
+if HAVE_XCB_COMPOSITE
+bin_PROGRAMS += \
+	xembed-sni-proxy
+endif
 endif
 endif
 
@@ -147,6 +151,22 @@ fbwl_xdp_portal_client_CPPFLAGS = \
 
 fbwl_xdp_portal_client_LDADD = \
 	$(SYSTEMD_LIBS)
+
+if HAVE_XCB_COMPOSITE
+xembed_sni_proxy_SOURCES = \
+	util/xembed-sni-proxy.c
+
+xembed_sni_proxy_CPPFLAGS = \
+	$(AM_CPPFLAGS) \
+	$(XCB_CFLAGS) \
+	$(XCB_COMPOSITE_CFLAGS) \
+	$(SYSTEMD_CFLAGS)
+
+xembed_sni_proxy_LDADD = \
+	$(XCB_LIBS) \
+	$(XCB_COMPOSITE_LIBS) \
+	$(SYSTEMD_LIBS)
+endif
 endif
 
 fbwl_cursor_shape_client_SOURCES = \
