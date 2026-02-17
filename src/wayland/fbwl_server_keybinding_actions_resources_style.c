@@ -321,26 +321,19 @@ static bool apply_updates_to_lines(char ***io_lines, size_t *io_len, const struc
     return true;
 }
 
-static bool init_update_file(const char *config_dir, const struct init_update *updates, size_t updates_len) {
-    if (config_dir == NULL || *config_dir == '\0' || updates == NULL || updates_len == 0) {
-        return false;
-    }
-
-    char *path = fbwl_path_join(config_dir, "init");
-    if (path == NULL) {
+static bool init_update_file(const char *path, const struct init_update *updates, size_t updates_len) {
+    if (path == NULL || *path == '\0' || updates == NULL || updates_len == 0) {
         return false;
     }
 
     char **lines = NULL;
     size_t len = 0;
     if (!load_lines(path, &lines, &len)) {
-        free(path);
         return false;
     }
 
     if (!apply_updates_to_lines(&lines, &len, updates, updates_len)) {
         free_lines(lines, len);
-        free(path);
         return false;
     }
 
@@ -351,7 +344,6 @@ static bool init_update_file(const char *config_dir, const struct init_update *u
         wlr_log(WLR_INFO, "Init: updated %s", path);
     }
     free_lines(lines, len);
-    free(path);
     return ok;
 }
 
@@ -455,11 +447,11 @@ void server_keybindings_set_style(void *userdata, const char *path) {
     server->style_file_override = false;
     server_apply_style_theme(server, &theme, "setstyle");
 
-    if (server->config_dir != NULL && *server->config_dir != '\0') {
+    if (server->init_file != NULL && *server->init_file != '\0') {
         struct init_update updates[] = {
             {.key = "session.styleFile", .value = server->style_file != NULL ? server->style_file : ""},
         };
-        (void)init_update_file(server->config_dir, updates, sizeof(updates) / sizeof(updates[0]));
+        (void)init_update_file(server->init_file, updates, sizeof(updates) / sizeof(updates[0]));
     }
 
     server_keybindings_save_rc(server);
@@ -522,8 +514,8 @@ static char *workspace_names_to_csv(const struct fbwm_core *wm) {
 
 void server_keybindings_save_rc(void *userdata) {
     struct fbwl_server *server = userdata;
-    if (server == NULL || server->config_dir == NULL || *server->config_dir == '\0') {
-        wlr_log(WLR_ERROR, "SaveRC: missing config_dir");
+    if (server == NULL || server->init_file == NULL || *server->init_file == '\0') {
+        wlr_log(WLR_ERROR, "SaveRC: missing init_file");
         return;
     }
 
@@ -565,7 +557,7 @@ void server_keybindings_save_rc(void *userdata) {
         {.key = "session.screen0.allowRemoteActions", .value = server->focus.allow_remote_actions ? "true" : "false"},
     };
 
-    if (init_update_file(server->config_dir, updates, sizeof(updates) / sizeof(updates[0]))) {
+    if (init_update_file(server->init_file, updates, sizeof(updates) / sizeof(updates[0]))) {
         wlr_log(WLR_INFO, "SaveRC: ok");
     } else {
         wlr_log(WLR_ERROR, "SaveRC: failed");
@@ -576,8 +568,8 @@ void server_keybindings_save_rc(void *userdata) {
 
 void server_keybindings_set_resource_value(void *userdata, const char *args) {
     struct fbwl_server *server = userdata;
-    if (server == NULL || server->config_dir == NULL || *server->config_dir == '\0') {
-        wlr_log(WLR_ERROR, "SetResourceValue: missing config_dir");
+    if (server == NULL || server->init_file == NULL || *server->init_file == '\0') {
+        wlr_log(WLR_ERROR, "SetResourceValue: missing init_file");
         return;
     }
     if (args == NULL) {
@@ -616,7 +608,7 @@ void server_keybindings_set_resource_value(void *userdata, const char *args) {
     struct init_update updates[] = {
         {.key = key, .value = value},
     };
-    (void)init_update_file(server->config_dir, updates, sizeof(updates) / sizeof(updates[0]));
+    (void)init_update_file(server->init_file, updates, sizeof(updates) / sizeof(updates[0]));
     free(tmp);
 
     wlr_log(WLR_INFO, "SetResourceValue: %s", key);

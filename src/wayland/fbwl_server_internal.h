@@ -267,6 +267,7 @@ struct fbwl_server {
     struct fbwl_menu *client_menu;
     struct fbwl_menu *slit_menu;
     char *config_dir;
+    char *init_file;
     char *keys_file;
     char *apps_file;
     char *style_file;
@@ -279,6 +280,8 @@ struct fbwl_server {
     bool apps_file_override;
     bool style_file_override;
     bool menu_file_override;
+    bool cli_no_toolbar;
+    bool cli_no_slit;
     struct fbwl_menu_ui menu_ui;
     struct fbwl_toolbar_ui toolbar_ui;
     struct fbwl_slit_ui slit_ui;
@@ -461,10 +464,13 @@ struct fbwl_server_bootstrap_options {
     const char *style_file;
     const char *menu_file;
     const char *config_dir;
+    const char *init_file;
     const float *background_color;
     int workspaces;
     bool workspaces_set;
     bool enable_xwayland;
+    bool no_toolbar;
+    bool no_slit;
     bool log_protocol;
 };
 
@@ -493,7 +499,7 @@ bool fbwl_titlebar_buttons_parse(const char *s, enum fbwl_decor_hit_kind *out, s
 void fbwl_apply_workspace_names_from_init(struct fbwm_core *wm, const char *csv);
 
 void fbwl_resource_db_free(struct fbwl_resource_db *db);
-bool fbwl_resource_db_load_init(struct fbwl_resource_db *db, const char *config_dir);
+bool fbwl_resource_db_load_init(struct fbwl_resource_db *db, const char *config_dir, const char *init_file);
 const char *fbwl_resource_db_get(const struct fbwl_resource_db *db, const char *key);
 size_t fbwl_resource_db_max_screen_index(const struct fbwl_resource_db *db);
 const char *fbwl_resource_db_get_screen(const struct fbwl_resource_db *db, size_t screen, const char *suffix);

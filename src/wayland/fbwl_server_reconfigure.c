@@ -78,9 +78,11 @@ void server_reconfigure(struct fbwl_server *server) {
     bool window_alpha_defaults_changed = false;
     bool default_deco_changed = false;
 
-    if (server->config_dir != NULL && *server->config_dir != '\0') {
+    const char *config_dir = server->config_dir;
+    const char *init_file = server->init_file;
+    if ((config_dir != NULL && *config_dir != '\0') || (init_file != NULL && *init_file != '\0')) {
         struct fbwl_resource_db init = {0};
-        if (fbwl_resource_db_load_init(&init, server->config_dir)) {
+        if (fbwl_resource_db_load_init(&init, config_dir, init_file)) {
             bool bool_val = false;
             int int_val = 0;
 
@@ -245,6 +247,12 @@ void server_reconfigure(struct fbwl_server *server) {
                 toolbar_needs_rebuild = true;
             }
             server->toolbar_ui.hidden = false;
+            if (server->cli_no_toolbar) {
+                server->toolbar_ui.enabled = false;
+            }
+            if (server->cli_no_slit) {
+                server->slit_ui.enabled = false;
+            }
             if (server->toolbar_ui.enabled != old_toolbar_enabled ||
                     server->toolbar_ui.placement != old_toolbar_placement ||
                     server->toolbar_ui.on_head != old_toolbar_on_head ||

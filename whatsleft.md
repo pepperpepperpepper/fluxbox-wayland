@@ -7,6 +7,14 @@ Completed items are kept below for historical context.
 
 ## Remaining for 1:1 parity
 
+### CLI / Startup Compatibility (Fluxbox/X11)
+
+- [x] `fluxbox-wayland` supports Fluxbox/X11-style single-dash long options:
+  - [x] `-rc <init-file>` loads an alternate init file and treats its directory as the config base (relative paths resolve like X11)
+  - [x] `SaveRc` / `SetResourceValue` / `SetStyle` update the chosen `-rc` file (not just `config_dir/init`)
+  - [x] `-no-toolbar` and `-no-slit` disable those UI components regardless of init configuration
+  - [x] Smoke: deterministic headless coverage (`scripts/fbwl-smoke-cli-rc.sh`)
+
 ### Styles / Themes (`fluxbox-style(5)`)
 
 The current Wayland theme implementation is intentionally simplified (mostly colors/fonts). True 1:1 parity requires implementing Fluxbox’s texture/pixmap style engine.

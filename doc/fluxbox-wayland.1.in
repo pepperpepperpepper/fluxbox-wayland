@@ -6,7 +6,7 @@
 fluxbox-wayland \- a wlroots-based Wayland compositor with Fluxbox-like policy
 .SH "SYNOPSIS"
 .sp
-\fBfluxbox-wayland\fR [\-\-socket \fINAME\fR] [\-\-ipc-socket \fIPATH\fR] [\-\-no-xwayland] [\-\-bg-color \fI#RRGGBB[AA]\fR] [\-s \fICMD\fR] [\-\-terminal \fICMD\fR] [\-\-workspaces \fIN\fR] [\-\-config-dir \fIDIR\fR] [\-\-keys \fIFILE\fR] [\-\-apps \fIFILE\fR] [\-\-style \fIFILE\fR] [\-\-menu \fIFILE\fR] [\-\-log-level \fILEVEL\fR] [\-\-log-protocol]
+\fBfluxbox-wayland\fR [\-\-socket \fINAME\fR] [\-\-ipc-socket \fIPATH\fR] [\-\-no-xwayland] [\-\-bg-color \fI#RRGGBB[AA]\fR] [\-s \fICMD\fR] [\-\-terminal \fICMD\fR] [\-\-workspaces \fIN\fR] [\-\-config-dir \fIDIR\fR] [\-rc \fIFILE\fR] [\-no-toolbar] [\-no-slit] [\-\-keys \fIFILE\fR] [\-\-apps \fIFILE\fR] [\-\-style \fIFILE\fR] [\-\-menu \fIFILE\fR] [\-\-log-level \fILEVEL\fR] [\-\-log-protocol]
 .SH "DESCRIPTION"
 .sp
 \fBfluxbox-wayland(1)\fR is a Wayland compositor (not an X11 window manager running under Wayland).
@@ -53,23 +53,39 @@ Set the number of workspaces.
 .PP
 \fB\-\-config-dir\fR \fIDIR\fR
 .RS 4
-Load a minimal subset of classic Fluxbox configuration from \fIDIR\fR (for example \fB~/.fluxbox\fR):
-workspace count (from \fBinit\fR), plus discovery of \fBkeys\fR/\fBapps\fR/\fBmenu\fR and style file references from \fBinit\fR.
+Load classic Fluxbox configuration from \fIDIR\fR (for example \fB~/.fluxbox\fR), including \fBinit\fR, \fBkeys\fR, \fBapps\fR, \fBmenu\fR, and \fBstyle\fR.
+.RE
+.PP
+\fB\-rc\fR \fIFILE\fR
+.RS 4
+Load a classic Fluxbox init file from \fIFILE\fR (Fluxbox/X11 compatibility).
+Relative paths referenced by the init file are resolved against the init file's directory.
+Commands that update init resources (such as \fBSaveRc\fR and \fBSetResourceValue\fR) write back to this file.
+.RE
+.PP
+\fB\-no-toolbar\fR
+.RS 4
+Disable the toolbar regardless of init configuration (Fluxbox/X11 compatibility).
+.RE
+.PP
+\fB\-no-slit\fR
+.RS 4
+Disable the slit regardless of init configuration (Fluxbox/X11 compatibility).
 .RE
 .PP
 \fB\-\-keys\fR \fIFILE\fR
 .RS 4
-Load keybindings from a Fluxbox-like \fBkeys\fR file (subset).
+Load keybindings from a Fluxbox \fBkeys\fR file.
 .RE
 .PP
 \fB\-\-apps\fR \fIFILE\fR
 .RS 4
-Load application rules from a Fluxbox-like \fBapps\fR file (subset).
+Load application rules from a Fluxbox \fBapps\fR file.
 .RE
 .PP
 \fB\-\-style\fR \fIFILE\fR
 .RS 4
-Load a minimal Fluxbox style/theme file (subset).
+Load a Fluxbox style/theme file.
 .RE
 .PP
 \fB\-\-menu\fR \fIFILE\fR

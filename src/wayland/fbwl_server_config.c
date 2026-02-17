@@ -268,17 +268,24 @@ static bool fbwl_resource_db_load_file(struct fbwl_resource_db *db, const char *
     return true;
 }
 
-bool fbwl_resource_db_load_init(struct fbwl_resource_db *db, const char *config_dir) {
+bool fbwl_resource_db_load_init(struct fbwl_resource_db *db, const char *config_dir, const char *init_file) {
     if (db == NULL) {
         return false;
     }
     fbwl_resource_db_free(db);
 
-    char *path = fbwl_path_join(config_dir, "init");
-    if (path == NULL) {
+    char *path = NULL;
+    if (init_file != NULL && *init_file != '\0') {
+        path = fbwl_resolve_config_path(NULL, init_file);
+        if (path == NULL) {
+            path = strdup(init_file);
+        }
+    } else if (config_dir != NULL && *config_dir != '\0') {
+        path = fbwl_path_join(config_dir, "init");
+    } else {
         return false;
     }
-    if (!fbwl_file_exists(path)) {
+    if (path == NULL || !fbwl_file_exists(path)) {
         free(path);
         return false;
     }

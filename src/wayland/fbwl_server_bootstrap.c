@@ -88,6 +88,20 @@ static bool cmd_contains_startmoving(const char *s) {
     return false;
 }
 
+static char *path_dirname_owned(const char *path) {
+    if (path == NULL || *path == '\0') {
+        return NULL;
+    }
+    const char *slash = strrchr(path, '/');
+    if (slash == NULL) {
+        return strdup(".");
+    }
+    if (slash == path) {
+        return strdup("/");
+    }
+    return strndup(path, (size_t)(slash - path));
+}
+
 static bool server_mousebindings_add_from_keys_file(void *userdata, enum fbwl_mousebinding_context context,
         enum fbwl_mousebinding_event_kind event_kind, int button, uint32_t modifiers, bool is_double,
         enum fbwl_keybinding_action action, int arg, const char *cmd, const char *mode) {
@@ -413,14 +427,36 @@ bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_
     const char *window_menu_file = NULL;
     const char *slitlist_file = NULL;
     const char *config_dir = opts->config_dir;
+    const char *init_file = opts->init_file;
 
     server->workspaces_override = workspaces_set;
     server->keys_file_override = opts->keys_file != NULL;
     server->apps_file_override = opts->apps_file != NULL;
     server->style_file_override = opts->style_file != NULL;
     server->menu_file_override = opts->menu_file != NULL;
+    server->cli_no_toolbar = opts->no_toolbar;
+    server->cli_no_slit = opts->no_slit;
 
     free(server->config_dir);
+    free(server->init_file);
+    server->init_file = NULL;
+
+    char *init_file_owned = NULL;
+    char *config_dir_from_init_owned = NULL;
+    if (init_file != NULL && *init_file != '\0') {
+        init_file_owned = fbwl_resolve_config_path(NULL, init_file);
+        if (init_file_owned == NULL) {
+            init_file_owned = strdup(init_file);
+        }
+        if (init_file_owned != NULL) {
+            config_dir_from_init_owned = path_dirname_owned(init_file_owned);
+            if (config_dir_from_init_owned != NULL) {
+                config_dir = config_dir_from_init_owned;
+            }
+            init_file = init_file_owned;
+        }
+    }
+
     server->config_dir = config_dir != NULL ? fbwl_resolve_config_path(NULL, config_dir) : NULL;
     if (server->config_dir == NULL && config_dir != NULL) {
         server->config_dir = strdup(config_dir);
@@ -428,6 +464,15 @@ bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_
     if (server->config_dir != NULL) {
         config_dir = server->config_dir;
     }
+    if (init_file_owned != NULL) {
+        server->init_file = init_file_owned;
+        init_file_owned = NULL;
+    } else if (config_dir != NULL && *config_dir != '\0') {
+        server->init_file = fbwl_path_join(config_dir, "init");
+    }
+
+    free(init_file_owned);
+    free(config_dir_from_init_owned);
 
     char *keys_file_owned = NULL;
     char *apps_file_owned = NULL;
@@ -451,7 +496,7 @@ bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_
     }
     if (config_dir != NULL) {
         struct fbwl_resource_db init = {0};
-        (void)fbwl_resource_db_load_init(&init, config_dir);
+        (void)fbwl_resource_db_load_init(&init, config_dir, server->init_file);
 
         bool bool_val = false;
         int int_val = 0;
@@ -626,6 +671,13 @@ bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_
         const char *default_deco = fbwl_resource_db_get(&init, "session.screen0.defaultDeco");
         if (default_deco != NULL) {
             server->default_deco_enabled = strcasecmp(default_deco, "NONE") != 0;
+        }
+
+        if (server->cli_no_toolbar) {
+            server->toolbar_ui.enabled = false;
+        }
+        if (server->cli_no_slit) {
+            server->slit_ui.enabled = false;
         }
 
         wlr_log(WLR_INFO,
@@ -803,6 +855,12 @@ bool fbwl_server_bootstrap(struct fbwl_server *server, const struct fbwl_server_
     free(slitlist_file_owned);
 
     server_menu_create_window(server);
+    if (server->cli_no_toolbar) {
+        server->toolbar_ui.enabled = false;
+    }
+    if (server->cli_no_slit) {
+        server->slit_ui.enabled = false;
+    }
     server_toolbar_ui_rebuild(server);
     (void)fbwl_ui_slit_set_order_file(&server->slit_ui, server->slitlist_file);
     server_slit_ui_rebuild(server);

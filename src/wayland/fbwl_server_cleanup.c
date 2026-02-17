@@ -83,6 +83,8 @@ void fbwl_server_finish(struct fbwl_server *server) {
     server_menu_free(server);
     free(server->config_dir);
     server->config_dir = NULL;
+    free(server->init_file);
+    server->init_file = NULL;
     free(server->group_file);
     server->group_file = NULL;
     free(server->keys_file);

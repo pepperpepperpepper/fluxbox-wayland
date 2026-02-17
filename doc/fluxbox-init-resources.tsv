@@ -7,7 +7,7 @@ session.colorsPerChannel	integer	global	doc+code
 session.configVersion	integer	global	code
 session.doubleClickInterval	integer	global	doc+code
 session.forcePseudoTransparency	boolean	global	doc+code
-session.groupFile	location	global	doc
+session.groupFile	location	global	doc+code
 session.ignoreBorder	boolean	global	doc+code
 session.keyFile	location	global	doc+code
 session.menuFile	location	global	doc+code
@@ -54,6 +54,7 @@ session.screenN.slit.onhead	integer	screen	doc+code
 session.screenN.slit.placement	placement	screen	doc+code
 session.screenN.strftimeFormat	date	screen	doc+code
 session.screenN.struts	integer	screen	doc+code
+session.screenN.struts.	unknown	screen	code
 session.screenN.struts.<ai>	unknown	screen	code
 session.screenN.systray.pinLeft	unknown	screen	code
 session.screenN.systray.pinRight	unknown	screen	code
@@ -83,7 +84,7 @@ session.screenN.window.focus.alpha	integer	screen	doc+code
 session.screenN.window.unfocus.alpha	integer	screen	doc+code
 session.screenN.windowMenu	location	screen	doc+code
 session.screenN.windowPlacement	strategy	screen	doc+code
-session.screenN.workspaceNames	names	screen	doc
+session.screenN.workspaceNames	names	screen	doc+code
 session.screenN.workspaces	integer	screen	doc+code
 session.screenN.workspacewarping	boolean	screen	doc+code
 session.screenN.workspacewarpinghorizontal	unknown	screen	code
@@ -95,5 +96,6 @@ session.styleFile	location	global	doc+code
 session.styleOverlay	location	global	doc+code
 session.tabPadding	integer	global	doc+code
 session.tabsAttachArea	enum	global	doc+code
-session.titlebar.left	buttons	global	doc
-session.titlebar.right	buttons	global	doc
+session.titlebar.left	buttons	global	doc+code
+session.titlebar.right	buttons	global	doc+code
+session.windowMenu	unknown	global	code

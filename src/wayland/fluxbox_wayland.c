@@ -13,7 +13,7 @@
 #include "wayland/fbwl_util.h"
 
 static void usage(const char *argv0) {
-    printf("Usage: %s [--socket NAME] [--ipc-socket PATH] [--no-xwayland] [--bg-color #RRGGBB[AA]] [-s CMD] [--terminal CMD] [--workspaces N] [--config-dir DIR] [--keys FILE] [--apps FILE] [--style FILE] [--menu FILE] [--log-level LEVEL] [--log-protocol]\n", argv0);
+    printf("Usage: %s [--socket NAME] [--ipc-socket PATH] [--no-xwayland] [--bg-color #RRGGBB[AA]] [-s CMD] [--terminal CMD] [--workspaces N] [--config-dir DIR] [-rc FILE] [-no-toolbar] [-no-slit] [--keys FILE] [--apps FILE] [--style FILE] [--menu FILE] [--log-level LEVEL] [--log-protocol]\n", argv0);
     printf("Keybindings:\n");
     printf("  Alt+Return: spawn terminal\n");
     printf("  Alt+Escape: exit\n");
@@ -61,10 +61,13 @@ int main(int argc, char **argv) {
     const char *style_file = NULL;
     const char *menu_file = NULL;
     const char *config_dir = NULL;
+    const char *init_file = NULL;
     float background_color[4] = {0.08f, 0.08f, 0.08f, 1.0f};
     int workspaces = 4;
     bool workspaces_set = false;
     bool enable_xwayland = true;
+    bool no_toolbar = false;
+    bool no_slit = false;
     enum wlr_log_importance log_level = WLR_INFO;
     bool log_protocol = false;
 
@@ -76,6 +79,9 @@ int main(int argc, char **argv) {
         {"terminal", required_argument, NULL, 2},
         {"workspaces", required_argument, NULL, 3},
         {"config-dir", required_argument, NULL, 8},
+        {"rc", required_argument, NULL, 14},
+        {"no-toolbar", no_argument, NULL, 15},
+        {"no-slit", no_argument, NULL, 16},
         {"keys", required_argument, NULL, 6},
         {"apps", required_argument, NULL, 7},
         {"style", required_argument, NULL, 9},
@@ -87,7 +93,7 @@ int main(int argc, char **argv) {
     };
 
     int c;
-    while ((c = getopt_long(argc, argv, "hs:", options, NULL)) != -1) {
+    while ((c = getopt_long_only(argc, argv, "hs:", options, NULL)) != -1) {
         switch (c) {
         case 1:
             socket_name = optarg;
@@ -116,6 +122,15 @@ int main(int argc, char **argv) {
             break;
         case 8:
             config_dir = optarg;
+            break;
+        case 14:
+            init_file = optarg;
+            break;
+        case 15:
+            no_toolbar = true;
+            break;
+        case 16:
+            no_slit = true;
             break;
         case 6:
             keys_file = optarg;
@@ -165,10 +180,13 @@ int main(int argc, char **argv) {
         .style_file = style_file,
         .menu_file = menu_file,
         .config_dir = config_dir,
+        .init_file = init_file,
         .background_color = background_color,
         .workspaces = workspaces,
         .workspaces_set = workspaces_set,
         .enable_xwayland = enable_xwayland,
+        .no_toolbar = no_toolbar,
+        .no_slit = no_slit,
         .log_protocol = log_protocol,
     };
 

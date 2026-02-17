@@ -184,6 +184,7 @@ scripts=(
 	  scripts/fbwl-smoke-mousebindings-wheel-click.sh
 	  scripts/fbwl-smoke-ignore-border.sh
 	  scripts/fbwl-smoke-grips.sh
+	  scripts/fbwl-smoke-cli-rc.sh
 	  scripts/fbwl-smoke-config-dir.sh
   scripts/fbwl-smoke-allow-remote-actions.sh
   scripts/fbwl-smoke-no-focus-while-typing.sh
