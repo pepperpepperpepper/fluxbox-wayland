@@ -88,6 +88,7 @@ scripts=(
   scripts/fbwl-smoke-xvfb-portal.sh
   scripts/fbwl-smoke-xwayland.sh
   scripts/fbwl-smoke-xwayland-window-attention.sh
+  scripts/fbwl-smoke-focushidden.sh
   scripts/fbwl-smoke-xembed-tray.sh
   scripts/fbwl-smoke-xwayland-net-wm-icon.sh
   scripts/fbwl-smoke-xwayland-xprop-clientpattern.sh
@@ -134,6 +135,7 @@ scripts=(
   scripts/fbwl-smoke-style-menu-underline-color.sh
   scripts/fbwl-smoke-style-toolbar-shaped-scale.sh
   scripts/fbwl-smoke-menu.sh
+  scripts/fbwl-smoke-menu-icons.sh
   scripts/fbwl-smoke-menu-search.sh
   scripts/fbwl-smoke-menu-escaping.sh
   scripts/fbwl-smoke-window-menu.sh
@@ -164,9 +166,10 @@ scripts=(
 	  scripts/fbwl-smoke-input.sh
 	  scripts/fbwl-smoke-keybinding-commands.sh
 	  scripts/fbwl-smoke-keybinding-parity-commands.sh
-	  scripts/fbwl-smoke-layer-ui-toggle-cmds.sh
-	  scripts/fbwl-smoke-keybinding-cmdlang.sh
+  scripts/fbwl-smoke-layer-ui-toggle-cmds.sh
+  scripts/fbwl-smoke-keybinding-cmdlang.sh
   scripts/fbwl-smoke-cmdlang-if-foreach.sh
+  scripts/fbwl-smoke-macrocmd-retarget.sh
   scripts/fbwl-smoke-keybinding-head-mark.sh
   scripts/fbwl-smoke-resource-style-cmds.sh
   scripts/fbwl-smoke-keys-file.sh
@@ -175,6 +178,7 @@ scripts=(
   scripts/fbwl-smoke-changeworkspace-event.sh
   scripts/fbwl-smoke-setenv-export.sh
   scripts/fbwl-smoke-activate-focus-pattern.sh
+  scripts/fbwl-smoke-focus-directional.sh
   scripts/fbwl-smoke-nextwindow-clientpattern.sh
   scripts/fbwl-smoke-clientpattern-regex-quirk.sh
   scripts/fbwl-smoke-focusmodel-aliases.sh

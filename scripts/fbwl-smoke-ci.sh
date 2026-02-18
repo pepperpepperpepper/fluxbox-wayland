@@ -122,8 +122,10 @@ scripts=(
   scripts/fbwl-smoke-xvfb-xwayland.sh
   scripts/fbwl-smoke-xvfb-portal.sh
   scripts/fbwl-smoke-xwayland.sh
+  scripts/fbwl-smoke-xwayland-window-attention.sh
   scripts/fbwl-smoke-xembed-tray.sh
   scripts/fbwl-smoke-xwayland-net-wm-icon.sh
+  scripts/fbwl-smoke-xwayland-xprop-clientpattern.sh
   scripts/fbwl-smoke-xwayland-max-ignore-increment.sh
   scripts/fbwl-smoke-ipc.sh
   scripts/fbwl-smoke-restart.sh
@@ -179,42 +181,52 @@ scripts=(
 			  scripts/fbwl-smoke-screen1-toolbar-overrides.sh
 			  scripts/fbwl-smoke-screen1-menu-overrides.sh
 			  scripts/fbwl-smoke-strftime-format.sh
-			  scripts/fbwl-smoke-iconbar.sh
-			  scripts/fbwl-smoke-iconbar-resources.sh
-			  scripts/fbwl-smoke-clientmenu-usepixmap.sh
-			  scripts/fbwl-smoke-tooltip-delay.sh
-			  scripts/fbwl-smoke-command-dialog.sh
-	  scripts/fbwl-smoke-osd.sh
+				  scripts/fbwl-smoke-iconbar.sh
+				  scripts/fbwl-smoke-iconbar-resources.sh
+				  scripts/fbwl-smoke-clientmenu-usepixmap.sh
+				  scripts/fbwl-smoke-custommenu-clientmenu-pattern.sh
+				  scripts/fbwl-smoke-tooltip-delay.sh
+				  scripts/fbwl-smoke-command-dialog.sh
+		  scripts/fbwl-smoke-osd.sh
   scripts/fbwl-smoke-idle.sh
   scripts/fbwl-smoke-session-lock.sh
   scripts/fbwl-smoke-shortcuts-inhibit.sh
   scripts/fbwl-smoke-single-pixel-buffer.sh
-	  scripts/fbwl-smoke-text-input.sh
-	  scripts/fbwl-smoke-input.sh
-		  scripts/fbwl-smoke-keybinding-commands.sh
-			  scripts/fbwl-smoke-keys-file.sh
-			  scripts/fbwl-smoke-keys-chaining.sh
-			  scripts/fbwl-smoke-changeworkspace-event.sh
-			  scripts/fbwl-smoke-setenv-export.sh
-			  scripts/fbwl-smoke-activate-focus-pattern.sh
-			  scripts/fbwl-smoke-nextwindow-clientpattern.sh
-		  scripts/fbwl-smoke-focusmodel-aliases.sh
-		  scripts/fbwl-smoke-focushidden.sh
-		  scripts/fbwl-smoke-doubleclick.sh
-		  scripts/fbwl-smoke-mousebindings-click-move.sh
+		  scripts/fbwl-smoke-text-input.sh
+		  scripts/fbwl-smoke-input.sh
+			  scripts/fbwl-smoke-keybinding-commands.sh
+			  scripts/fbwl-smoke-keybinding-parity-commands.sh
+			  scripts/fbwl-smoke-layer-ui-toggle-cmds.sh
+			  scripts/fbwl-smoke-keybinding-cmdlang.sh
+			  scripts/fbwl-smoke-keybinding-head-mark.sh
+			  scripts/fbwl-smoke-resource-style-cmds.sh
+			  scripts/fbwl-smoke-macrocmd-retarget.sh
+				  scripts/fbwl-smoke-keys-file.sh
+				  scripts/fbwl-smoke-keys-chaining.sh
+				  scripts/fbwl-smoke-changeworkspace-event.sh
+				  scripts/fbwl-smoke-setenv-export.sh
+				  scripts/fbwl-smoke-activate-focus-pattern.sh
+				  scripts/fbwl-smoke-focus-directional.sh
+				  scripts/fbwl-smoke-nextwindow-clientpattern.sh
+				  scripts/fbwl-smoke-clientpattern-regex-quirk.sh
+			  scripts/fbwl-smoke-focusmodel-aliases.sh
+			  scripts/fbwl-smoke-focushidden.sh
+			  scripts/fbwl-smoke-doubleclick.sh
+			  scripts/fbwl-smoke-mousebindings-click-move.sh
 	  scripts/fbwl-smoke-ignore-border.sh
 	  scripts/fbwl-smoke-grips.sh
   scripts/fbwl-smoke-config-dir.sh
   scripts/fbwl-smoke-allow-remote-actions.sh
   scripts/fbwl-smoke-no-focus-while-typing.sh
-	  scripts/fbwl-smoke-apps-rules.sh
-	  scripts/fbwl-smoke-apps-hidden.sh
-	  scripts/fbwl-smoke-apps-tab.sh
-	  scripts/fbwl-smoke-apps-rules-xwayland.sh
-	  scripts/fbwl-smoke-apps-ignore-size-hints.sh
-	  scripts/fbwl-smoke-edge-snap.sh
-	  scripts/fbwl-smoke-move-resize.sh
-	  scripts/fbwl-smoke-keyboard-move-resize.sh
+		  scripts/fbwl-smoke-apps-rules.sh
+		  scripts/fbwl-smoke-apps-hidden.sh
+		  scripts/fbwl-smoke-apps-tab.sh
+		  scripts/fbwl-smoke-apps-matchlimit.sh
+		  scripts/fbwl-smoke-apps-rules-xwayland.sh
+		  scripts/fbwl-smoke-apps-ignore-size-hints.sh
+		  scripts/fbwl-smoke-edge-snap.sh
+		  scripts/fbwl-smoke-move-resize.sh
+		  scripts/fbwl-smoke-keyboard-move-resize.sh
 	  scripts/fbwl-smoke-geometry-cmds.sh
 	  scripts/fbwl-smoke-workspaces.sh
 	  scripts/fbwl-smoke-workspace-add-remove-name.sh
@@ -234,6 +246,7 @@ scripts=(
 	  scripts/fbwl-smoke-mousebindings-ontab.sh
   scripts/fbwl-smoke-tabs-ui-mousefocus.sh
   scripts/fbwl-smoke-tabs-attach-area.sh
+  scripts/fbwl-smoke-tabs-commands.sh
   scripts/fbwl-smoke-tabs-maxover.sh
   scripts/fbwl-smoke-maximize-axis-toggle.sh
   scripts/fbwl-smoke-maximize-fullscreen.sh
