@@ -130,7 +130,9 @@ scripts=(
   scripts/fbwl-smoke-ipc.sh
   scripts/fbwl-smoke-restart.sh
   scripts/fbwl-smoke-startfluxbox-wayland.sh
+  scripts/fbwl-smoke-cli-rc.sh
   scripts/fbwl-smoke-fluxbox-remote.sh
+  scripts/fbwl-smoke-clientpatterntest.sh
   scripts/fbwl-smoke-sni.sh
   scripts/fbwl-smoke-tray.sh
   scripts/fbwl-smoke-tray-iconname.sh
@@ -163,6 +165,10 @@ scripts=(
 	  scripts/fbwl-smoke-style-textures.sh
 	  scripts/fbwl-smoke-style-justify.sh
 	  scripts/fbwl-smoke-style-window-bevel.sh
+	  scripts/fbwl-smoke-style-window-round-corners.sh
+	  scripts/fbwl-smoke-style-menu-round-corners.sh
+	  scripts/fbwl-smoke-style-menu-underline-color.sh
+	  scripts/fbwl-smoke-style-toolbar-shaped-scale.sh
 	  scripts/fbwl-smoke-menu.sh
 	  scripts/fbwl-smoke-left-click-menu.sh
 	  scripts/fbwl-smoke-menu-search.sh
@@ -194,14 +200,20 @@ scripts=(
   scripts/fbwl-smoke-single-pixel-buffer.sh
 		  scripts/fbwl-smoke-text-input.sh
 		  scripts/fbwl-smoke-input.sh
+			  scripts/fbwl-smoke-focusnewwindows.sh
+			  scripts/fbwl-smoke-clickraises.sh
+			  scripts/fbwl-smoke-autoraise.sh
 			  scripts/fbwl-smoke-keybinding-commands.sh
 			  scripts/fbwl-smoke-keybinding-parity-commands.sh
 			  scripts/fbwl-smoke-layer-ui-toggle-cmds.sh
 			  scripts/fbwl-smoke-keybinding-cmdlang.sh
+			  scripts/fbwl-smoke-cmdlang-if-foreach.sh
 			  scripts/fbwl-smoke-keybinding-head-mark.sh
 			  scripts/fbwl-smoke-resource-style-cmds.sh
+			  scripts/fbwl-smoke-cache-resources.sh
 			  scripts/fbwl-smoke-macrocmd-retarget.sh
 				  scripts/fbwl-smoke-keys-file.sh
+				  scripts/fbwl-smoke-bindkey.sh
 				  scripts/fbwl-smoke-keys-chaining.sh
 				  scripts/fbwl-smoke-changeworkspace-event.sh
 				  scripts/fbwl-smoke-setenv-export.sh
@@ -213,12 +225,17 @@ scripts=(
 			  scripts/fbwl-smoke-focushidden.sh
 			  scripts/fbwl-smoke-doubleclick.sh
 			  scripts/fbwl-smoke-mousebindings-click-move.sh
+			  scripts/fbwl-smoke-mousebindings-fluxconf-mangled.sh
+			  scripts/fbwl-smoke-mousebindings-winbutton-contexts.sh
+			  scripts/fbwl-smoke-mousebindings-ontoolbar-precedence.sh
+			  scripts/fbwl-smoke-mousebindings-wheel-click.sh
 	  scripts/fbwl-smoke-ignore-border.sh
 	  scripts/fbwl-smoke-grips.sh
   scripts/fbwl-smoke-config-dir.sh
   scripts/fbwl-smoke-allow-remote-actions.sh
   scripts/fbwl-smoke-no-focus-while-typing.sh
 		  scripts/fbwl-smoke-apps-rules.sh
+		  scripts/fbwl-smoke-apps-deco-mask.sh
 		  scripts/fbwl-smoke-apps-hidden.sh
 		  scripts/fbwl-smoke-apps-tab.sh
 		  scripts/fbwl-smoke-apps-matchlimit.sh
@@ -227,6 +244,7 @@ scripts=(
 		  scripts/fbwl-smoke-edge-snap.sh
 		  scripts/fbwl-smoke-move-resize.sh
 		  scripts/fbwl-smoke-keyboard-move-resize.sh
+		  scripts/fbwl-smoke-startresizing-args.sh
 	  scripts/fbwl-smoke-geometry-cmds.sh
 	  scripts/fbwl-smoke-workspaces.sh
 	  scripts/fbwl-smoke-workspace-add-remove-name.sh

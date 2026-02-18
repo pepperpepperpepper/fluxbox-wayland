@@ -164,6 +164,9 @@ scripts=(
   scripts/fbwl-smoke-single-pixel-buffer.sh
   scripts/fbwl-smoke-text-input.sh
 	  scripts/fbwl-smoke-input.sh
+	  scripts/fbwl-smoke-focusnewwindows.sh
+	  scripts/fbwl-smoke-clickraises.sh
+	  scripts/fbwl-smoke-autoraise.sh
 	  scripts/fbwl-smoke-keybinding-commands.sh
 	  scripts/fbwl-smoke-keybinding-parity-commands.sh
   scripts/fbwl-smoke-layer-ui-toggle-cmds.sh
@@ -172,6 +175,7 @@ scripts=(
   scripts/fbwl-smoke-macrocmd-retarget.sh
   scripts/fbwl-smoke-keybinding-head-mark.sh
   scripts/fbwl-smoke-resource-style-cmds.sh
+  scripts/fbwl-smoke-cache-resources.sh
   scripts/fbwl-smoke-keys-file.sh
   scripts/fbwl-smoke-bindkey.sh
   scripts/fbwl-smoke-keys-chaining.sh
