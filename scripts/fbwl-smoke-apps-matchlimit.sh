@@ -65,20 +65,36 @@ FBW_PID=$!
 
 timeout 5 bash -c "until rg -q 'Running fluxbox-wayland' '$LOG'; do sleep 0.05; done"
 
-./fbwl-smoke-client --socket "$SOCKET" --app-id mlimit --title mlimit-1 --stay-ms 20000 >/dev/null 2>&1 &
-A_PID=$!
-./fbwl-smoke-client --socket "$SOCKET" --app-id mlimit --title mlimit-2 --stay-ms 20000 >/dev/null 2>&1 &
-B_PID=$!
-./fbwl-smoke-client --socket "$SOCKET" --app-id mlimit --title mlimit-3 --stay-ms 20000 >/dev/null 2>&1 &
-C_PID=$!
+spawn_client() {
+  local title="$1"
+  ./fbwl-smoke-client --socket "$SOCKET" --app-id mlimit --title "$title" --stay-ms 20000 >/dev/null 2>&1 &
+  echo $!
+}
 
-timeout 10 bash -c "until rg -q 'Place: mlimit-1 ' '$LOG'; do sleep 0.05; done"
-timeout 10 bash -c "until rg -q 'Place: mlimit-2 ' '$LOG'; do sleep 0.05; done"
-timeout 10 bash -c "until rg -q 'Place: mlimit-3 ' '$LOG'; do sleep 0.05; done"
+wait_place() {
+  local title="$1"
+  timeout 10 bash -c "until rg -q 'Place: ${title} ' '$LOG'; do sleep 0.05; done"
+}
 
-timeout 5 bash -c "until rg -q 'Apps: match rule=0 title=mlimit-1 ' '$LOG'; do sleep 0.05; done"
-timeout 5 bash -c "until rg -q 'Apps: match rule=0 title=mlimit-2 ' '$LOG'; do sleep 0.05; done"
-if rg -q 'Apps: match rule=0 title=mlimit-3 ' "$LOG"; then
+wait_apps_match() {
+  local title="$1"
+  timeout 5 bash -c "until rg -q 'Apps: match rule=0 title=${title} ' '$LOG'; do sleep 0.05; done"
+}
+
+LOG_OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+A_PID=$(spawn_client mlimit-1)
+wait_place mlimit-1
+wait_apps_match mlimit-1
+
+LOG_OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+B_PID=$(spawn_client mlimit-2)
+wait_place mlimit-2
+wait_apps_match mlimit-2
+
+LOG_OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+C_PID=$(spawn_client mlimit-3)
+wait_place mlimit-3
+if timeout 1 bash -c "until tail -c +$((LOG_OFFSET + 1)) '$LOG' | rg -q 'Apps: match rule=0 title=mlimit-3 '; do sleep 0.05; done"; then
   echo "unexpected match-limit behavior: rule applied to third client (log=$LOG)" >&2
   exit 1
 fi
@@ -104,4 +120,3 @@ timeout 10 bash -c "until rg -q 'Place: mlimit-4 ' '$LOG'; do sleep 0.05; done"
 timeout 5 bash -c "until rg -q 'Apps: match rule=0 title=mlimit-4 ' '$LOG'; do sleep 0.05; done"
 
 echo "ok: apps rules {N} match-limit smoke passed (socket=$SOCKET log=$LOG keys=$KEYS_FILE apps=$APPS_FILE)"
-
