@@ -94,6 +94,9 @@ dbus-run-session -- bash -c '
   XEMBED_PID=$!
 
   timeout 10 bash -c "until rg -q \"Toolbar: tray item idx=0\" \"$LOG\"; do sleep 0.05; done"
+  # The tray slot can be created before the item icon has propagated over DBus and the toolbar has rebuilt.
+  # Wait for the icon update event to avoid racing the pixel sample.
+  timeout 10 bash -c "until rg -q \"SNI: icon updated\" \"$LOG\"; do sleep 0.05; done"
 
   pos_line="$(rg -m1 "Toolbar: position " "$LOG")"
   if [[ "$pos_line" =~ x=([-0-9]+)[[:space:]]+y=([-0-9]+)[[:space:]]+h=([0-9]+) ]]; then
@@ -117,7 +120,15 @@ dbus-run-session -- bash -c '
   SAMPLE_X=$((X0 + LX + W / 2))
   SAMPLE_Y=$((Y0 + H / 2))
 
-  if ! ./fbwl-screencopy-client --socket "$SOCKET" --timeout-ms 4000 --sample-x "$SAMPLE_X" --sample-y "$SAMPLE_Y" --expect-rgb "$ICON_RGB" >/dev/null 2>&1; then
+  if ! timeout 5 bash -c "\
+    for _i in {1..50}; do \
+      if ./fbwl-screencopy-client --socket \"$SOCKET\" --timeout-ms 4000 --sample-x \"$SAMPLE_X\" --sample-y \"$SAMPLE_Y\" --expect-rgb \"$ICON_RGB\" >/dev/null 2>&1; then \
+        exit 0; \
+      fi; \
+      sleep 0.05; \
+    done; \
+    exit 1; \
+  "; then
     echo "expected tray icon color not found at sample point (x=$SAMPLE_X y=$SAMPLE_Y rgb=$ICON_RGB)" >&2
     echo "log tail:" >&2
     tail -n 200 "$LOG" >&2 || true
