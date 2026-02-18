@@ -255,7 +255,20 @@ static void build_pattern_env(struct fbwl_ui_toolbar_env *env, const struct fbwl
     }
 }
 
-static bool cmdlang_eval_bool(const char *expr, struct fbwl_view *target_view,
+struct cmdlang_bool_eval {
+    bool parse_ok;
+    bool value;
+};
+
+static struct cmdlang_bool_eval bool_eval_ok(bool value) {
+    return (struct cmdlang_bool_eval){.parse_ok = true, .value = value};
+}
+
+static struct cmdlang_bool_eval bool_eval_err(void) {
+    return (struct cmdlang_bool_eval){.parse_ok = false, .value = false};
+}
+
+static struct cmdlang_bool_eval cmdlang_eval_bool_ex(const char *expr, struct fbwl_view *target_view,
         const struct fbwl_keybindings_hooks *hooks, int depth);
 
 static bool cmdlang_matches(const char *pattern, struct fbwl_view *target_view, const struct fbwl_keybindings_hooks *hooks) {
@@ -285,159 +298,208 @@ static bool cmdlang_matches(const char *pattern, struct fbwl_view *target_view, 
     return ok;
 }
 
-static bool cmdlang_some(const char *cond, const struct fbwl_keybindings_hooks *hooks, int depth) {
+static struct cmdlang_bool_eval cmdlang_some_eval(const char *cond, const struct fbwl_keybindings_hooks *hooks, int depth) {
     if (hooks == NULL || hooks->wm == NULL || cond == NULL) {
-        return false;
+        return bool_eval_err();
     }
     if (depth > CMDLANG_MAX_DEPTH) {
-        return false;
+        return bool_eval_err();
     }
+
+    const struct cmdlang_bool_eval probe = cmdlang_eval_bool_ex(cond, NULL, hooks, depth + 1);
+    if (!probe.parse_ok) {
+        return bool_eval_err();
+    }
+
     for (struct fbwm_view *walk = hooks->wm->views.next; walk != &hooks->wm->views; walk = walk->next) {
         struct fbwl_view *view = walk != NULL ? walk->userdata : NULL;
         if (view == NULL) {
             continue;
         }
-        if (cmdlang_eval_bool(cond, view, hooks, depth + 1)) {
-            return true;
+        const struct cmdlang_bool_eval r = cmdlang_eval_bool_ex(cond, view, hooks, depth + 1);
+        if (!r.parse_ok) {
+            return bool_eval_err();
+        }
+        if (r.value) {
+            return bool_eval_ok(true);
         }
     }
-    return false;
+    return bool_eval_ok(false);
 }
 
-static bool cmdlang_every(const char *cond, const struct fbwl_keybindings_hooks *hooks, int depth) {
+static struct cmdlang_bool_eval cmdlang_every_eval(const char *cond, const struct fbwl_keybindings_hooks *hooks, int depth) {
     if (hooks == NULL || hooks->wm == NULL || cond == NULL) {
-        return false;
+        return bool_eval_err();
     }
     if (depth > CMDLANG_MAX_DEPTH) {
-        return false;
+        return bool_eval_err();
     }
+
+    const struct cmdlang_bool_eval probe = cmdlang_eval_bool_ex(cond, NULL, hooks, depth + 1);
+    if (!probe.parse_ok) {
+        return bool_eval_err();
+    }
+
     for (struct fbwm_view *walk = hooks->wm->views.next; walk != &hooks->wm->views; walk = walk->next) {
         struct fbwl_view *view = walk != NULL ? walk->userdata : NULL;
         if (view == NULL) {
             continue;
         }
-        if (!cmdlang_eval_bool(cond, view, hooks, depth + 1)) {
-            return false;
+        const struct cmdlang_bool_eval r = cmdlang_eval_bool_ex(cond, view, hooks, depth + 1);
+        if (!r.parse_ok) {
+            return bool_eval_err();
+        }
+        if (!r.value) {
+            return bool_eval_ok(false);
         }
     }
-    return true;
+    return bool_eval_ok(true);
 }
 
-static bool cmdlang_and(const char *args, struct fbwl_view *target_view, const struct fbwl_keybindings_hooks *hooks, int depth) {
+static struct cmdlang_bool_eval cmdlang_and_eval(const char *args, struct fbwl_view *target_view,
+        const struct fbwl_keybindings_hooks *hooks, int depth) {
     if (args == NULL || hooks == NULL) {
-        return false;
+        return bool_eval_err();
     }
     if (depth > CMDLANG_MAX_DEPTH) {
-        return false;
+        return bool_eval_err();
     }
 
     struct str_vec toks = {0};
-    const char *rest = NULL;
-    if (!cmdlang_tokens_between(&toks, args, '{', '}', " \t\n", true, &rest)) {
-        return false;
+    if (!cmdlang_tokens_between(&toks, args, '{', '}', " \t\n", true, NULL)) {
+        return bool_eval_err();
     }
-    if (toks.len == 0 || !rest_empty(rest)) {
+    if (toks.len == 0) {
         str_vec_free(&toks);
-        return false;
+        return bool_eval_err();
     }
 
-    for (size_t i = 0; i < toks.len; i++) {
-        char *s = trim_inplace(toks.items[i]);
-        if (s == NULL || *s == '\0') {
-            str_vec_free(&toks);
-            return false;
-        }
-        if (!cmdlang_eval_bool(s, target_view, hooks, depth + 1)) {
-            str_vec_free(&toks);
-            return false;
-        }
-    }
-    str_vec_free(&toks);
-    return true;
-}
-
-static bool cmdlang_or(const char *args, struct fbwl_view *target_view, const struct fbwl_keybindings_hooks *hooks, int depth) {
-    if (args == NULL || hooks == NULL) {
-        return false;
-    }
-    if (depth > CMDLANG_MAX_DEPTH) {
-        return false;
-    }
-
-    struct str_vec toks = {0};
-    const char *rest = NULL;
-    if (!cmdlang_tokens_between(&toks, args, '{', '}', " \t\n", true, &rest)) {
-        return false;
-    }
-    if (toks.len == 0 || !rest_empty(rest)) {
-        str_vec_free(&toks);
-        return false;
-    }
-
+    size_t valid = 0;
     for (size_t i = 0; i < toks.len; i++) {
         char *s = trim_inplace(toks.items[i]);
         if (s == NULL || *s == '\0') {
             continue;
         }
-        if (cmdlang_eval_bool(s, target_view, hooks, depth + 1)) {
+        const struct cmdlang_bool_eval r = cmdlang_eval_bool_ex(s, target_view, hooks, depth + 1);
+        if (!r.parse_ok) {
+            continue;
+        }
+        valid++;
+        if (!r.value) {
             str_vec_free(&toks);
-            return true;
+            return bool_eval_ok(false);
         }
     }
+
     str_vec_free(&toks);
-    return false;
+    if (valid == 0) {
+        return bool_eval_err();
+    }
+    return bool_eval_ok(true);
 }
 
-static bool cmdlang_xor(const char *args, struct fbwl_view *target_view, const struct fbwl_keybindings_hooks *hooks, int depth) {
+static struct cmdlang_bool_eval cmdlang_or_eval(const char *args, struct fbwl_view *target_view,
+        const struct fbwl_keybindings_hooks *hooks, int depth) {
     if (args == NULL || hooks == NULL) {
-        return false;
+        return bool_eval_err();
     }
     if (depth > CMDLANG_MAX_DEPTH) {
-        return false;
+        return bool_eval_err();
     }
 
     struct str_vec toks = {0};
-    const char *rest = NULL;
-    if (!cmdlang_tokens_between(&toks, args, '{', '}', " \t\n", true, &rest)) {
-        return false;
+    if (!cmdlang_tokens_between(&toks, args, '{', '}', " \t\n", true, NULL)) {
+        return bool_eval_err();
     }
-    if (toks.len == 0 || !rest_empty(rest)) {
+    if (toks.len == 0) {
         str_vec_free(&toks);
-        return false;
+        return bool_eval_err();
     }
 
+    size_t valid = 0;
+    for (size_t i = 0; i < toks.len; i++) {
+        char *s = trim_inplace(toks.items[i]);
+        if (s == NULL || *s == '\0') {
+            continue;
+        }
+        const struct cmdlang_bool_eval r = cmdlang_eval_bool_ex(s, target_view, hooks, depth + 1);
+        if (!r.parse_ok) {
+            continue;
+        }
+        valid++;
+        if (r.value) {
+            str_vec_free(&toks);
+            return bool_eval_ok(true);
+        }
+    }
+
+    str_vec_free(&toks);
+    if (valid == 0) {
+        return bool_eval_err();
+    }
+    return bool_eval_ok(false);
+}
+
+static struct cmdlang_bool_eval cmdlang_xor_eval(const char *args, struct fbwl_view *target_view,
+        const struct fbwl_keybindings_hooks *hooks, int depth) {
+    if (args == NULL || hooks == NULL) {
+        return bool_eval_err();
+    }
+    if (depth > CMDLANG_MAX_DEPTH) {
+        return bool_eval_err();
+    }
+
+    struct str_vec toks = {0};
+    if (!cmdlang_tokens_between(&toks, args, '{', '}', " \t\n", true, NULL)) {
+        return bool_eval_err();
+    }
+    if (toks.len == 0) {
+        str_vec_free(&toks);
+        return bool_eval_err();
+    }
+
+    size_t valid = 0;
     bool acc = false;
     for (size_t i = 0; i < toks.len; i++) {
         char *s = trim_inplace(toks.items[i]);
         if (s == NULL || *s == '\0') {
             continue;
         }
-        if (cmdlang_eval_bool(s, target_view, hooks, depth + 1)) {
+        const struct cmdlang_bool_eval r = cmdlang_eval_bool_ex(s, target_view, hooks, depth + 1);
+        if (!r.parse_ok) {
+            continue;
+        }
+        valid++;
+        if (r.value) {
             acc = !acc;
         }
     }
+
     str_vec_free(&toks);
-    return acc;
+    if (valid == 0) {
+        return bool_eval_err();
+    }
+    return bool_eval_ok(acc);
 }
 
-static bool cmdlang_eval_bool(const char *expr, struct fbwl_view *target_view,
+static struct cmdlang_bool_eval cmdlang_eval_bool_ex(const char *expr, struct fbwl_view *target_view,
         const struct fbwl_keybindings_hooks *hooks, int depth) {
     if (expr == NULL || hooks == NULL) {
-        return false;
+        return bool_eval_err();
     }
     if (depth > CMDLANG_MAX_DEPTH) {
-        return false;
+        return bool_eval_err();
     }
 
     char *copy = strdup(expr);
     if (copy == NULL) {
-        return false;
+        return bool_eval_err();
     }
 
     char *s = trim_inplace(copy);
     if (s == NULL || *s == '\0') {
         free(copy);
-        return false;
+        return bool_eval_err();
     }
 
     char *sp = s;
@@ -451,27 +513,28 @@ static bool cmdlang_eval_bool(const char *expr, struct fbwl_view *target_view,
     }
     args = trim_inplace(args);
 
-    bool ok = false;
+    struct cmdlang_bool_eval out = bool_eval_err();
     if (strcasecmp(s, "matches") == 0) {
-        ok = cmdlang_matches(args, target_view, hooks);
+        out = bool_eval_ok(cmdlang_matches(args, target_view, hooks));
     } else if (strcasecmp(s, "some") == 0) {
-        ok = cmdlang_some(args, hooks, depth);
+        out = cmdlang_some_eval(args, hooks, depth);
     } else if (strcasecmp(s, "every") == 0) {
-        ok = cmdlang_every(args, hooks, depth);
+        out = cmdlang_every_eval(args, hooks, depth);
     } else if (strcasecmp(s, "not") == 0) {
-        ok = !cmdlang_eval_bool(args, target_view, hooks, depth + 1);
+        const struct cmdlang_bool_eval inner = cmdlang_eval_bool_ex(args, target_view, hooks, depth + 1);
+        if (inner.parse_ok) {
+            out = bool_eval_ok(!inner.value);
+        }
     } else if (strcasecmp(s, "and") == 0) {
-        ok = cmdlang_and(args, target_view, hooks, depth);
+        out = cmdlang_and_eval(args, target_view, hooks, depth);
     } else if (strcasecmp(s, "or") == 0) {
-        ok = cmdlang_or(args, target_view, hooks, depth);
+        out = cmdlang_or_eval(args, target_view, hooks, depth);
     } else if (strcasecmp(s, "xor") == 0) {
-        ok = cmdlang_xor(args, target_view, hooks, depth);
-    } else {
-        ok = false;
+        out = cmdlang_xor_eval(args, target_view, hooks, depth);
     }
 
     free(copy);
-    return ok;
+    return out;
 }
 
 bool fbwl_cmdlang_execute_line(const char *cmd_line, struct fbwl_view *target_view,
@@ -625,11 +688,10 @@ bool fbwl_cmdlang_execute_foreach(const char *args, struct fbwl_view *target_vie
     }
 
     struct str_vec toks = {0};
-    const char *rest = NULL;
-    if (!cmdlang_tokens_between(&toks, args, '{', '}', " \t\n", true, &rest)) {
+    if (!cmdlang_tokens_between(&toks, args, '{', '}', " \t\n", true, NULL)) {
         return false;
     }
-    if (toks.len == 0 || toks.len > 2 || !rest_empty(rest)) {
+    if (toks.len == 0) {
         str_vec_free(&toks);
         return false;
     }
@@ -646,6 +708,12 @@ bool fbwl_cmdlang_execute_foreach(const char *args, struct fbwl_view *target_vie
     if (toks.len > 1) {
         parse_foreach_options_inplace(toks.items[1], &groups, &static_order, &cond_expr);
         if (cond_expr != NULL && *cond_expr == '\0') {
+            cond_expr = NULL;
+        }
+    }
+    if (cond_expr != NULL) {
+        const struct cmdlang_bool_eval probe = cmdlang_eval_bool_ex(cond_expr, NULL, hooks, depth + 1);
+        if (!probe.parse_ok) {
             cond_expr = NULL;
         }
     }
@@ -672,8 +740,11 @@ bool fbwl_cmdlang_execute_foreach(const char *args, struct fbwl_view *target_vie
         if (view == NULL) {
             continue;
         }
-        if (cond_expr != NULL && !cmdlang_eval_bool(cond_expr, view, hooks, depth + 1)) {
-            continue;
+        if (cond_expr != NULL) {
+            const struct cmdlang_bool_eval r = cmdlang_eval_bool_ex(cond_expr, view, hooks, depth + 1);
+            if (!r.parse_ok || !r.value) {
+                continue;
+            }
         }
         if (fbwl_cmdlang_execute_line(cmd_line, view, hooks, depth + 1, exec_action)) {
             any = true;
@@ -695,11 +766,10 @@ bool fbwl_cmdlang_execute_if(const char *args, struct fbwl_view *target_view,
     }
 
     struct str_vec toks = {0};
-    const char *rest = NULL;
-    if (!cmdlang_tokens_between(&toks, args, '{', '}', " \t\n", true, &rest)) {
+    if (!cmdlang_tokens_between(&toks, args, '{', '}', " \t\n", true, NULL)) {
         return false;
     }
-    if (toks.len < 2 || toks.len > 3 || !rest_empty(rest)) {
+    if (toks.len < 2) {
         str_vec_free(&toks);
         return false;
     }
@@ -708,9 +778,13 @@ bool fbwl_cmdlang_execute_if(const char *args, struct fbwl_view *target_view,
     char *then_cmd = trim_inplace(toks.items[1]);
     char *else_cmd = toks.len > 2 ? trim_inplace(toks.items[2]) : NULL;
 
-    const bool ok = cmdlang_eval_bool(cond, target_view, hooks, depth + 1);
+    const struct cmdlang_bool_eval ok = cmdlang_eval_bool_ex(cond, target_view, hooks, depth + 1);
+    if (!ok.parse_ok) {
+        str_vec_free(&toks);
+        return false;
+    }
     bool exec_ok = false;
-    if (ok) {
+    if (ok.value) {
         if (then_cmd != NULL && *then_cmd != '\0') {
             exec_ok = fbwl_cmdlang_execute_line(then_cmd, target_view, hooks, depth + 1, exec_action);
         }

@@ -166,6 +166,7 @@ scripts=(
 	  scripts/fbwl-smoke-keybinding-parity-commands.sh
 	  scripts/fbwl-smoke-layer-ui-toggle-cmds.sh
 	  scripts/fbwl-smoke-keybinding-cmdlang.sh
+  scripts/fbwl-smoke-cmdlang-if-foreach.sh
   scripts/fbwl-smoke-keybinding-head-mark.sh
   scripts/fbwl-smoke-resource-style-cmds.sh
   scripts/fbwl-smoke-keys-file.sh

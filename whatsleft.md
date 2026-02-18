@@ -164,6 +164,21 @@ strings in different bindings do **not** share state.
 - [x] Scope `ToggleCmd` and `Delay` state per invoker (keys/mouse binding) (not per `(server, args string)`).
 - [x] Smoke: prove two different bindings with identical `ToggleCmd {…} {…}` args don’t share state (`scripts/fbwl-smoke-keybinding-cmdlang.sh`).
 
+## CmdLang Parity — `If` / `ForEach` Parsing Semantics
+
+Goal: match Fluxbox/X11 `stringTokensBetween()` parsing behavior for brace-delimited cmdlang commands:
+- `If`/`Cond`: ignores trailing text after the brace blocks, and ignores additional `{...}` blocks beyond the 3rd.
+- `ForEach`/`Map`: ignores trailing text, ignores additional `{...}` blocks beyond the 2nd, and treats an invalid filter
+  expression as “no filter” (apply to all).
+- Bool expression parse failures should not silently become “false” in ways that can trigger the wrong branch.
+
+- [x] Wayland: relax `If`/`ForEach` token parsing to ignore trailing remainder and extra `{...}` blocks (match X11 behavior).
+- [x] Wayland: distinguish “parse error” vs “false” for bool expressions:
+  - `If`: parse error => do nothing (no implicit else execution)
+  - `ForEach`: filter parse error => treat as no filter
+  - `and`/`or`/`xor`: skip parse-invalid subexpressions and require at least one valid (matches X11)
+- [x] Smoke: `scripts/fbwl-smoke-cmdlang-if-foreach.sh`
+
 ## Wallpaper Utility Parity — `fbsetbg` on Wayland (Best-effort)
 
 Goal: make classic Fluxbox configs/menu entries that call `fbsetbg …` work under `fluxbox-wayland` by routing to the
