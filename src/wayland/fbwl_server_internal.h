@@ -366,6 +366,7 @@ struct fbwl_server {
     struct fbwl_session_lock_state session_lock;
 
     struct fbwl_ipc ipc;
+    char *ipc_last_result;
 
 #ifdef HAVE_SYSTEMD
     struct fbwl_sni_watcher sni;

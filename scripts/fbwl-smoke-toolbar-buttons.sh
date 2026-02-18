@@ -31,6 +31,7 @@ cat >"$CFGDIR/init" <<EOF
 session.screen0.workspaces: 4
 session.screen0.toolbar.visible: true
 session.screen0.toolbar.tools: workspacename,clock,button.test
+session.screen0.allowRemoteActions: true
 session.screen0.toolbar.button.test.label: TBTEST
 session.screen0.toolbar.button.test.commands: NextWorkspace:PrevWorkspace:Workspace 3
 EOF
@@ -41,6 +42,7 @@ FBW_PID=$!
 
 timeout 5 bash -c "until rg -q 'Running fluxbox-wayland' '$LOG'; do sleep 0.05; done"
 timeout 5 bash -c "until rg -q 'Toolbar: position ' '$LOG'; do sleep 0.05; done"
+timeout 5 bash -c "until rg -q 'IPC: listening' '$LOG'; do sleep 0.05; done"
 
 line="$(rg -m1 'Toolbar: position ' "$LOG")"
 if [[ "$line" =~ x=([-0-9]+)\ y=([-0-9]+)\ h=([0-9]+)\ cell_w=([0-9]+)\ workspaces=([0-9]+) ]]; then
@@ -65,6 +67,16 @@ fi
 
 CLICK_X=$((X0 + TB_LX + TB_W / 2))
 CLICK_Y=$((Y0 + H / 2))
+
+fbr() {
+  DISPLAY='' ./fluxbox-remote --wayland --socket "$SOCKET" "$@"
+}
+
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+fbr relabelbutton button.test TBNEW | rg -q '^ok$'
+START=$((OFFSET + 1))
+timeout 5 bash -c "until tail -c +$START '$LOG' | rg -q 'RelabelButton: button\\.test label=TBNEW found=1'; do sleep 0.05; done"
+timeout 5 bash -c "until tail -c +$START '$LOG' | rg -q 'Toolbar: tool tok=button\\.test '; do sleep 0.05; done"
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" click "$CLICK_X" "$CLICK_Y"

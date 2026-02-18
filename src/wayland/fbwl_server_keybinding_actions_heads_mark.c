@@ -1,8 +1,13 @@
 #include "wayland/fbwl_server_keybinding_actions.h"
 
+#include <ctype.h>
 #include <stdbool.h>
+#include <stdarg.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <strings.h>
 
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_scene.h>
@@ -13,6 +18,7 @@
 #include "wayland/fbwl_screen_map.h"
 #include "wayland/fbwl_server_internal.h"
 #include "wayland/fbwl_tabs.h"
+#include "wayland/fbwl_ui_toolbar_iconbar_pattern.h"
 #include "wayland/fbwl_view.h"
 
 static struct fbwl_view *find_view_by_create_seq(struct fbwl_server *server, uint64_t create_seq) {
@@ -450,8 +456,240 @@ void server_keybindings_goto_marked_window(void *userdata, uint32_t keycode) {
     }
     server_raise_view(view, "goto-marked-window");
 
-    wlr_log(WLR_INFO, "GotoMarkedWindow: keycode=%u create_seq=%llu title=%s",
-        keycode,
-        (unsigned long long)view->create_seq,
-        fbwl_view_display_title(view));
+	    wlr_log(WLR_INFO, "GotoMarkedWindow: keycode=%u create_seq=%llu title=%s",
+	        keycode,
+	        (unsigned long long)view->create_seq,
+	        fbwl_view_display_title(view));
+}
+
+static char *trim_inplace(char *s) {
+    while (s != NULL && *s != '\0' && isspace((unsigned char)*s)) {
+        s++;
+    }
+
+    if (s == NULL || *s == '\0') {
+        return s;
+    }
+
+    char *end = s + strlen(s);
+    while (end > s && isspace((unsigned char)end[-1])) {
+        end--;
+    }
+    *end = '\0';
+    return s;
+}
+
+static void build_pattern_env(struct fbwl_ui_toolbar_env *env, struct fbwl_server *server, int cursor_x, int cursor_y) {
+    if (env == NULL) {
+        return;
+    }
+    *env = (struct fbwl_ui_toolbar_env){0};
+    if (server == NULL) {
+        return;
+    }
+    env->wm = &server->wm;
+    env->focused_view = server->wm.focused != NULL ? server->wm.focused->userdata : NULL;
+    env->cursor_valid = true;
+    env->cursor_x = (double)cursor_x;
+    env->cursor_y = (double)cursor_y;
+    env->output_layout = server->output_layout;
+    env->outputs = &server->outputs;
+    env->xwayland = server->xwayland;
+    env->layer_background = server->layer_background;
+    env->layer_bottom = server->layer_bottom;
+    env->layer_normal = server->layer_normal;
+    env->layer_fullscreen = server->layer_fullscreen;
+    env->layer_top = server->layer_top;
+    env->layer_overlay = server->layer_overlay;
+    env->decor_theme = &server->decor_theme;
+}
+
+static char *append_str(char *buf, size_t *len, const char *s) {
+    if (len != NULL) {
+        *len = buf != NULL ? strlen(buf) : 0;
+    }
+    if (s == NULL) {
+        return buf;
+    }
+
+    const size_t cur_len = buf != NULL ? strlen(buf) : 0;
+    const size_t add_len = strlen(s);
+    char *tmp = realloc(buf, cur_len + add_len + 1);
+    if (tmp == NULL) {
+        free(buf);
+        return NULL;
+    }
+    memcpy(tmp + cur_len, s, add_len + 1);
+    if (len != NULL) {
+        *len = cur_len + add_len;
+    }
+    return tmp;
+}
+
+static char *append_fmt(char *buf, const char *fmt, ...) {
+    if (fmt == NULL) {
+        return buf;
+    }
+
+    va_list ap;
+    va_start(ap, fmt);
+    char tmp_stack[512];
+    const int n_stack = vsnprintf(tmp_stack, sizeof(tmp_stack), fmt, ap);
+    va_end(ap);
+
+    if (n_stack < 0) {
+        free(buf);
+        return NULL;
+    }
+
+    if ((size_t)n_stack < sizeof(tmp_stack)) {
+        return append_str(buf, NULL, tmp_stack);
+    }
+
+    char *tmp_heap = malloc((size_t)n_stack + 1);
+    if (tmp_heap == NULL) {
+        free(buf);
+        return NULL;
+    }
+
+    va_start(ap, fmt);
+    const int n_heap = vsnprintf(tmp_heap, (size_t)n_stack + 1, fmt, ap);
+    va_end(ap);
+    if (n_heap != n_stack) {
+        free(tmp_heap);
+        free(buf);
+        return NULL;
+    }
+
+    buf = append_str(buf, NULL, tmp_heap);
+    free(tmp_heap);
+    return buf;
+}
+
+void server_keybindings_relabel_button(void *userdata, const char *args) {
+    struct fbwl_server *server = userdata;
+    if (server == NULL || args == NULL) {
+        return;
+    }
+
+    while (*args != '\0' && isspace((unsigned char)*args)) {
+        args++;
+    }
+
+    const char *sp = args;
+    while (*sp != '\0' && !isspace((unsigned char)*sp)) {
+        sp++;
+    }
+    if (sp == args) {
+        return;
+    }
+
+    char *button = strndup(args, (size_t)(sp - args));
+    if (button == NULL) {
+        wlr_log(WLR_ERROR, "RelabelButton: OOM");
+        return;
+    }
+
+    const char *label = sp;
+    while (*label != '\0' && isspace((unsigned char)*label)) {
+        label++;
+    }
+
+    bool found = false;
+    if (strncmp(button, "button.", 7) == 0) {
+        const char *name = button + 7;
+        for (size_t i = 0; i < server->toolbar_ui.buttons_len; i++) {
+            struct fbwl_toolbar_button_cfg *cfg = &server->toolbar_ui.buttons[i];
+            if (cfg->name == NULL || strcmp(cfg->name, name) != 0) {
+                continue;
+            }
+
+            char *dup = strdup(label);
+            if (dup == NULL) {
+                wlr_log(WLR_ERROR, "RelabelButton: OOM");
+                break;
+            }
+            free(cfg->label);
+            cfg->label = dup;
+            found = true;
+            break;
+        }
+    }
+
+    wlr_log(WLR_INFO, "RelabelButton: %s label=%s found=%d", button, label, found ? 1 : 0);
+
+    if (found) {
+        server_toolbar_ui_rebuild(server);
+    }
+
+    free(button);
+}
+
+void server_keybindings_client_pattern_test(void *userdata, const char *args, int cursor_x, int cursor_y) {
+    struct fbwl_server *server = userdata;
+    if (server == NULL) {
+        return;
+    }
+
+    char *tmp = strdup(args != NULL ? args : "");
+    if (tmp == NULL) {
+        return;
+    }
+    char *pattern = trim_inplace(tmp);
+    if (pattern != NULL && *pattern == '{') {
+        char *close = strchr(pattern, '}');
+        if (close != NULL) {
+            pattern = close + 1;
+        }
+    }
+    pattern = trim_inplace(pattern);
+
+    struct fbwl_iconbar_pattern pat = {0};
+    fbwl_iconbar_pattern_parse_inplace(&pat, pattern != NULL ? pattern : tmp);
+
+    struct fbwl_ui_toolbar_env env = {0};
+    build_pattern_env(&env, server, cursor_x, cursor_y);
+
+    const size_t head = fbwl_server_screen_index_at(server, (double)cursor_x, (double)cursor_y);
+    const int current_ws = fbwm_core_workspace_current_for_head(&server->wm, head);
+
+    char *result = NULL;
+    size_t matches = 0;
+    for (struct fbwm_view *wm_view = server->wm.views.next; wm_view != &server->wm.views; wm_view = wm_view->next) {
+        struct fbwl_view *view = wm_view->userdata;
+        if (view == NULL || !view->mapped || view->in_slit) {
+            continue;
+        }
+        if (!fbwl_client_pattern_matches(&pat, &env, view, current_ws)) {
+            continue;
+        }
+
+        unsigned long long id = 0;
+        if (view->type == FBWL_VIEW_XWAYLAND && view->xwayland_surface != NULL) {
+            id = (unsigned long long)view->xwayland_surface->window_id;
+        } else {
+            id = (unsigned long long)view->create_seq;
+        }
+
+        const char *title = fbwl_view_display_title(view);
+        result = append_fmt(result, "0x%llx\t%s\n", id, title != NULL ? title : "");
+        if (result == NULL) {
+            break;
+        }
+        matches++;
+    }
+
+    if (matches == 0) {
+        free(result);
+        result = strdup("0\n");
+    } else if (result == NULL) {
+        // OOM mid-build; don't leave stale data behind.
+        result = strdup("-1\t0\n");
+    }
+
+    free(server->ipc_last_result);
+    server->ipc_last_result = result;
+
+    fbwl_iconbar_pattern_free(&pat);
+    free(tmp);
 }

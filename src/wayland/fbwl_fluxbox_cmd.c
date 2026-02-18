@@ -620,7 +620,8 @@ bool fbwl_fluxbox_cmd_resolve(const char *cmd_name, const char *cmd_args,
         *out_action = FBWL_KEYBIND_HIDE_MENUS;
         return true;
     }
-
+    if (strcasecmp(cmd_name, "relabelbutton") == 0) { if (cmd_args != NULL) { while (*cmd_args != '\0' && isspace((unsigned char)*cmd_args)) { cmd_args++; } } *out_action = FBWL_KEYBIND_RELABEL_BUTTON; if (cmd_args != NULL && *cmd_args != '\0') { *out_cmd = cmd_args; } return true; }
+    if (strcasecmp(cmd_name, "clientpatterntest") == 0) { if (cmd_args != NULL) { while (*cmd_args != '\0' && isspace((unsigned char)*cmd_args)) { cmd_args++; } } *out_action = FBWL_KEYBIND_CLIENT_PATTERN_TEST; if (cmd_args != NULL && *cmd_args != '\0') { *out_cmd = cmd_args; } return true; }
     if (strcasecmp(cmd_name, "workspace") == 0) {
         int ws0 = 0;
         if (!parse_one_based_workspace(cmd_args, &ws0)) {

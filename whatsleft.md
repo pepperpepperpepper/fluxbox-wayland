@@ -71,6 +71,10 @@ The current Wayland theme implementation is intentionally simplified (mostly col
 
 - [x] Implement `BindKey` command parity (appends to `session.keyFile` and applies immediately; smoke-covered)
 - [x] Implement `KeyMode <mode> [return-keybinding]` optional second arg (return binding now works; smoke-covered)
+- [x] Remaining Fluxbox cmdlang commands not previously implemented on Wayland:
+  - [x] `RelabelButton` (runtime relabel for `toolbar.tools` custom `button.*`)
+  - [x] `ClientPatternTest` + `fluxbox-remote result` on Wayland IPC
+  - [x] Smoke: `scripts/fbwl-smoke-toolbar-buttons.sh` + `scripts/fbwl-smoke-clientpatterntest.sh`
 - [x] Add missing common aliases:
   - `MinimizeWindow` alias for `Minimize`
   - `MaximizeWindow` alias for `Maximize`

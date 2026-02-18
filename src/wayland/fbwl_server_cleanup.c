@@ -30,6 +30,8 @@ void fbwl_server_finish(struct fbwl_server *server) {
         wl_display_destroy_clients(server->wl_display);
     }
     fbwl_ipc_finish(&server->ipc);
+    free(server->ipc_last_result);
+    server->ipc_last_result = NULL;
 #ifdef HAVE_SYSTEMD
     fbwl_sni_finish(&server->sni);
 #endif

@@ -169,16 +169,15 @@ static int wayland_ipc_call(const std::string &cmdline, const char *wayland_sock
         return EXIT_FAILURE;
     }
 
-    char resp[1024];
-    size_t len = 0;
-    bool saw_newline = false;
-    resp[0] = '\0';
-
     struct pollfd pfd;
     pfd.fd = fd;
     pfd.events = POLLIN;
 
-    while (!saw_newline && len + 1 < sizeof(resp)) {
+    std::string resp;
+    resp.reserve(1024);
+    const size_t max_resp = 1024 * 1024; // 1 MiB
+
+    for (;;) {
         int prc = poll(&pfd, 1, timeout_ms);
         if (prc < 0) {
             if (errno == EINTR) {
@@ -194,7 +193,8 @@ static int wayland_ipc_call(const std::string &cmdline, const char *wayland_sock
             return EXIT_FAILURE;
         }
 
-        ssize_t n = read(fd, resp + len, sizeof(resp) - 1 - len);
+        char buf[4096];
+        ssize_t n = read(fd, buf, sizeof(buf));
         if (n < 0) {
             if (errno == EINTR) {
                 continue;
@@ -207,31 +207,47 @@ static int wayland_ipc_call(const std::string &cmdline, const char *wayland_sock
             break;
         }
 
-        len += (size_t)n;
-        resp[len] = '\0';
-
-        if (strchr(resp, '\n') != NULL) {
-            saw_newline = true;
+        resp.append(buf, (size_t)n);
+        if (resp.size() > max_resp) {
+            fprintf(stderr, "fluxbox-remote: response too large\n");
+            close(fd);
+            return EXIT_FAILURE;
         }
     }
 
     close(fd);
 
-    char *nl = strchr(resp, '\n');
-    if (nl != NULL) {
-        *nl = '\0';
-    }
-
-    if (len == 0 || resp[0] == '\0') {
+    if (resp.empty()) {
         fprintf(stderr, "fluxbox-remote: empty response\n");
         return EXIT_FAILURE;
     }
 
-    printf("%s\n", resp);
-    if (strncmp(resp, "ok", 2) == 0) {
+    size_t first_nl = resp.find('\n');
+    std::string first_line = (first_nl == std::string::npos) ? resp : resp.substr(0, first_nl);
+
+    const bool is_ok = first_line.size() >= 2 && first_line.compare(0, 2, "ok") == 0;
+    const bool is_err = first_line.size() >= 3 && first_line.compare(0, 3, "err") == 0;
+
+    if (cmdline == "result") {
+        if (is_err) {
+            printf("%s\n", first_line.c_str());
+            return EXIT_FAILURE;
+        }
+        if (!is_ok) {
+            printf("%s\n", first_line.c_str());
+            return EXIT_FAILURE;
+        }
+        if (first_nl != std::string::npos && first_nl + 1 < resp.size()) {
+            fwrite(resp.data() + first_nl + 1, 1, resp.size() - (first_nl + 1), stdout);
+        }
         return EXIT_SUCCESS;
     }
-    return EXIT_FAILURE;
+
+    printf("%s\n", first_line.c_str());
+    if (is_ok) {
+        return EXIT_SUCCESS;
+    }
+    return is_err ? EXIT_FAILURE : EXIT_FAILURE;
 }
 
 #ifdef HAVE_X11

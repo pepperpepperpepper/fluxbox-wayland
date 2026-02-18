@@ -1,10 +1,13 @@
-# Wayland monolithic-file taxonomy + refactor plan (>1400 LOC)
+# Wayland monolithic-file taxonomy + refactor plan (physical LOC)
 
-Updated: 2026-02-12
+Updated: 2026-02-18
 
 This section is **Wayland implementation only** (Fluxbox Wayland compositor + its Wayland tooling).
 It is intentionally **not** a “do this refactor now” doc; it’s a **taxonomy + mechanical extraction
 plan** to use when/if files cross a hard size threshold.
+
+Note: `src/wayland/**` is hard-capped at **< 1000 physical LOC** by `scripts/fbwl-check-wayland-loc.sh`
+(excluding `src/wayland/protocol/**`).
 
 ## Scope (Wayland implementation only)
 Included:
@@ -51,75 +54,81 @@ print('Count > 1400:', sum(1 for n,_ in counts if n > 1400))
 PY
 ```
 
-## Status (as of 2026-02-12)
+## Status (as of 2026-02-18)
 - **Hard threshold (>1400 LOC):** none
-- **Max LOC (in scope):** `util/fbwl-input-injector.c` (1185 LOC)
+- **Max LOC (in scope):** `util/fbwl-input-injector.c` (1242 LOC)
 - **Watchlist (>=900 LOC):** these are the files most likely to become the next monoliths
 
 | LOC | File |
 | ---: | --- |
-| 1185 | `util/fbwl-input-injector.c` |
+| 1242 | `util/fbwl-input-injector.c` |
 | 1080 | `util/fbwl-dnd-client.c` |
-| 999 | `src/wayland/fbwl_view.c` |
 | 999 | `src/wayland/fbwl_server_ui.c` |
-| 999 | `src/wayland/fbwl_server_policy.c` |
-| 999 | `src/wayland/fbwl_menu_parse.c` |
 | 999 | `src/wayland/fbwl_fluxbox_cmd.c` |
-| 995 | `src/wayland/fbwl_server_keybinding_actions.c` |
+| 998 | `src/wayland/fbwl_server_key_mode.c` |
+| 997 | `src/wayland/fbwl_view.c` |
+| 996 | `src/wayland/fbwl_server_keybinding_actions.c` |
+| 993 | `src/wayland/fbwl_server_policy.c` |
+| 982 | `src/wayland/fbwl_style_parse.c` |
+| 982 | `src/wayland/fbwl_server_policy_input.c` |
+| 982 | `src/wayland/fbwl_server_bootstrap.c` |
+| 978 | `src/wayland/fbwl_ui_toolbar.c` |
 | 977 | `src/wayland/fbwl_ui_toolbar_iconbar_pattern.c` |
-| 965 | `src/wayland/fbwl_keybindings_execute.c` |
-| 962 | `src/wayland/fbwl_server_config.c` |
-| 958 | `src/wayland/fbwl_server_keybinding_actions_windows.c` |
+| 969 | `src/wayland/fbwl_server_menu.c` |
+| 969 | `src/wayland/fbwl_server_config.c` |
+| 964 | `src/wayland/fbwl_server_menu_actions.c` |
+| 956 | `src/wayland/fbwl_keybindings_execute.c` |
+| 940 | `src/wayland/fbwl_server_keybinding_actions_windows.c` |
 | 938 | `util/fbwl-clipboard-client.c` |
-| 937 | `src/wayland/fbwl_view_decor.c` |
 | 925 | `src/wmcore/fbwm_core.c` |
-| 916 | `src/wayland/fbwl_server_bootstrap.c` |
-| 915 | `src/wayland/fbwl_server_policy_input.c` |
+| 913 | `src/wayland/fbwl_ui_slit.c` |
 
 ## Taxonomy (current “large/monolithic” candidates, >=600 LOC)
 The goal here is to make it obvious which files are “doing too much” so splitting can be targeted.
 
 ### Server lifecycle & configuration
-- `src/wayland/fbwl_server_bootstrap.c` (916) — wlroots init + protocol managers + subsystem wiring
-- `src/wayland/fbwl_server_config.c` (962) — resource/defaults loading + config parsing + apply-to-server glue
-- `src/wayland/fbwl_server_reconfigure.c` (652) — live reconfigure pipeline
-- `src/wayland/fbwl_server_outputs.c` (607) — output add/remove + output layout + per-output glue
+- `src/wayland/fbwl_server_bootstrap.c` (982) — wlroots init + protocol managers + subsystem wiring
+- `src/wayland/fbwl_server_config.c` (969) — resource/defaults loading + config parsing + apply-to-server glue
+- `src/wayland/fbwl_server_reconfigure.c` (667) — live reconfigure pipeline
+- `src/wayland/fbwl_server_outputs.c` (773) — output add/remove + output layout + per-output glue
 - `src/wayland/fbwl_screen_config.c` (637) — per-screen/head configuration parsing + defaults
-- `src/wayland/fbwl_server_internal.h` (624) — “everything server” internal types; tends to grow as a dumping ground
+- `src/wayland/fbwl_server_internal.h` (643) — “everything server” internal types; tends to grow as a dumping ground
 
 ### Policy / focus / workspace / grabs
-- `src/wayland/fbwl_server_policy.c` (999) — focus policy + raise/lower + snap/opaque move/resize + apps-rule policy hooks
-- `src/wayland/fbwl_server_policy_input.c` (915) — pointer/keyboard input policy glue (when events map to policy actions)
+- `src/wayland/fbwl_server_policy.c` (993) — focus policy + raise/lower + snap/opaque move/resize + apps-rule policy hooks
+- `src/wayland/fbwl_server_policy_input.c` (982) — pointer/keyboard input policy glue (when events map to policy actions)
 - `src/wmcore/fbwm_core.c` (925) — workspace + focus + stacking model used by the Wayland compositor
 
 ### Views & decoration (window model)
-- `src/wayland/fbwl_view.c` (999) — view lifecycle + xdg/xwayland glue + geometry/state helpers
-- `src/wayland/fbwl_view_decor.c` (937) — decorations layout + hit-testing + scene-tree glue for frame/titlebar
-- `src/wayland/fbwl_server_xdg_xwayland.c` (741) — creation/teardown glue between XDG/XWayland view backends
-- `src/wayland/fbwl_xwayland.c` (658) — XWayland integration details (ICCCM/EWMH-ish, mapping, quirks)
+- `src/wayland/fbwl_view.c` (997) — view lifecycle + xdg/xwayland glue + geometry/state helpers
+- `src/wayland/fbwl_view_decor.c` (755) — decorations layout + hit-testing + scene-tree glue for frame/titlebar
+- `src/wayland/fbwl_server_xdg_xwayland.c` (749) — creation/teardown glue between XDG/XWayland view backends
+- `src/wayland/fbwl_xwayland.c` (773) — XWayland integration details (ICCCM/EWMH-ish, mapping, quirks)
 
 ### Input & keybindings
-- `src/wayland/fbwl_keybindings_execute.c` (965) — execute/bind key actions (shelling out + internal command dispatch)
-- `src/wayland/fbwl_server_key_mode.c` (824) — key mode state machine (multi-key sequences, mode switching)
-- `src/wayland/fbwl_server_keybinding_actions.c` (995) — core action dispatch + action registry (already partially split)
-- `src/wayland/fbwl_server_keybinding_actions_windows.c` (958) — window-focused action implementations
-- `src/wayland/fbwl_server_keybinding_actions_resources_style.c` (641) — style/resource-related actions
+- `src/wayland/fbwl_keybindings_execute.c` (956) — execute/bind key actions (shelling out + internal command dispatch)
+- `src/wayland/fbwl_server_key_mode.c` (998) — key mode state machine (multi-key sequences, mode switching)
+- `src/wayland/fbwl_server_keybinding_actions.c` (996) — core action dispatch + action registry (already partially split)
+- `src/wayland/fbwl_server_keybinding_actions_windows.c` (940) — window-focused action implementations
+- `src/wayland/fbwl_server_keybinding_actions_resources_style.c` (801) — style/resource-related actions
+- `src/wayland/fbwl_server_keybinding_actions_heads_mark.c` (695) — head movement + mark/goto-marked actions
 
 ### UI (root menu / toolbar / slit)
 - `src/wayland/fbwl_server_ui.c` (999) — UI glue + workspace visibility + focus repair + “strict mouse focus” checks
-- `src/wayland/fbwl_server_menu_actions.c` (841) — menu-driven actions (root menu + window menu glue)
-- `src/wayland/fbwl_ui_menu.c` (747) — menu rendering + input handling + menu model glue
-- `src/wayland/fbwl_menu_parse.c` (999) — menu file parser (fluxbox menu syntax)
-- `src/wayland/fbwl_ui_toolbar.c` (848) — toolbar model + layout + rebuild pipeline
+- `src/wayland/fbwl_server_menu.c` (969) — menu state + open/close + input routing
+- `src/wayland/fbwl_server_menu_actions.c` (964) — menu-driven actions (root menu + window menu glue)
+- `src/wayland/fbwl_ui_menu.c` (895) — menu rendering + input handling + menu model glue
+- `src/wayland/fbwl_menu_parse.c` (733) — menu file parser (fluxbox menu syntax)
+- `src/wayland/fbwl_ui_toolbar.c` (978) — toolbar model + layout + rebuild pipeline
 - `src/wayland/fbwl_ui_toolbar_iconbar_pattern.c` (977) — iconbar pattern parsing + matching + update glue
-- `src/wayland/fbwl_ui_slit.c` (839) — slit layout + input + reconfigure glue
+- `src/wayland/fbwl_ui_slit.c` (913) — slit layout + input + reconfigure glue
 
 ### Commands / parsing / rules
 - `src/wayland/fbwl_fluxbox_cmd.c` (999) — Fluxbox command surface for Wayland (maps commands to policy/UI actions)
 - `src/wayland/fbwl_cmdlang.c` (723) — command language parsing + evaluation
-- `src/wayland/fbwl_style_parse.c` (687) — style/theme parsing (Wayland-side)
-- `src/wayland/fbwl_apps_rules_load.c` (609) — apps rules parsing + normalization
-- `src/wayland/fbwl_util.c` (761) — “kitchen sink” helpers (string, IO, small algorithms); high churn risk
+- `src/wayland/fbwl_style_parse.c` (982) — style/theme parsing (Wayland-side)
+- `src/wayland/fbwl_apps_rules_load.c` (608) — apps rules parsing + normalization
+- `src/wayland/fbwl_util.c` (845) — “kitchen sink” helpers (string, IO, small algorithms); high churn risk
 
 ### Tray / SNI
 - `src/wayland/fbwl_sni_item_requests.c` (838) — SNI item request/response plumbing + state machine glue
@@ -127,7 +136,7 @@ The goal here is to make it obvious which files are “doing too much” so spli
 ### Wayland utilities / protocol test clients
 These tend to be monolithic because they mix:
 CLI parsing + Wayland protocol binding + event-loop glue + “demo logic”.
-- `util/fbwl-input-injector.c` (1185) — virtual keyboard + virtual pointer injector
+- `util/fbwl-input-injector.c` (1242) — virtual keyboard + virtual pointer injector
 - `util/fbwl-dnd-client.c` (1080) — drag-and-drop test client
 - `util/fbwl-clipboard-client.c` (938) — clipboard test client
 - `util/fbwl-primary-selection-client.c` (871) — primary selection test client

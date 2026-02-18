@@ -188,6 +188,12 @@ static bool execute_action_depth(enum fbwl_keybinding_action action, int arg, co
     case FBWL_KEYBIND_BIND_KEY:
         server_keybindings_bind_key(hooks->userdata, cmd);
         return true;
+    case FBWL_KEYBIND_RELABEL_BUTTON:
+        server_keybindings_relabel_button(hooks->userdata, cmd);
+        return true;
+    case FBWL_KEYBIND_CLIENT_PATTERN_TEST:
+        server_keybindings_client_pattern_test(hooks->userdata, cmd, hooks->cursor_x, hooks->cursor_y);
+        return true;
     case FBWL_KEYBIND_IF:
         return fbwl_cmdlang_execute_if(cmd, view, hooks, depth, execute_action_depth);
     case FBWL_KEYBIND_FOREACH:

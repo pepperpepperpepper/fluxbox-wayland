@@ -29,6 +29,8 @@ void server_keybindings_set_resource_value(void *userdata, const char *args);
 void server_keybindings_set_resource_value_dialog(void *userdata);
 void server_keybindings_set_env(void *userdata, const char *args);
 void server_keybindings_bind_key(void *userdata, const char *binding);
+void server_keybindings_relabel_button(void *userdata, const char *args);
+void server_keybindings_client_pattern_test(void *userdata, const char *args, int cursor_x, int cursor_y);
 
 void server_keybindings_toggle_toolbar_hidden(void *userdata, int cursor_x, int cursor_y);
 void server_keybindings_toggle_toolbar_above(void *userdata, int cursor_x, int cursor_y);

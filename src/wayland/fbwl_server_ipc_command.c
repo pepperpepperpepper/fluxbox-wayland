@@ -65,6 +65,21 @@ void server_ipc_command(void *userdata, int client_fd, char *line) {
         return;
     }
 
+    if (strcasecmp(cmd, "result") == 0) {
+        fbwl_ipc_send_line(client_fd, "ok");
+        if (server->ipc_last_result != NULL && *server->ipc_last_result != '\0') {
+            char *dup = strdup(server->ipc_last_result);
+            if (dup != NULL) {
+                char *save = NULL;
+                for (char *tok = strtok_r(dup, "\n", &save); tok != NULL; tok = strtok_r(NULL, "\n", &save)) {
+                    fbwl_ipc_send_line(client_fd, tok);
+                }
+                free(dup);
+            }
+        }
+        return;
+    }
+
     if (strcasecmp(cmd, "reconfigure") == 0 || strcasecmp(cmd, "reconfig") == 0) {
         fbwl_ipc_send_line(client_fd, "ok reconfigure");
         server_reconfigure(server);

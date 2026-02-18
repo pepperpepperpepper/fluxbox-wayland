@@ -96,6 +96,7 @@ scripts=(
   scripts/fbwl-smoke-restart.sh
   scripts/fbwl-smoke-startfluxbox-wayland.sh
   scripts/fbwl-smoke-fluxbox-remote.sh
+  scripts/fbwl-smoke-clientpatterntest.sh
   scripts/fbwl-smoke-sni.sh
   scripts/fbwl-smoke-tray.sh
   scripts/fbwl-smoke-tray-iconname.sh
