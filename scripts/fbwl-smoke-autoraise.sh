@@ -45,6 +45,7 @@ session.screen0.toolbar.visible: false
 session.screen0.focusModel: MouseFocus
 session.screen0.focusNewWindows: false
 session.screen0.autoRaise: true
+session.screen0.windowPlacement: UnderMousePlacement
 EOF
 
 WLR_BACKENDS="${WLR_BACKENDS:-headless}" WLR_RENDERER="${WLR_RENDERER:-pixman}" ./fluxbox-wayland \
@@ -68,15 +69,20 @@ OUTLINE="$(rg -m1 'OutputLayout: ' "$LOG")"
 OUT_X="$(printf '%s\n' "$OUTLINE" | rg -o 'x=-?[0-9]+' | head -n 1 | cut -d= -f2)"
 OUT_Y="$(printf '%s\n' "$OUTLINE" | rg -o 'y=-?[0-9]+' | head -n 1 | cut -d= -f2)"
 
-# Ensure the pointer starts far away from where RowSmartPlacement is likely to place test windows.
-./fbwl-input-injector --socket "$SOCKET" motion "$((OUT_X + OUT_W - 2))" "$((OUT_Y + OUT_H - 2))" >/dev/null 2>&1 || true
+# Place windows away from (0,0) so the input injector's normalization warp doesn't accidentally
+# focus a window (MouseFocus cares about pointer motion).
+PLACE_Y="$((OUT_Y + OUT_H / 4))"
+PLACE_A_X="$((OUT_X + OUT_W / 4))"
+PLACE_B_X="$((OUT_X + (OUT_W * 3) / 4))"
 
+./fbwl-input-injector --socket "$SOCKET" motion "$PLACE_A_X" "$PLACE_Y" >/dev/null 2>&1 || true
 ./fbwl-smoke-client --socket "$SOCKET" --title ar-a --stay-ms 20000 --xdg-decoration --width 240 --height 160 >/dev/null 2>&1 &
 A_PID=$!
+timeout 5 bash -c "until rg -q 'Place: ar-a ' '$LOG'; do sleep 0.05; done"
+
+./fbwl-input-injector --socket "$SOCKET" motion "$PLACE_B_X" "$PLACE_Y" >/dev/null 2>&1 || true
 ./fbwl-smoke-client --socket "$SOCKET" --title ar-b --stay-ms 20000 --xdg-decoration --width 240 --height 160 >/dev/null 2>&1 &
 B_PID=$!
-
-timeout 5 bash -c "until rg -q 'Place: ar-a ' '$LOG'; do sleep 0.05; done"
 timeout 5 bash -c "until rg -q 'Place: ar-b ' '$LOG'; do sleep 0.05; done"
 
 place_a="$(rg -m1 'Place: ar-a ' "$LOG")"
@@ -98,12 +104,61 @@ else
   exit 1
 fi
 
+WIN_W=240
+WIN_H=160
+MARGIN=64
+
+point_in_win() {
+  local px="$1"
+  local py="$2"
+  local wx="$3"
+  local wy="$4"
+
+  ((px >= wx - MARGIN)) && ((px < wx + WIN_W + MARGIN)) && ((py >= wy - MARGIN)) && ((py < wy + WIN_H + MARGIN))
+}
+
+EMPTY_X=0
+EMPTY_Y=0
+for pt in \
+  "$((OUT_X + 2)) $((OUT_Y + 2))" \
+  "$((OUT_X + OUT_W - 2)) $((OUT_Y + 2))" \
+  "$((OUT_X + 2)) $((OUT_Y + OUT_H - 2))" \
+  "$((OUT_X + OUT_W - 2)) $((OUT_Y + OUT_H - 2))"; do
+  x="${pt% *}"
+  y="${pt#* }"
+  if point_in_win "$x" "$y" "$A_X" "$A_Y"; then
+    continue
+  fi
+  if point_in_win "$x" "$y" "$B_X" "$B_Y"; then
+    continue
+  fi
+  EMPTY_X="$x"
+  EMPTY_Y="$y"
+  break
+done
+
+if ((EMPTY_X == 0 && EMPTY_Y == 0)); then
+  # Should be extremely unlikely, but pick *something* not on the window centers.
+  EMPTY_X="$((OUT_X + OUT_W - 2))"
+  EMPTY_Y="$((OUT_Y + OUT_H - 2))"
+fi
+
 # AutoRaiseDelay should apply only to the currently focused view, and should follow focus as it
 # changes. Specifically: moving from A to B before the delay expires should prevent A raising.
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" motion "$((A_X + 10))" "$((A_Y + 10))" >/dev/null 2>&1 || true
 START=$((OFFSET + 1))
 timeout 5 bash -c "until tail -c +$START '$LOG' | rg -q 'Focus: ar-a'; do sleep 0.05; done"
+
+# Leaving all views before the delay expires must cancel a pending raise even when MouseFocus
+# keeps the last-focused window focused (Fluxbox/X11 semantics).
+OFFSET=$(wc -c <"$LOG" | tr -d ' ')
+./fbwl-input-injector --socket "$SOCKET" motion "$EMPTY_X" "$EMPTY_Y" >/dev/null 2>&1 || true
+START=$((OFFSET + 1))
+if timeout 1 bash -c "until tail -c +$START '$LOG' | rg -q 'Raise: ar-a reason=autoRaiseDelay'; do sleep 0.05; done"; then
+  echo "unexpected autoRaiseDelay raise for ar-a after pointer left all windows (MouseFocus keeps focus)" >&2
+  exit 1
+fi
 
 OFFSET=$(wc -c <"$LOG" | tr -d ' ')
 ./fbwl-input-injector --socket "$SOCKET" motion "$((B_X + 10))" "$((B_Y + 10))" >/dev/null 2>&1 || true
@@ -117,4 +172,3 @@ if tail -c +$START "$LOG" | rg -q 'Raise: ar-a reason=autoRaiseDelay'; then
 fi
 
 echo "ok: autoRaiseDelay smoke passed (socket=$SOCKET log=$LOG)"
-

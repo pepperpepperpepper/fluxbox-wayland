@@ -259,6 +259,7 @@ scripts=(
 	  scripts/fbwl-smoke-slit-kde-dockapps.sh
 	  scripts/fbwl-smoke-slit-alpha-input.sh
 	  scripts/fbwl-smoke-slit-menu.sh
+	  scripts/fbwl-smoke-slit-autoraise.sh
 	  scripts/fbwl-smoke-slit-autosave.sh
 	  scripts/fbwl-smoke-tabs-ui-click.sh
 	  scripts/fbwl-smoke-mousebindings-ontab.sh
