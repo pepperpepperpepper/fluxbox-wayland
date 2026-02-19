@@ -2,16 +2,35 @@
 
 `fluxbox-wayland` is a **wlroots-based Wayland compositor** with Fluxbox-like policy (root menu, key/mouse bindings, workspaces, theming, lightweight).
 
-This repo is **BETA**: full Wayland compatibility with an explicit **1:1 Fluxbox/X11 config parity** target (everything tracked is implemented, but still stabilizing).
+This repo is **BETA**: full Wayland compatibility with an explicit **1:1 Fluxbox/X11 config parity** target (still stabilizing).
 
 - **`fluxbox-wayland` is a compositor**, not an X11 window manager running “on top of” Wayland.
 - It manages native Wayland `xdg_toplevel` apps and can optionally run X11 apps via **XWayland**.
-- Classic Fluxbox config formats are intentionally reused with an explicit **1:1 parity** target; parity notes/checklists are tracked in `whatsleft.md` and `plan.md`.
+- Classic Fluxbox config formats are intentionally reused with an explicit **1:1 parity** target (see “Fluxbox/X11 parity” below).
 
-Project notes / work tracking:
+## Fluxbox/X11 parity (implemented)
 
-- `plan.md` (overall port plan + status snapshot)
-- `whatsleft.md` (Fluxbox/X11 parity checklist; top section is the active “what’s left” list)
+The core goal is that classic `~/.fluxbox/` configs “just work” under Wayland, with Fluxbox-like behavior and command
+semantics.
+
+Parity coverage includes:
+
+- **Startup / CLI**: Fluxbox-style `-rc <init-file>` semantics (including relative path resolution), `-no-toolbar`, `-no-slit`.
+- **Bindings + cmdlang**: Fluxbox key/mouse binding formats and cmdlang parsing/semantics (including `If`/`ForEach`, and per-binding `ToggleCmd`/`Delay` statefulness).
+- **Menus**: root menu + client menu behavior (including escaping, icons, and menu search/type-ahead).
+- **Workspaces**: add/remove/name, navigation, and workspace warping behavior.
+- **Focus / stacking policy**: click-raise/click-focus, focus models, directional focus, MRU cycling, auto-raise delay behavior.
+- **Move/resize/maximize**: keyboard and pointer move/resize; maximize/fullscreen; common edge-snap behaviors.
+- **Apps rules**: Fluxbox `apps` file rules (matching + placement + decoration flags + tabbing-related rules).
+- **Tabs UI**: attach areas, mouse focus behavior, and tab command parity.
+- **Toolbar**: tools ordering and theming; `autoHide`, `autoRaise`, `maxOver`, `layer`, per-screen overrides.
+- **Slit**: direction + ordering + autosave; `autoHide`, `autoRaise`, `maxOver`; menu behavior; KDE dockapp handling (best-effort under XWayland).
+- **Styles / themes**: Fluxbox texture engine (gradients/pixmaps/`ParentRelative`), per-element theming for menus/toolbar/slit/window decorations, font effects, and common shape keys (bevel/rounded corners) on supported UI components.
+
+Docs:
+
+- Man pages: `doc/fluxbox-wayland.1.in`, `doc/startfluxbox-wayland.1.in`
+- Smoke tests (deterministic, non-interactive): `scripts/fbwl-smoke-all.sh`
 
 ## Screenshots
 
