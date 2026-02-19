@@ -220,6 +220,8 @@ scripts=(
   scripts/fbwl-smoke-full-maximization.sh
 	  scripts/fbwl-smoke-slit-maxover.sh
 	  scripts/fbwl-smoke-slit-ordering.sh
+	  scripts/fbwl-smoke-slit-direction.sh
+	  scripts/fbwl-smoke-slit-autohide.sh
 	  scripts/fbwl-smoke-slit-kde-dockapps.sh
 	  scripts/fbwl-smoke-slit-alpha-input.sh
 	  scripts/fbwl-smoke-slit-menu.sh
