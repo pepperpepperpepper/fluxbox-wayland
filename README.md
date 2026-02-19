@@ -6,12 +6,12 @@ This repo is **BETA**: full Wayland compatibility with an explicit **1:1 Fluxbox
 
 - **`fluxbox-wayland` is a compositor**, not an X11 window manager running “on top of” Wayland.
 - It manages native Wayland `xdg_toplevel` apps and can optionally run X11 apps via **XWayland**.
-- Classic Fluxbox config formats are intentionally reused with an explicit **1:1 parity** target; parity notes are tracked in `whatsleft.md`.
+- Classic Fluxbox config formats are intentionally reused with an explicit **1:1 parity** target; parity notes/checklists are tracked in `whatsleft.md` and `plan.md`.
 
 Project notes / work tracking:
 
 - `plan.md` (overall port plan + status snapshot)
-- `whatsleft.md` (remaining parity tasks)
+- `whatsleft.md` (Fluxbox/X11 parity checklist; top section is the active “what’s left” list)
 
 ## Screenshots
 
@@ -94,7 +94,10 @@ There is also a standalone HTML gallery at `docs/screenshots/index.html` (works 
 
 - Build: `./autogen.sh && ./configure --enable-wayland && make -j` (or Wayland-only: `./configure --disable-x11 --enable-wayland`)
 - Run (recommended): `util/startfluxbox-wayland`
-- Smoke tests: `scripts/fbwl-smoke-all.sh`
+- Smoke tests:
+  - Main suite: `scripts/fbwl-smoke-all.sh` (SSH/headless-friendly; includes Xvfb/XWayland coverage where available)
+  - CI helper: `scripts/fbwl-smoke-ci.sh` (same suite, but skips individual tests when host deps are missing)
+  - Toolbar parity: `scripts/fbwl-smoke-toolbar-autohide.sh`, `scripts/fbwl-smoke-toolbar-autoraise.sh`, `scripts/fbwl-smoke-toolbar-maxover.sh`
 
 To regenerate screenshots in `docs/screenshots/`:
 
