@@ -147,6 +147,9 @@ scripts=(
   scripts/fbwl-smoke-toolbar-tools-order.sh
   scripts/fbwl-smoke-toolbar-onhead.sh
   scripts/fbwl-smoke-toolbar-layer.sh
+  scripts/fbwl-smoke-toolbar-maxover.sh
+  scripts/fbwl-smoke-toolbar-autohide.sh
+  scripts/fbwl-smoke-toolbar-autoraise.sh
   scripts/fbwl-smoke-screen1-toolbar-overrides.sh
   scripts/fbwl-smoke-screen1-menu-overrides.sh
   scripts/fbwl-smoke-strftime-format.sh
